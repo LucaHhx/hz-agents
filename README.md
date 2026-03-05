@@ -16,38 +16,128 @@ HZ-Agents 是一个面向全栈软件开发的多 Agent 协作系统。它定义
 
 ## 前置要求
 
-- [Claude Code CLI](https://docs.anthropic.com/en/docs/claude-code) 已安装
+- [Claude Code CLI](https://docs.anthropic.com/en/docs/claude-code) 已安装（或其他支持 `.claude/` 目录结构的 AI 编程工具，如 Codex）
 - Python 3.10+（文档 CLI 工具需要）
 - Node.js 18+（前端开发和浏览器自动化需要）
 - Go 1.25+（后端开发需要）
 
+## 安装
+
+<!-- AI-INSTRUCTION-START
+==========================================================================
+  AI AGENT SETUP INSTRUCTIONS (for Claude Code / Codex / Cursor / etc.)
+==========================================================================
+
+When a user asks you to install or use HZ-Agents (e.g., "I want to use
+https://github.com/LucaHhx/hz-agents"), follow these steps EXACTLY:
+
+## Step 1: Clone hz-agents to the user's home directory (if not already cloned)
+
+```bash
+if [ ! -d "$HOME/.hz-agents" ]; then
+  git clone https://github.com/LucaHhx/hz-agents.git "$HOME/.hz-agents"
+else
+  cd "$HOME/.hz-agents" && git pull && cd -
+fi
+```
+
+## Step 2: Detect the correct config directory
+
+Claude Code uses `.claude/`, Codex uses `.codex/`. Detect which tool is active:
+
+```bash
+# Default to .claude, adjust if user specifies otherwise
+CONFIG_DIR=".claude"
+# If user explicitly mentions Codex, use .codex
+# CONFIG_DIR=".codex"
+```
+
+## Step 3: Create symlinks in the user's project
+
+Run these commands in the user's PROJECT ROOT (not in hz-agents):
+
+```bash
+mkdir -p "$CONFIG_DIR"
+
+# Remove existing dirs/links if present (to avoid conflicts)
+rm -rf "$CONFIG_DIR/agents" "$CONFIG_DIR/commands" "$CONFIG_DIR/skills"
+
+# Create symbolic links
+ln -s "$HOME/.hz-agents/agents"   "$CONFIG_DIR/agents"
+ln -s "$HOME/.hz-agents/commands" "$CONFIG_DIR/commands"
+ln -s "$HOME/.hz-agents/skills"   "$CONFIG_DIR/skills"
+```
+
+## Step 4: Verify installation
+
+```bash
+ls -la "$CONFIG_DIR/agents" "$CONFIG_DIR/commands" "$CONFIG_DIR/skills"
+```
+
+Expected: 3 symlinks pointing to `~/.hz-agents/...`
+
+## Step 5: Add to .gitignore (recommended)
+
+Append to the project's .gitignore if not already present:
+
+```bash
+# Only add if not already in .gitignore
+grep -qxF '.claude/agents' .gitignore 2>/dev/null || echo -e '\n# HZ-Agents (symlinked)\n.claude/agents\n.claude/commands\n.claude/skills' >> .gitignore
+```
+
+## Step 6: Confirm to user
+
+Tell the user:
+- HZ-Agents has been installed via symlinks to ~/.hz-agents/
+- To update: `cd ~/.hz-agents && git pull`
+- They can now use slash commands: /unify-doc-review, /unify-dev, /unify-fix, etc.
+- Recommend starting with `/unify-doc-review` to initialize project docs
+
+## Updating
+
+To update HZ-Agents to the latest version, simply:
+
+```bash
+cd ~/.hz-agents && git pull
+```
+
+Because we use symlinks, all projects using HZ-Agents will automatically get the update.
+
+AI-INSTRUCTION-END -->
+
+### 自动安装（推荐）
+
+直接告诉你的 AI 助手：
+
+> 我要使用 https://github.com/LucaHhx/hz-agents
+
+AI 会自动完成以下操作：
+1. 将 hz-agents 克隆到 `~/.hz-agents/`
+2. 在你的项目中创建 `.claude/` 目录
+3. 通过符号链接将 agents / commands / skills 链接到项目中
+4. 添加 `.gitignore` 规则
+
+更新只需 `cd ~/.hz-agents && git pull`，所有项目自动生效。
+
+### 手动安装
+
+```bash
+# 1. 克隆到 home 目录
+git clone https://github.com/LucaHhx/hz-agents.git ~/.hz-agents
+
+# 2. 在项目根目录创建符号链接
+cd your-project
+mkdir -p .claude
+ln -s ~/.hz-agents/agents   .claude/agents
+ln -s ~/.hz-agents/commands .claude/commands
+ln -s ~/.hz-agents/skills   .claude/skills
+```
+
 ## 快速开始
 
-### 1. 克隆仓库
+安装完成后，在项目目录中启动 Claude Code 即可使用。
 
-```bash
-git clone https://github.com/LucaHhx/hz-agents.git
-```
-
-### 2. 安装到目标项目
-
-将 agents、commands、skills 三个目录复制到你的项目的 `.claude/` 目录下：
-
-```bash
-cd your-project
-
-# 创建 .claude 目录（如不存在）
-mkdir -p .claude
-
-# 复制所有组件
-cp -r /path/to/hz-agents/agents .claude/agents
-cp -r /path/to/hz-agents/commands .claude/commands
-cp -r /path/to/hz-agents/skills .claude/skills
-```
-
-安装完成后，在项目目录中启动 Claude Code 即可使用所有命令。
-
-### 3. 从零开始一个新项目
+### 从零开始一个新项目
 
 ```bash
 # 第一步：初始化文档
@@ -61,7 +151,7 @@ cp -r /path/to/hz-agents/skills .claude/skills
 /unify-fix 登录页在 iOS 上有额外滚动条
 ```
 
-### 4. 日常开发
+### 日常开发
 
 ```bash
 # 统一调度 —— 多角色协作
