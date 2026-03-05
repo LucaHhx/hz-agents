@@ -218,40 +218,133 @@ IMPORTANT:
 
 ## Step 8: Confirm to user and explain how to use
 
-After installation, you MUST briefly explain HZ-Agents to the user. Use the following
-template (translate to the user's language if needed):
+After installation, you MUST:
+1. Briefly explain what HZ-Agents is
+2. ASK the user their role in the team
+3. Based on their role, show the relevant commands and workflow
 
----
+Use the user's language (Chinese if they spoke Chinese, English if English, etc.).
 
-HZ-Agents installed successfully! Here's how to use it:
+### 8.1 — Explain what HZ-Agents is
 
-**What is HZ-Agents?**
-A multi-agent software development framework. 6 specialized AI agents (PM, Tech Lead,
-Frontend, Backend, UI Designer, QA) collaborate to build full-stack applications —
-from requirements to testing.
+Tell the user:
 
-**3 main commands (multi-agent orchestration):**
+> HZ-Agents is a multi-agent software development framework. 6 specialized AI agents
+> (PM, Tech Lead, Frontend, Backend, UI Designer, QA) collaborate to build full-stack
+> applications — from requirements planning to QA testing.
 
-| Command | What it does |
-|---------|-------------|
-| `/unify-doc-review` | Start PM + Tech Lead + UI Designer to plan requirements, design architecture, and create UI mockups |
-| `/unify-dev [requirement]` | Start full dev team (5 agents) to implement a requirement with code review and QA testing |
-| `/unify-fix <description>` | Diagnose and fix bugs, auto-assembles the right team based on complexity |
+### 8.2 — Ask the user's role
 
-**6 single-role commands (fine-grained control):**
+Ask the user (use AskUserQuestion or equivalent):
 
-| Command | Role |
-|---------|------|
-| `/review-pm [req]` | PM — review/create requirement docs |
-| `/review-tech [req]` | Tech Lead — create/update technical design |
-| `/review-ui [req]` | UI Designer — produce design mockups |
-| `/dev-frontend [req]` | Frontend dev — implement frontend code |
-| `/dev-backend [req]` | Backend dev — implement backend code |
-| `/review-qa [req]` | QA — run API + E2E browser tests |
+> What is your role in the team?
+
+Options:
+- PM (Product Manager)
+- Tech Lead
+- UI Designer
+- Frontend Developer
+- Backend Developer
+- QA Tester
+
+### 8.3 — Show role-specific command guide
+
+Based on the user's answer, show the corresponding section below:
+
+#### If PM:
+
+Your core command is `/review-pm` — create and review requirement documents.
+
+```
+/review-pm 新建需求：用户积分系统     # Create a new requirement
+/review-pm 7                         # Review requirement #7
+/review-pm 7 补充验收标准             # Add acceptance criteria to #7
+/review-pm                           # Auto-scan, pick a requirement
+```
+
+After finishing, notify Tech Lead to run `/review-tech` and UI Designer to run `/review-ui`.
+
+#### If Tech Lead:
+
+Your core command is `/review-tech` — create technical designs and task breakdowns.
+
+```
+/review-tech 7                       # Create technical design for requirement #7
+/review-tech 7 追加OAuth登录支持      # Update design: add OAuth support
+/review-tech 7 缓存策略改用Redis      # Update design: switch to Redis cache
+```
+
+After finishing, notify Frontend to run `/dev-frontend` and Backend to run `/dev-backend`.
+
+#### If UI Designer:
+
+Your core command is `/review-ui` — produce design mockups and design systems.
+
+```
+/review-ui 7                         # Create UI design for requirement #7
+/review-ui 7 按钮改成圆角风格         # Iterate: rounded button style
+/review-ui 7 增加空状态和加载骨架屏    # Add empty state and skeleton screens
+```
+
+Deliverables: `ui/merge.html` (mockup), `ui/design.md` (design system), `ui/Resources/` (icons).
+
+#### If Frontend Developer:
+
+Your core command is `/dev-frontend` — implement frontend pages and interactions.
+
+```
+/dev-frontend 7                      # Implement all frontend tasks for #7
+/dev-frontend 7 先实现登录页          # Start with the login page
+/dev-frontend 7 只做表单验证部分      # Only do form validation
+```
+
+Note: Always use local resources from `ui/Resources/`, never external URLs.
+
+#### If Backend Developer:
+
+Your core command is `/dev-backend` — implement APIs and business logic.
+
+```
+/dev-backend 7                       # Implement all backend tasks for #7
+/dev-backend 7 只做用户CRUD接口       # Only do user CRUD APIs
+/dev-backend 7 先做数据库迁移         # Start with database migration
+```
+
+#### If QA Tester:
+
+Your core command is `/review-qa` — run API + E2E acceptance tests.
+
+```
+/review-qa 7                         # Full test for requirement #7
+/review-qa 7 重点测试并发和边界场景    # Focus on concurrency and edge cases
+/review-qa 7 回归测试用户列表功能      # Regression test user list feature
+```
+
+### 8.4 — Show the unified orchestration commands and dependency chain
+
+After the role-specific guide, ALWAYS also show:
+
+**Unified orchestration commands** (coordinate multiple roles at once):
+
+```
+/unify-doc-review [req]    # PM + Tech Lead + UI collaborate on docs and design
+/unify-dev [req]           # Full team: design → dev → code review → QA test
+/unify-fix <description>   # Smart bug fix: auto-assemble repair team
+```
+
+**Command dependency chain** (the order commands should be run):
+
+```
+/review-pm ──┬── /review-tech ──┬── /dev-backend ──┐
+             │                  │                  │
+             └── /review-ui ────┼── /dev-frontend ─┤
+                                │                  │
+                                └──────────────────┴── /review-qa
+```
 
 **Recommended first step:**
-Run `/unify-doc-review` to initialize project documentation. The PM agent will discuss
-requirements with you, and the Tech Lead will help plan the technical architecture.
+If the project has no `docs/` directory yet, run `/unify-doc-review` to initialize.
+The PM will discuss requirements with you, and the Tech Lead will plan the architecture.
 
 **Updating HZ-Agents:**
 ```
