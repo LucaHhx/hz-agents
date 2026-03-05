@@ -43,13 +43,21 @@ fi
 
 ## Step 2: Detect the correct config directory
 
-Claude Code uses `.claude/`, Codex uses `.codex/`. Detect which tool is active:
+You MUST auto-detect which config directory to use based on your own runtime environment.
+DO NOT hardcode `.claude/`. Pick the one that matches your platform:
+
+- Claude Code → `.claude/`
+- Codex CLI  → `.codex/`
+- Cursor     → `.cursor/`
+- Other tools → use whatever config directory your tool expects for agents/commands/skills
+
+If your project root already has one of these directories, reuse it.
+If unsure, ask the user which tool they are using.
+
+Store your choice in a variable for subsequent steps:
 
 ```bash
-# Default to .claude, adjust if user specifies otherwise
-CONFIG_DIR=".claude"
-# If user explicitly mentions Codex, use .codex
-# CONFIG_DIR=".codex"
+CONFIG_DIR=".<your-tool-name>"   # e.g. ".claude" or ".codex"
 ```
 
 ## Step 3: Create symlinks in the user's project
@@ -78,11 +86,12 @@ Expected: 3 symlinks pointing to `~/.hz-agents/...`
 
 ## Step 5: Add to .gitignore (recommended)
 
-Append to the project's .gitignore if not already present:
+Append to the project's .gitignore if not already present.
+Use the actual CONFIG_DIR value you determined in Step 2:
 
 ```bash
-# Only add if not already in .gitignore
-grep -qxF '.claude/agents' .gitignore 2>/dev/null || echo -e '\n# HZ-Agents (symlinked)\n.claude/agents\n.claude/commands\n.claude/skills' >> .gitignore
+grep -qxF "$CONFIG_DIR/agents" .gitignore 2>/dev/null || \
+  echo -e "\n# HZ-Agents (symlinked)\n$CONFIG_DIR/agents\n$CONFIG_DIR/commands\n$CONFIG_DIR/skills" >> .gitignore
 ```
 
 ## Step 6: Confirm to user and explain how to use
@@ -150,7 +159,7 @@ AI-INSTRUCTION-END -->
 
 AI 会自动完成以下操作：
 1. 将 hz-agents 克隆到 `~/.hz-agents/`
-2. 在你的项目中创建 `.claude/` 目录
+2. 自动识别你使用的工具（Claude Code / Codex / Cursor 等），创建对应的配置目录
 3. 通过符号链接将 agents / commands / skills 链接到项目中
 4. 添加 `.gitignore` 规则
 
@@ -163,6 +172,7 @@ AI 会自动完成以下操作：
 git clone https://github.com/LucaHhx/hz-agents.git ~/.hz-agents
 
 # 2. 在项目根目录创建符号链接
+#    将 .claude 替换为你使用的工具对应的目录（.codex / .cursor 等）
 cd your-project
 mkdir -p .claude
 ln -s ~/.hz-agents/agents   .claude/agents
