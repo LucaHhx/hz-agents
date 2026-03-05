@@ -135,7 +135,75 @@ grep -qxF "$CONFIG_DIR/agents" .gitignore 2>/dev/null || \
   echo -e "\n# HZ-Agents (symlinked)\n$CONFIG_DIR/agents\n$CONFIG_DIR/commands\n$CONFIG_DIR/skills" >> .gitignore
 ```
 
-## Step 7: Confirm to user and explain how to use
+## Step 7: Check and install dependencies
+
+HZ-Agents skills rely on external CLI tools. You MUST check which ones are missing and
+ASK the user before installing anything. Do NOT silently install tools.
+
+### Dependency table
+
+| Dependency | Required by | What it does | Install command (macOS) |
+|------------|-------------|--------------|------------------------|
+| `python3` (3.10+) | create-docs (docs.py CLI) | Document management CLI | `brew install python` |
+| `node` (18+) + `npm` | create-web, agent-browser | Frontend dev, browser automation | `brew install node` |
+| `go` (1.25+) | Backend development | Go backend compilation | `brew install go` |
+| `tmux` | Claude Code teammateMode | Multi-agent parallel panes | `brew install tmux` |
+| `agent-browser` | agent-browser skill | Browser automation CLI | `npm install -g @anthropic/agent-browser` |
+| `uvx` | desktop-control skill | Python tool runner (uv) | `brew install uv` |
+
+### Detection and installation flow
+
+1. **Detect OS**: Check if macOS (`uname -s` == "Darwin") or Linux.
+
+2. **On macOS, check Homebrew first**:
+```bash
+if ! command -v brew &>/dev/null; then
+  # Ask user: "Homebrew is not installed. It's needed to install dependencies.
+  #            Install Homebrew? (https://brew.sh)"
+  # If user agrees:
+  /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
+fi
+```
+
+3. **Check each dependency and collect missing ones**:
+```bash
+MISSING=()
+command -v python3 &>/dev/null || MISSING+=("python3")
+command -v node &>/dev/null    || MISSING+=("node")
+command -v go &>/dev/null      || MISSING+=("go")
+command -v tmux &>/dev/null    || MISSING+=("tmux")
+command -v agent-browser &>/dev/null || MISSING+=("agent-browser")
+command -v uvx &>/dev/null     || MISSING+=("uvx")
+```
+
+4. **Present findings to user**:
+   - List which dependencies are already installed (with versions)
+   - List which are missing
+   - Explain what each missing one is used for (reference the table above)
+   - ASK: "Would you like me to install the missing dependencies?"
+   - Let user choose which ones to install (they may not need all of them)
+
+5. **Install only what the user approves** using the install commands from the table.
+
+6. **After installation, verify**:
+```bash
+python3 --version
+node --version
+go version
+tmux -V
+agent-browser --version
+uvx --version
+```
+
+IMPORTANT:
+- NEVER install anything without asking first
+- If on Linux, adapt install commands (apt, dnf, pacman, etc.)
+- `agent-browser` and `desktop-control` are OPTIONAL — only needed if the user plans
+  to use browser automation or desktop automation skills
+- `go` is only needed if the project has a Go backend
+- At minimum, `python3`, `node`, and `tmux` are recommended for core functionality
+
+## Step 8: Confirm to user and explain how to use
 
 After installation, you MUST briefly explain HZ-Agents to the user. Use the following
 template (translate to the user's language if needed):
@@ -204,6 +272,7 @@ AI 会自动完成以下操作：
 3. 通过符号链接将 agents / commands / skills 链接到项目中
 4. 配置工具所需的设置（如 Claude Code 的团队模式、权限等）
 5. 添加 `.gitignore` 规则
+6. 检测缺失的依赖工具（python3 / node / go / tmux / agent-browser 等），询问你是否安装
 
 更新只需 `cd ~/.hz-agents && git pull`，所有项目自动生效。
 
