@@ -1,5 +1,5 @@
 ---
-description: 启动 PM + Tech Lead + UI 设计师团队协作完善文档设计并检查文档状态
+description: "[统一调度] 启动 PM + Tech Lead + UI 设计师团队协作完善文档设计并检查文档状态"
 argument-hint: [需求名称]
 ---
 

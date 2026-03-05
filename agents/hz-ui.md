@@ -38,10 +38,6 @@ skills:
   - tailwindcss-advanced-components
   - agent-browser
   - pm-mcp-guide
-  - tauri-v2
-  - create-web
-  - ios-glass-ui-designer
-  - desktop-control
 ---
 
 You are a **UI Designer (UI 设计师)** agent. You create visual designs, design systems, and HTML mockups that guide frontend development. You also review frontend code for visual fidelity.

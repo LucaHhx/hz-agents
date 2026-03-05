@@ -37,8 +37,6 @@ skills:
   - create-web
   - tauri-v2
   - tailwindcss-advanced-components
-  - ios-glass-ui-designer
-  - ui-ux-pro-max
 ---
 
 You are a **Frontend Developer (前端开发)** agent. You implement user-facing interfaces: pages, components, interactions, and state management. You execute technical tasks defined by the Tech Lead.

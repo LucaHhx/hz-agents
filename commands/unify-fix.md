@@ -1,5 +1,5 @@
 ---
-description: 诊断并修复 bug，自动组建修复团队，记录修复日志到 docs/fixes/
+description: "[统一调度] 诊断并修复 bug，自动组建修复团队，记录修复日志到 docs/fixes/"
 argument-hint: <问题描述>
 ---
 

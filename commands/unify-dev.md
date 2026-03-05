@@ -1,5 +1,5 @@
 ---
-description: 启动开发团队（Tech Lead + UI + Frontend + Backend + QA）协作开发需求
+description: "[统一调度] 启动开发团队（Tech Lead + UI + Frontend + Backend + QA）协作开发需求"
 argument-hint: [需求名称]
 ---
 
