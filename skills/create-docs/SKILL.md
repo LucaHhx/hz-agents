@@ -139,6 +139,32 @@ python3 $SCRIPT status [req-name]
 3. Fill `design.md`: 技术选型 / 架构设计 / 关键决策
 4. Fill `tasks.md`: 技术级任务拆解
 
+### UI Role Special Structure
+
+当 `role-name` 为 `ui` 时，`docs.py role` 会创建扩展目录结构（而非通用的 design.md + tasks.md）:
+
+```
+ui/
+├── design.md            ← 设计系统（配色/字体/间距/组件规范）
+├── tasks.md             ← 标准任务清单
+├── merge.html           ← HTML 响应式效果图骨架（Tailwind CDN，禁止外部资源 URL）
+├── Introduction.md      ← 前端实现指南（布局/交互/资源使用说明）
+└── Resources/
+    ├── .gitkeep
+    ├── assets-manifest.md  ← 资源交付清单（AI 生成 + 人工提供 + 自检 checklist）
+    └── icons/
+        └── .gitkeep
+```
+
+| 文件 | 用途 |
+|------|------|
+| `design.md` | 设计系统文档：调色板、字体方案、间距系统、组件规范 |
+| `tasks.md` | UI 设计任务清单 |
+| `merge.html` | 响应式 HTML 效果图，使用 Tailwind CDN，内含禁止外部资源 URL 的注释提醒 |
+| `Introduction.md` | 给前端工程师的实现指南：布局说明、交互说明、资源使用指南 |
+| `Resources/assets-manifest.md` | 资源交付清单：AI 可生成资源（必须交付）、需人工提供资源（记录+占位）、自检清单 |
+| `Resources/icons/` | SVG 图标存放目录 |
+
 ### Update Operations
 
 Use CLI commands for standard operations (task/start/done/log). Read `references/update-guide.md` for manual edit guidelines and cross-file consistency rules.

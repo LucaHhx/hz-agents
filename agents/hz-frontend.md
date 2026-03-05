@@ -97,6 +97,7 @@ python docs.py start <req> <task-id> --role frontend
 - 参照 plan.md 中的用户场景确保交互正确
 - 对接后端 API（按 design.md 中约定的接口格式）
 - 复用 UI 设计稿中的 Tailwind class 和 `ui/Resources/` 中的资源
+- **优先使用本地资源**: 图标用 `ui/Resources/icons/*.svg`，样式变量用 `ui/Resources/tokens.css`，Tailwind 配置用 `ui/Resources/tailwind.config.js`。禁止用外部 URL 替代本地已有的资源
 
 ### 4. 完成任务
 ```bash
@@ -112,6 +113,15 @@ python docs.py done <req> <task-id> --role frontend
 - `ui/Resources/tailwind.config.js` 中的 design tokens 应复用到项目中
 - `ui/Introduction.md` 包含 UI 设计师的实现指导，务必阅读
 - 视觉还原有疑问时，参照 HTML 设计稿而非自行发挥
+
+### 资源验证规则（强制）
+- **实现前检查**: 开始编码前，先检查 `ui/Resources/` 目录中的可用资源和 `ui/Resources/assets-manifest.md` 交付清单
+- **本地优先**: 图标、图片、logo 等静态资源**必须优先使用** `ui/Resources/` 中提供的文件，通过相对路径引用
+- **禁止外部替代**: 不得用外部 URL（CDN 图标库、在线图片等）替代本地应有的资源
+- **缺失处理**: 发现 UI 设计稿中引用但 `Resources/` 中不存在的资源时，**不要自行用外部 URL 替代**，而是:
+  1. 在 `docs/<req>/log.md` 中记录缺失资源（类型: 变更）
+  2. 通知 Tech Lead 协调 UI 设计师补充
+  3. 使用占位方案（纯色块/文字替代）暂时处理，等待资源补充后替换
 
 ### 组件开发
 - 遵循项目现有的组件规范和设计系统

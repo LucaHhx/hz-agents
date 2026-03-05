@@ -168,7 +168,7 @@ Agent tool:
     1. 等待 tech-lead 通知你开始验证
     2. 验证修复是否解决了原始问题，检查回归问题
     3. 如果涉及 API → 用 curl 测试接口
-    4. 如果涉及 UI → 使用 agent-browser 截图验证
+    4. 如果涉及 UI → 使用 agent-browser 验证，仅在问题未修复或发现新问题时截图
     5. 发送验证结果给 tech-lead，标记任务 completed
 ```
 

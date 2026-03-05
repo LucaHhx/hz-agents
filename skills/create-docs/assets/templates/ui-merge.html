@@ -1,0 +1,39 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>设计稿 — {{REQ_NAME}}</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          colors: {
+            /* 设计系统配色 — 从 design.md 同步 */
+          },
+          fontFamily: {
+            /* 字体方案 — 从 design.md 同步 */
+          }
+        }
+      }
+    }
+  </script>
+  <!--
+    ==================== 资源规则 ====================
+    禁止使用外部 URL 引用本地应有的资源（图标、图片、logo 等）。
+    所有本地资源必须放在 Resources/ 目录并使用相对路径引用。
+    示例:
+      正确: <img src="Resources/icons/logo.svg" />
+      错误: <img src="https://example.com/logo.svg" />
+    ================================================
+  -->
+</head>
+<body class="bg-white text-gray-900">
+
+  <!-- 在此编写响应式效果图 -->
+  <!-- 使用 Tailwind 响应式前缀 (sm: md: lg:) 覆盖所有断点 -->
+  <!-- 375px 手机 / 768px 平板 / 1440px+ 桌面 -->
+
+</body>
+</html>

@@ -74,7 +74,13 @@ Task tool:
     2. 前后端 API 接口契约是否对齐（请求/响应格式一致）
     3. 技术方案是否完整可执行（不是占位符内容）
     4. 任务拆分是否合理、可执行
-    5. 如果 ui/ 目录存在，检查设计稿是否完整（merge.html）
+    5. **UI 资源完整性检查**（如果 ui/ 目录存在）:
+       - merge.html 存在且可预览
+       - merge.html 中无外部 URL 引用本地应有的资源（grep 检查 src="http 或 href="http 指向图片/图标的引用）
+       - Resources/ 目录非空（不能只有 .gitkeep）
+       - Resources/assets-manifest.md 存在且自检清单已填写
+       - Resources/icons/ 下有 SVG 文件（如果 merge.html 中使用了图标）
+       - 以上任一不满足 → pass: false
 
     最终输出一个 JSON 格式的检查结果:
     {
@@ -85,7 +91,7 @@ Task tool:
     }
 
     如果有小问题可以直接修复（如格式问题、小的遗漏），修复后视为通过。
-    如果有结构性缺失（文件不存在、方案空白、接口未定义），必须标记为不通过。
+    如果有结构性缺失（文件不存在、方案空白、接口未定义、UI 资源未交付），必须标记为不通过。
 ```
 
 **处理检查结果:**
@@ -146,7 +152,12 @@ Task tool:
        - ui/Introduction.md — UI 设计说明
        - ui/design.md — 设计系统（配色、字体、间距）
        - ui/Resources/ — 可复用的资源文件
-    5. 按任务列表逐项实现前端代码，优先以 UI 设计稿为视觉标准
+    4.5. **资源可用性验证**（实现代码前必须执行）:
+       - 检查 ui/Resources/icons/ 中有哪些可用 SVG 图标
+       - 检查 ui/Resources/tokens.css 和 tailwind.config.js 是否存在
+       - 阅读 ui/Resources/assets-manifest.md 了解资源交付状态
+       - **如发现设计稿中引用但 Resources/ 中缺失的资源**: 在 log.md 记录（类型: 变更），通知 tech-lead 协调补充，使用占位方案暂时处理，**禁止用外部 URL 替代**
+    5. 按任务列表逐项实现前端代码，优先以 UI 设计稿为视觉标准，优先使用 ui/Resources/ 中的本地资源
     6. 每完成一个子任务，使用 docs.py CLI 更新 tasks.md 状态
     7. 全部完成后标记团队任务为 completed
     8. 发送消息给 tech-lead 报告完成状态
@@ -234,15 +245,23 @@ Task tool:
        - 读取前端源码，检查 Tailwind class 使用是否与 ui/design.md 一致
        - 检查响应式断点是否正确
        - 检查间距、颜色、字号是否与设计系统一致
-    4. 视觉对比审查:
+    4. **资源使用审查**:
+       - 对比前端代码中引用的资源 vs ui/Resources/ 中提供的资源
+       - 检查前端是否使用了外部 URL 替代本地应有的资源（grep 检查图片/图标的 src/href 是否指向外部域名）
+       - 检查 ui/Resources/icons/ 中的 SVG 图标是否被前端正确引用
+       - 检查 ui/Resources/tokens.css 和 tailwind.config.js 是否被前端项目集成
+       - **缺失资源或使用外部 URL 替代标记为 P0**
+    5. 视觉对比审查:
        - 使用 pm-mcp 启动前后端服务
-       - 使用 agent-browser --headed 截图各端效果
+       - 使用 agent-browser --headed 打开页面进行实时视觉检查
        - 与 ui/ 目录下的 HTML 设计稿对比
-    5. 输出审查报告发送给 tech-lead:
+       - **仅在发现视觉问题时截图留证，正常通过的页面不截图**
+    6. 输出审查报告发送给 tech-lead:
        - 视觉一致性评分
-       - 具体问题清单（布局差异、颜色不一致、间距问题等）
+       - 具体问题清单（布局差异、颜色不一致、间距问题、**资源缺失**等）
        - 每个问题标注严重程度（P0/P1/P2）和建议修复方式
-    6. 审查完成后清理: 关闭浏览器, 停止服务, 清理进程
+       - **资源缺失问题单独列出**，说明缺失的资源名称和前端当前使用的替代方案
+    7. 审查完成后清理: 关闭浏览器, 停止服务, 清理进程
 
     需求目录: docs/$REQ_NAME/
 ```
@@ -282,8 +301,8 @@ Task tool:
     - 模拟真实用户操作流程:
       - 按 plan.md 中的用户场景逐步操作
       - 验证页面展示、交互、数据一致性
-      - 截图记录关键步骤
-    - 发现 bug 记录到 log.md，严重问题通知 tech-lead
+      - **仅在发现 Bug 时截图留证，正常通过的步骤不截图**
+    - 发现 bug 记录到 log.md（附截图），严重问题通知 tech-lead
 
     6. 全部完成后标记团队任务为 completed
     7. 发送消息给 tech-lead 报告验收结果，包括:

@@ -113,13 +113,20 @@ TeamCreate: team_name: "doc-review"
 
 **任务 3 — UI 设计产出** (owner: ui-designer, blockedBy: 任务1):
 - 阅读 plan.md 用户场景，创建 UI 设计稿
-- 产出: merge.html（响应式效果图，覆盖所有断点）
+- 产出: merge.html（响应式效果图，覆盖所有断点，禁止使用外部 URL 引用本地资源）
 - 编写 design.md 设计系统文档和 Introduction.md 设计说明
-- 按需产出 Resources/ 资源
+- **强制交付 Resources/**:
+  - `Resources/icons/*.svg` — 设计稿中使用的所有 SVG 图标（必须交付）
+  - `Resources/tokens.css` — CSS 变量（必须交付）
+  - `Resources/tailwind.config.js` — Tailwind 扩展配置（必须交付）
+  - `Resources/assets-manifest.md` — 资源交付清单，自检清单全部通过
+- 需人工提供的资源记录到 assets-manifest.md 并在 merge.html 中使用占位方案
+- **交付自检**: 10 项检查清单全部通过才可标记完成（见 hz-ui agent 定义）
 - 完成后发送结果给 tech-lead 和 pm
 
 **任务 4 — 交叉评审与对齐** (pm + tech-lead + ui-designer 协作):
 - 确认需求、技术方案、UI 设计三方对齐
+- **Tech Lead 验证 UI 资源完整性**: 检查 Resources/ 非空、assets-manifest.md 存在且自检通过、merge.html 无外部 URL 引用本地资源。不完整则退回 UI 设计师补充
 - 解决不一致问题
 
 #### 3.2 启动团队成员
@@ -187,12 +194,18 @@ Task tool:
     2. 阅读 docs/ 下的需求 plan.md，了解用户场景和验收标准
     3. 按照你的 agent 职责，为每个需求创建 UI 设计:
        - 使用 ui-ux-pro-max skill 生成设计系统
-       - 制作 merge.html 响应式效果图（覆盖所有断点）
+       - 制作 merge.html 响应式效果图（覆盖所有断点，禁止使用外部 URL 引用本地资源）
        - 编写 design.md 设计系统文档
-       - 编写 Introduction.md 给前端的设计说明
-       - 按需产出 Resources/ 资源
-    4. 使用 docs.py CLI 更新 ui/tasks.md 任务状态
-    5. 完成后将设计成果发送给 tech-lead 和 pm
+       - 编写 Introduction.md 给前端的设计说明（包含资源使用指南）
+       - **强制交付 Resources/ 资源**:
+         - `Resources/icons/*.svg` — 设计稿中使用的所有 SVG 图标
+         - `Resources/tokens.css` — 完整的 CSS 变量
+         - `Resources/tailwind.config.js` — Tailwind 扩展配置
+         - `Resources/assets-manifest.md` — 填写资源交付清单，自检清单全部通过
+         - 需人工提供的资源记录到 assets-manifest.md 并提供占位方案
+    4. 完成前对照 10 项交付检查清单逐项自检（见你的 agent 定义）
+    5. 使用 docs.py CLI 更新 ui/tasks.md 任务状态
+    6. 完成后将设计成果发送给 tech-lead 和 pm
 
     [如有需求参数: 只处理需求: $ARGUMENTS]
 ```
