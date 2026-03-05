@@ -31,15 +31,28 @@ HZ-Agents 是一个面向全栈软件开发的多 Agent 协作系统。它定义
 When a user asks you to install or use HZ-Agents (e.g., "I want to use
 https://github.com/LucaHhx/hz-agents"), follow these steps EXACTLY:
 
-## Step 1: Clone hz-agents to the user's home directory (if not already cloned)
+## Step 1: Parse the URL and clone hz-agents
+
+IMPORTANT: The user may provide a URL that includes a branch path, such as:
+  - https://github.com/LucaHhx/hz-agents/tree/split  → branch = "split"
+  - https://github.com/LucaHhx/hz-agents/tree/main   → branch = "main"
+  - https://github.com/LucaHhx/hz-agents              → branch = default (main)
+
+You MUST extract the branch name from the URL if `/tree/<branch>` is present.
 
 ```bash
+# Extract branch from URL (default to "main" if not specified)
+BRANCH="main"  # ← Replace with the branch parsed from the user's URL
+
 if [ ! -d "$HOME/.hz-agents" ]; then
-  git clone https://github.com/LucaHhx/hz-agents.git "$HOME/.hz-agents"
+  git clone -b "$BRANCH" https://github.com/LucaHhx/hz-agents.git "$HOME/.hz-agents"
 else
-  cd "$HOME/.hz-agents" && git pull && cd -
+  cd "$HOME/.hz-agents" && git fetch origin && git checkout "$BRANCH" && git pull && cd -
 fi
 ```
+
+If the repo is already cloned but on a different branch, you MUST switch to the
+correct branch. Always ensure the local copy matches the branch the user specified.
 
 ## Step 2: Detect the correct config directory
 
