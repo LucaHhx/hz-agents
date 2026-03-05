@@ -84,7 +84,48 @@ ls -la "$CONFIG_DIR/agents" "$CONFIG_DIR/commands" "$CONFIG_DIR/skills"
 
 Expected: 3 symlinks pointing to `~/.hz-agents/...`
 
-## Step 5: Add to .gitignore (recommended)
+## Step 5: Configure tool-specific settings
+
+### If Claude Code (.claude/)
+
+HZ-Agents uses multi-agent team features that require experimental flags and specific
+settings. Create or merge into `.claude/settings.local.json`:
+
+```json
+{
+  "env": {
+    "CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS": "1"
+  },
+  "permissions": {
+    "allow": []
+  },
+  "defaultMode": "bypassPermissions",
+  "teammateMode": "tmux"
+}
+```
+
+Explanation of each field:
+- `CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS`: "1" — Enables the experimental agent teams
+  feature. REQUIRED for `/unify-dev`, `/unify-doc-review`, `/unify-fix` commands that
+  orchestrate multiple agents in parallel.
+- `defaultMode`: "bypassPermissions" — Allows agents to execute tools without manual
+  approval on every action. Needed because agents run autonomously and cannot wait for
+  user confirmation at each step.
+- `teammateMode`: "tmux" — Runs each team member agent in a separate tmux pane so you
+  can monitor all agents working in parallel in real-time.
+- `permissions.allow`: [] — You can add specific tool patterns here to pre-approve
+  (e.g. "Bash(npm run *)", "Read(**)"). Leave empty to use defaultMode as fallback.
+
+IMPORTANT: If `.claude/settings.local.json` already exists, MERGE these keys into the
+existing file. Do NOT overwrite the user's existing settings.
+
+### If Codex (.codex/) or other tools
+
+No additional settings file is needed. The symlinked agents/commands/skills directories
+are sufficient. If the tool has its own team/agent configuration, follow that tool's
+documentation.
+
+## Step 6: Add to .gitignore (recommended)
 
 Append to the project's .gitignore if not already present.
 Use the actual CONFIG_DIR value you determined in Step 2:
@@ -94,7 +135,7 @@ grep -qxF "$CONFIG_DIR/agents" .gitignore 2>/dev/null || \
   echo -e "\n# HZ-Agents (symlinked)\n$CONFIG_DIR/agents\n$CONFIG_DIR/commands\n$CONFIG_DIR/skills" >> .gitignore
 ```
 
-## Step 6: Confirm to user and explain how to use
+## Step 7: Confirm to user and explain how to use
 
 After installation, you MUST briefly explain HZ-Agents to the user. Use the following
 template (translate to the user's language if needed):
@@ -161,7 +202,8 @@ AI 会自动完成以下操作：
 1. 将 hz-agents 克隆到 `~/.hz-agents/`
 2. 自动识别你使用的工具（Claude Code / Codex / Cursor 等），创建对应的配置目录
 3. 通过符号链接将 agents / commands / skills 链接到项目中
-4. 添加 `.gitignore` 规则
+4. 配置工具所需的设置（如 Claude Code 的团队模式、权限等）
+5. 添加 `.gitignore` 规则
 
 更新只需 `cd ~/.hz-agents && git pull`，所有项目自动生效。
 
