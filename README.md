@@ -85,13 +85,50 @@ Append to the project's .gitignore if not already present:
 grep -qxF '.claude/agents' .gitignore 2>/dev/null || echo -e '\n# HZ-Agents (symlinked)\n.claude/agents\n.claude/commands\n.claude/skills' >> .gitignore
 ```
 
-## Step 6: Confirm to user
+## Step 6: Confirm to user and explain how to use
 
-Tell the user:
-- HZ-Agents has been installed via symlinks to ~/.hz-agents/
-- To update: `cd ~/.hz-agents && git pull`
-- They can now use slash commands: /unify-doc-review, /unify-dev, /unify-fix, etc.
-- Recommend starting with `/unify-doc-review` to initialize project docs
+After installation, you MUST briefly explain HZ-Agents to the user. Use the following
+template (translate to the user's language if needed):
+
+---
+
+HZ-Agents installed successfully! Here's how to use it:
+
+**What is HZ-Agents?**
+A multi-agent software development framework. 6 specialized AI agents (PM, Tech Lead,
+Frontend, Backend, UI Designer, QA) collaborate to build full-stack applications —
+from requirements to testing.
+
+**3 main commands (multi-agent orchestration):**
+
+| Command | What it does |
+|---------|-------------|
+| `/unify-doc-review` | Start PM + Tech Lead + UI Designer to plan requirements, design architecture, and create UI mockups |
+| `/unify-dev [requirement]` | Start full dev team (5 agents) to implement a requirement with code review and QA testing |
+| `/unify-fix <description>` | Diagnose and fix bugs, auto-assembles the right team based on complexity |
+
+**6 single-role commands (fine-grained control):**
+
+| Command | Role |
+|---------|------|
+| `/review-pm [req]` | PM — review/create requirement docs |
+| `/review-tech [req]` | Tech Lead — create/update technical design |
+| `/review-ui [req]` | UI Designer — produce design mockups |
+| `/dev-frontend [req]` | Frontend dev — implement frontend code |
+| `/dev-backend [req]` | Backend dev — implement backend code |
+| `/review-qa [req]` | QA — run API + E2E browser tests |
+
+**Recommended first step:**
+Run `/unify-doc-review` to initialize project documentation. The PM agent will discuss
+requirements with you, and the Tech Lead will help plan the technical architecture.
+
+**Updating HZ-Agents:**
+```
+cd ~/.hz-agents && git pull
+```
+All linked projects update automatically.
+
+---
 
 ## Updating
 
