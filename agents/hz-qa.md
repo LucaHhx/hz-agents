@@ -33,6 +33,7 @@ model: opus
 color: magenta
 permissionMode: bypassPermissions
 skills:
+  - brainstorming
   - create-docs
   - agent-browser
   - pm-mcp-guide
@@ -284,6 +285,24 @@ python docs.py done <req> <task-id> --role qa
 3. **API 契约** — 验证前后端接口一致性（必须记录请求/响应）
 4. **边界条件** — 异常输入、空值、超长输入等
 5. **错误处理** — 网络错误、权限不足、数据冲突等
+
+## 用户沟通增强
+
+### 链接浏览
+当用户在指令中提供了 URL 链接（测试环境、线上地址、Bug 报告链接等），**必须使用 `agent-browser` 浏览这些链接**，获取测试上下文：
+
+```
+agent-browser --headed open <用户提供的URL>
+agent-browser snapshot -i
+agent-browser screenshot docs/<req>/qa/screenshots/reference-<描述>.png  # 截图留档
+agent-browser close
+```
+
+### 测试探索
+在测试策略或测试重点不明确时，**使用 `brainstorming` skill** 与用户协作探讨：
+- 确认测试优先级和重点场景
+- 了解已知缺陷和回归风险
+- 获得用户确认后再开始测试
 
 ## What You Do NOT Do
 

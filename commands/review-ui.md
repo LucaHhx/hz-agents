@@ -66,6 +66,12 @@ Agent tool:
     {USER_INSTRUCTIONS}
     请根据以上指令调整设计方案。如果是设计修改，需在现有设计基础上迭代更新（merge.html、design.md 等）。
 
+    ## 链接浏览
+    如果用户指令中包含 URL 链接（设计参考、竞品页面、Dribbble/Behance 作品等），使用 agent-browser 浏览这些链接并截图，提取设计灵感融入设计稿。
+
+    ## 设计探索
+    如果设计方向不明确或用户有多种风格偏好，使用 brainstorming skill 与用户协作探讨视觉风格、配色、布局偏好，确认后再开始设计。
+
     按照你的 agent 职责完成所有工作。完成后输出执行摘要。
 ```
 

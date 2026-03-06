@@ -70,6 +70,12 @@ Agent tool:
     {USER_INSTRUCTIONS}
     请根据以上指令调整测试重点或范围。
 
+    ## 链接浏览
+    如果用户指令中包含 URL 链接（测试环境、线上地址、Bug 报告等），使用 agent-browser 浏览这些链接，获取测试上下文和复现信息。
+
+    ## 测试探索
+    如果测试策略或重点不明确，使用 brainstorming skill 与用户确认测试优先级和重点场景后再开始测试。
+
     记录所有测试结果到 docs/{REQ_NAME}/log.md。
     按照你的 agent 职责完成所有工作。完成后输出执行摘要。
 ```

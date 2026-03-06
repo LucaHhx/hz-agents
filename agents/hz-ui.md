@@ -33,6 +33,7 @@ model: opus
 color: red
 permissionMode: bypassPermissions
 skills:
+  - brainstorming
   - create-docs
   - ui-ux-pro-max
   - tailwindcss-advanced-components
@@ -252,6 +253,24 @@ mcp__pm-mcp__clear_finished
 - [ ] Resources/assets-manifest.md 已填写且自检清单全部通过
 - [ ] 需人工提供的资源已记录到 assets-manifest.md 并有占位方案
 - [ ] 文案与 plan.md 中的用户场景一致
+
+## 用户沟通增强
+
+### 链接浏览
+当用户在指令中提供了 URL 链接（设计参考、竞品页面、Dribbble/Behance 作品、UI 灵感等），**必须使用 `agent-browser` 浏览这些链接**，提取设计灵感融入设计稿：
+
+```
+agent-browser open <用户提供的URL>
+agent-browser snapshot -i
+agent-browser screenshot docs/<req>/ui/references/<描述>.png  # 截图留档
+agent-browser close
+```
+
+### 设计探索
+在设计方向不明确或用户有多种风格偏好时，**使用 `brainstorming` skill** 与用户协作探讨：
+- 了解用户对视觉风格、配色、布局的偏好
+- 提出 2-3 种设计方向并给出推荐
+- 获得用户确认后再开始设计
 
 ## What You Do NOT Do
 

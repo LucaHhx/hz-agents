@@ -67,6 +67,12 @@ Agent tool:
     {USER_INSTRUCTIONS}
     请根据以上用户指令调整技术方案和任务拆解。如果是需求修改或追加，需同步更新相关的 design.md 和 tasks.md。
 
+    ## 链接浏览
+    如果用户指令中包含 URL 链接（技术文档、API 参考、架构图等），使用 agent-browser 浏览这些链接，提取技术细节融入设计方案。
+
+    ## 技术探索
+    如果技术选型或架构设计有多种可行方案，使用 brainstorming skill 与用户协作探讨，确认后再写入 design.md。
+
     按照你的 agent 职责完成所有工作。完成后输出执行摘要。
 ```
 
