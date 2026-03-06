@@ -18,7 +18,7 @@ agent-browser close             # Close browser
 
 ## Core workflow
 
-1. Navigate: `agent-browser open <url> --headed`
+1. Navigate: `agent-browser open <url> --headed --args "--start-maximized"`
 2. Snapshot: `agent-browser snapshot -i` (returns elements with refs like `@e1`, `@e2`)
 3. Interact using refs from the snapshot
 4. Re-snapshot after navigation or significant DOM changes
