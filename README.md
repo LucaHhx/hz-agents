@@ -9,7 +9,7 @@ HZ-Agents 是一个面向全栈软件开发的多 Agent 协作系统。它定义
 **核心特性:**
 
 - **6 个专业 Agent** — PM 规划需求、Tech Lead 架构设计、前后端并行开发、UI 设计、QA 测试
-- **9 个 Slash Command** — 3 个统一调度命令 + 6 个单角色命令，灵活组合
+- **11 个 Slash Command** — 4 个统一调度 + 1 个团队调度 + 6 个单角色命令，灵活组合
 - **16 个模块化 Skills** — 可复用的能力组件（文档管理、UI 设计、浏览器自动化、桌面控制等）
 - **三层文档体系** — L1 项目级 / L2 需求级 / L3 技术级，自动化文档管理
 - **质量门禁** — 文档审查 → 代码评审 + 视觉审查 → QA 自动化测试
@@ -28,17 +28,70 @@ HZ-Agents 是一个面向全栈软件开发的多 Agent 协作系统。它定义
   AI AGENT SETUP INSTRUCTIONS (for Claude Code / Codex / Cursor / etc.)
 ==========================================================================
 
-When a user asks you to install or use HZ-Agents (e.g., "I want to use
-https://github.com/LucaHhx/hz-agents"), follow these steps EXACTLY:
+When a user asks you to install, use, or UPDATE HZ-Agents, follow the
+instructions below. First determine which scenario applies:
+
+## Scenario A: UPDATE (user wants to update an existing installation)
+
+Trigger keywords: "更新", "update", "upgrade", "pull latest", "同步最新",
+or user provides a URL like:
+  - https://github.com/LucaHhx/hz-agents
+  - https://github.com/LucaHhx/hz-agents/tree/split
+  - https://github.com/LucaHhx/hz-agents/blob/split/README.md
+
+### How to update:
+
+1. **Parse branch from URL** (same rules as install):
+   - `/tree/<branch>` or `/blob/<branch>/...` → extract that branch
+   - No branch in URL → default to "main"
+
+2. **Pull latest code**:
+```bash
+cd "$HOME/.hz-agents" && git fetch origin && git checkout "$BRANCH" && git pull
+```
+
+3. **Verify symlinks still work**:
+```bash
+# Auto-detect config dir
+CONFIG_DIR=""
+for dir in .claude .codex .cursor; do
+  if [ -d "$dir" ]; then CONFIG_DIR="$dir"; break; fi
+done
+
+if [ -n "$CONFIG_DIR" ]; then
+  ls -la "$CONFIG_DIR/agents" "$CONFIG_DIR/commands" "$CONFIG_DIR/skills"
+fi
+```
+
+4. **If symlinks are broken or missing**, re-create them:
+```bash
+rm -rf "$CONFIG_DIR/agents" "$CONFIG_DIR/commands" "$CONFIG_DIR/skills"
+ln -s "$HOME/.hz-agents/agents"   "$CONFIG_DIR/agents"
+ln -s "$HOME/.hz-agents/commands" "$CONFIG_DIR/commands"
+ln -s "$HOME/.hz-agents/skills"   "$CONFIG_DIR/skills"
+```
+
+5. **Report to user**: Tell them what changed (new commands, updated agents, etc.)
+   and remind them the update is effective immediately for all linked projects.
+
+That's it for updates. No need to re-run the full install flow.
+
+---
+
+## Scenario B: FRESH INSTALL (user wants to install for the first time)
+
+Trigger: user says "I want to use hz-agents", "安装 hz-agents", etc.
+Follow these steps EXACTLY:
 
 ## Step 1: Parse the URL and clone hz-agents
 
 IMPORTANT: The user may provide a URL that includes a branch path, such as:
-  - https://github.com/LucaHhx/hz-agents/tree/split  → branch = "split"
-  - https://github.com/LucaHhx/hz-agents/tree/main   → branch = "main"
-  - https://github.com/LucaHhx/hz-agents              → branch = default (main)
+  - https://github.com/LucaHhx/hz-agents/tree/split           → branch = "split"
+  - https://github.com/LucaHhx/hz-agents/tree/main            → branch = "main"
+  - https://github.com/LucaHhx/hz-agents/blob/split/README.md → branch = "split"
+  - https://github.com/LucaHhx/hz-agents                      → branch = default (main)
 
-You MUST extract the branch name from the URL if `/tree/<branch>` is present.
+You MUST extract the branch name from the URL if `/tree/<branch>` or `/blob/<branch>/` is present.
 
 ```bash
 # Extract branch from URL (default to "main" if not specified)
@@ -266,15 +319,22 @@ After finishing, notify Tech Lead to run `/review-tech` and UI Designer to run `
 
 #### If Tech Lead:
 
-Your core command is `/review-tech` — create technical designs and task breakdowns.
+Your core commands are `/review-tech` (design) and `/dev-tech` (lead development).
 
 ```
+# Technical design
 /review-tech 7                       # Create technical design for requirement #7
 /review-tech 7 追加OAuth登录支持      # Update design: add OAuth support
 /review-tech 7 缓存策略改用Redis      # Update design: switch to Redis cache
+
+# Lead development (Tech Lead + Frontend + Backend, with code review)
+/dev-tech 7                          # Lead team to develop requirement #7
+/dev-tech 7 先实现登录模块            # Lead team, prioritize login module
+/dev-tech 7 只做后端API部分           # Lead team, backend API only
 ```
 
-After finishing, notify Frontend to run `/dev-frontend` and Backend to run `/dev-backend`.
+After `/review-tech`, use `/dev-tech` to lead the development team (includes code review).
+Or notify Frontend to run `/dev-frontend` and Backend to run `/dev-backend` separately.
 
 #### If UI Designer:
 
@@ -328,23 +388,33 @@ After the role-specific guide, ALWAYS also show:
 
 ```
 /unify-doc-review [req]    # PM + Tech Lead + UI collaborate on docs and design
-/unify-dev [req]           # Full team: design → dev → code review → QA test
+/review-all [req]          # PM + Tech Lead + UI cross-review and align docs
+/unify-dev [req]           # Full team: dev → code review + UI review → QA test
+/dev-tech [req]            # Lightweight: Tech Lead + Frontend + Backend + code review
 /unify-fix <description>   # Smart bug fix: auto-assemble repair team
 ```
 
 **Command dependency chain** (the order commands should be run):
 
 ```
-/review-pm ──┬── /review-tech ──┬── /dev-backend ──┐
-             │                  │                  │
-             └── /review-ui ────┼── /dev-frontend ─┤
-                                │                  │
-                                └──────────────────┴── /review-qa
+/review-pm ──┬── /review-tech ──┐
+             │                  ├── /review-all ──┬── /dev-tech ─────────┐
+             └── /review-ui ────┘   (三端对齐)    │  (Tech Lead 带队)    │
+                                                  │     — 或者 —         │
+                                                  ├── /dev-backend ──┐  │
+                                                  │                  ├──┴── /review-qa
+                                                  └── /dev-frontend ─┘
 ```
 
-**Recommended first step:**
-If the project has no `docs/` directory yet, run `/unify-doc-review` to initialize.
-The PM will discuss requirements with you, and the Tech Lead will plan the architecture.
+**Recommended workflow:**
+
+1. If the project has no `docs/` directory yet, run `/unify-doc-review` to initialize.
+   The PM will discuss requirements with you, and the Tech Lead will plan the architecture.
+2. Optionally run `/review-all [req]` to cross-review and align PM + Tech + UI docs.
+3. After docs are ready, choose your development path:
+   - `/unify-dev [req]` — full process with UI review + QA testing
+   - `/dev-tech [req]` — faster iteration with just code review
+4. If bugs are found later, use `/unify-fix <description>` to diagnose and fix.
 
 **Updating HZ-Agents:**
 ```
@@ -408,8 +478,9 @@ ln -s ~/.hz-agents/skills   .claude/skills
 # PM 和 Tech Lead 会与你交互确认需求和技术方案
 /unify-doc-review
 
-# 第二步：启动团队开发第一个需求
-/unify-dev 1-account-system
+# 第二步：启动团队开发第一个需求（两种方式任选）
+/unify-dev 1-account-system           # 完整流程：开发 + 视觉审查 + QA 测试
+/dev-tech 1-account-system            # 轻量开发：Tech Lead 带队 + 代码审查
 
 # 第三步：修复 Bug（可选）
 /unify-fix 登录页在 iOS 上有额外滚动条
@@ -419,9 +490,14 @@ ln -s ~/.hz-agents/skills   .claude/skills
 
 ```bash
 # 统一调度 —— 多角色协作
-/unify-doc-review 2-quick-bookkeeping   # 文档评审
-/unify-dev 2-quick-bookkeeping          # 团队开发
+/unify-doc-review 2-quick-bookkeeping   # 文档评审（初始化或补充文档）
+/review-all 2-quick-bookkeeping         # 三端文档对齐评审（PM+Tech+UI 交叉检查）
+/unify-dev 2-quick-bookkeeping          # 团队开发（完整流程：开发+视觉审查+QA）
 /unify-fix 记账接口返回 500 错误        # Bug 修复
+
+# 团队开发 —— Tech Lead 带队
+/dev-tech 3-transaction-list            # Tech Lead 带队开发（轻量：开发+代码审查）
+/dev-tech 3 先实现列表页                # 带指令，指定优先级
 
 # 单角色 —— 精准控制单个 Agent
 /review-pm 3-transaction-list           # PM 评审需求文档
@@ -445,9 +521,9 @@ ln -s ~/.hz-agents/skills   .claude/skills
 | `hz-ui` | UI 设计师 | 设计稿产出（merge.html）、设计系统、视觉审查 |
 | `hz-qa` | QA 测试 | API 测试、浏览器 E2E 测试、验收报告 |
 
-### 9 个 Slash Command
+### 11 个 Slash Command
 
-命令分为两类：**统一调度**（多 Agent 协作）和**单角色**（独立执行）。
+命令分为三类：**统一调度**（多 Agent 协作）、**团队调度**（Tech Lead 带队）和**单角色**（独立执行）。
 
 #### 统一调度命令
 
@@ -456,6 +532,13 @@ ln -s ~/.hz-agents/skills   .claude/skills
 | `/unify-doc-review` | 启动 PM + Tech Lead + UI 设计师协作完善文档和设计稿 | `/unify-doc-review [需求名称]` |
 | `/unify-dev` | 启动 Tech Lead + UI + Frontend + Backend + QA 团队开发 | `/unify-dev [需求名称]` |
 | `/unify-fix` | 诊断并修复 Bug，自动组建修复团队 | `/unify-fix <问题描述>` |
+| `/review-all` | 启动 PM + Tech Lead + UI 三端文档对齐评审 | `/review-all [需求名称]` |
+
+#### 团队调度命令
+
+| 命令 | 说明 | 用法 |
+|------|------|------|
+| `/dev-tech` | Tech Lead 带队前后端开发，含开发指导和代码审查 | `/dev-tech [需求名称] [指令]` |
 
 #### 单角色命令
 
@@ -475,19 +558,38 @@ ln -s ~/.hz-agents/skills   .claude/skills
   ↓
 /unify-doc-review ─── PM 需求规划 + Tech Lead 架构设计 + UI 设计稿产出
   ↓
-/unify-dev ────────── Frontend + Backend 并行开发
-                        ↓
-                      Tech Lead 代码审查 + UI 视觉审查
-                        ↓
-                      QA 测试（API + 浏览器 E2E）
+/review-all ────────── PM + Tech Lead + UI 三端交叉评审对齐（可选）
+  ↓
+  ├─ 路径 A（完整流程）:
+  │  /unify-dev ────── 文档检查 → Frontend + Backend 并行开发
+  │                      ↓
+  │                    Tech Lead 代码审查 + UI 视觉审查（并行）
+  │                      ↓
+  │                    QA 测试（API + 浏览器 E2E）
+  │
+  └─ 路径 B（轻量开发）:
+     /dev-tech ──────── 文档检查 → Frontend + Backend 并行开发
+                          ↓
+                        Tech Lead 代码审查（最多 3 轮）
+                          ↓
+                        可选: /review-qa 单独跑测试
   ↓
 验收交付
 ```
 
+**两条开发路径对比:**
+
+| | `/unify-dev`（完整流程） | `/dev-tech`（轻量开发） |
+|---|---|---|
+| 参与角色 | Tech Lead + Frontend + Backend + UI + QA | Tech Lead + Frontend + Backend |
+| UI 视觉审查 | 有（与代码审查并行） | 无 |
+| QA 测试 | 自动执行（API + E2E） | 需手动运行 `/review-qa` |
+| 适用场景 | 完整需求交付 | 快速迭代、仅需代码审查 |
+
 **关键机制:**
 
-- **文档检查是硬门槛** — `/unify-dev` 会先检查文档完整性，不通过则停止
-- **代码审查 + UI 视觉审查并行** — Tech Lead 审代码质量，UI 设计师审视觉还原
+- **文档检查是硬门槛** — `/unify-dev` 和 `/dev-tech` 都会先检查文档完整性，不通过则停止
+- **代码审查 + UI 视觉审查并行** — Tech Lead 审代码质量，UI 设计师审视觉还原（`/unify-dev`）
 - **审查不通过自动循环修复** — 创建修复任务 → 开发者修复 → 重新审查（上限 3 轮）
 - **QA 测试两阶段** — 先 API 接口测试，再浏览器有头模式 E2E 测试
 
@@ -562,10 +664,12 @@ hz-agents/
 │   ├── hz-backend.md                    # 后端开发
 │   ├── hz-ui.md                         # UI 设计师
 │   └── hz-qa.md                         # QA 测试
-├── commands/                            # 9 个 Slash 命令
+├── commands/                            # 11 个 Slash 命令
 │   ├── unify-dev.md                     # [统一调度] 团队开发
 │   ├── unify-doc-review.md              # [统一调度] 文档评审
 │   ├── unify-fix.md                     # [统一调度] Bug 修复
+│   ├── review-all.md                    # [统一调度] 三端文档对齐评审
+│   ├── dev-tech.md                      # [团队调度] Tech Lead 带队开发
 │   ├── dev-frontend.md                  # [单角色] 前端开发
 │   ├── dev-backend.md                   # [单角色] 后端开发
 │   ├── review-pm.md                     # [单角色] PM 评审
