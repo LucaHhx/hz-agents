@@ -1,0 +1,6 @@
+{
+  "packageName": "order",
+  "label": "订单管理",
+  "desc": "订单相关业务模块",
+  "template": "package"
+}

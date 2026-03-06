@@ -1,0 +1,63 @@
+{
+  "package": "order",
+  "tableName": "orders",
+  "structName": "Order",
+  "packageName": "order",
+  "abbreviation": "order",
+  "humpPackageName": "order",
+  "description": "订单管理",
+  "businessDB": "",
+  "gvaModel": true,
+  "autoMigrate": true,
+  "autoCreateApiToSql": true,
+  "autoCreateMenuToSql": true,
+  "autoCreateBtnAuth": true,
+  "onlyTemplate": false,
+  "generateServer": true,
+  "generateWeb": true,
+  "fields": [
+    {
+      "fieldName": "OrderNo",
+      "fieldDesc": "订单号",
+      "fieldType": "string",
+      "fieldJson": "orderNo",
+      "dataType": "varchar",
+      "dataTypeLong": "64",
+      "comment": "订单编号",
+      "columnName": "order_no",
+      "fieldSearchType": "=",
+      "form": true,
+      "table": true,
+      "desc": true,
+      "require": true
+    },
+    {
+      "fieldName": "Amount",
+      "fieldDesc": "金额",
+      "fieldType": "float64",
+      "fieldJson": "amount",
+      "dataType": "decimal",
+      "dataTypeLong": "10,2",
+      "comment": "订单金额",
+      "columnName": "amount",
+      "form": true,
+      "table": true,
+      "desc": true
+    },
+    {
+      "fieldName": "Status",
+      "fieldDesc": "状态",
+      "fieldType": "int",
+      "fieldJson": "status",
+      "dataType": "int",
+      "dataTypeLong": "4",
+      "comment": "订单状态 1:待支付 2:已支付 3:已完成",
+      "columnName": "status",
+      "fieldSearchType": "=",
+      "form": true,
+      "table": true,
+      "desc": true,
+      "defaultValue": "1"
+    }
+  ]
+}

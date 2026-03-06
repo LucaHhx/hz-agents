@@ -1,0 +1,31 @@
+{
+  "package": "order",
+  "tableName": "orders",
+  "structName": "Order",
+  "packageName": "order",
+  "abbreviation": "order",
+  "humpPackageName": "order",
+  "description": "订单",
+  "gvaModel": true,
+  "autoMigrate": true,
+  "autoCreateApiToSql": true,
+  "autoCreateMenuToSql": true,
+  "autoCreateBtnAuth": true,
+  "generateServer": true,
+  "generateWeb": true,
+  "fields": [
+    {
+      "fieldName": "Name",
+      "fieldDesc": "名称",
+      "fieldType": "string",
+      "fieldJson": "name",
+      "dataType": "varchar",
+      "dataTypeLong": "255",
+      "comment": "名称",
+      "columnName": "name",
+      "form": true,
+      "table": true,
+      "desc": true
+    }
+  ]
+}
