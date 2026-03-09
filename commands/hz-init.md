@@ -5,7 +5,7 @@ argument-hint: [项目名称]
 
 # 交互式项目初始化
 
-从 hz-admin-base 模板创建新项目，包含交互问答、模板拉取、定制化和文档初始化。
+从 hz-admin-base 模板创建新项目，包含交互问答、模板拉取、定制化、数据库初始化和文档初始化。
 
 ## Implementation Steps
 
@@ -27,34 +27,89 @@ ls -la server/ web/ client/ 2>/dev/null
 
 ### 2. 交互问答
 
-使用 brainstorming 方式收集项目信息。如果 `$ARGUMENTS` 提供了项目名称，跳过名称询问。
+**逐步引导式收集项目信息，每次只问一个问题，使用 AskUserQuestion 工具。**
 
-**必须收集的信息：**
+如果 `$ARGUMENTS` 提供了项目名称，跳过名称询问。
 
-**① 项目名称**
-- 英文小写，如 `my-project`
+---
+
+**【Q1】项目名称**（仅当 $ARGUMENTS 为空时询问）
+
+AskUserQuestion:
+- question: "请输入项目名称（英文小写，如 my-project）"
 - 用于：config 中的 db-name、日志前缀、Dockerfile 路径、页面标题等
 
-**② 项目描述**
-- 一句话描述项目用途
+---
 
-**③ 项目形态**（多选一）
-- A: server + web（纯后台管理系统）← 默认
-- B: server + web + client（后台 + 客户端）
-- C: server（纯 API 服务）
+**【Q2】项目描述**
 
-**④ 数据库类型**（多选一）
-- A: SQLite ← 默认（轻量，无需额外服务）
-- B: MySQL
-- C: PostgreSQL
+AskUserQuestion:
+- question: "一句话描述这个项目的用途"
+- options:
+  - label: "后台管理系统"
+    description: "通用的后台管理系统"
+  - label: "自己填写"
+    description: "输入你的项目描述"
 
-**⑤ client 技术栈**（仅形态 B 需要）
-- A: React 19 + Vite + Tailwind CSS + Zustand ← 默认推荐
-- B: 其他（用户指定）
+---
 
-**等待用户确认所有选项后再继续。**
+**【Q3】项目形态**
+
+AskUserQuestion:
+- question: "选择项目形态"
+- options:
+  - label: "server + web（后台管理系统）"
+    description: "Go 后端 + Vue 管理后台，最常用的形态"
+  - label: "server + web + client（后台 + 客户端）"
+    description: "额外包含一个面向用户的前端客户端"
+  - label: "server（纯 API 服务）"
+    description: "只有后端 API，不含任何前端"
+
+---
+
+**【Q4】数据库类型**
+
+AskUserQuestion:
+- question: "选择数据库类型"
+- options:
+  - label: "SQLite（推荐）"
+    description: "零安装、文件即数据库，适合开发和个人项目"
+  - label: "MySQL"
+    description: "功能完善，适合生产和团队协作"
+
+---
+
+**【Q5】Client 技术栈**（仅当 Q3 选了"server + web + client"时询问）
+
+AskUserQuestion:
+- question: "选择客户端技术栈"
+- options:
+  - label: "React 19 + Vite + Tailwind CSS + Zustand（推荐）"
+    description: "现代化的 React 全家桶"
+  - label: "自己指定"
+    description: "输入你想要的技术栈"
+
+---
+
+**每个问题等用户回答后再问下一个。全部收集完毕后，向用户展示确认：**
+
+```
+项目信息确认：
+  名称：<name>
+  描述：<description>
+  形态：<form>
+  数据库：<db-type>
+  [客户端：<client-stack>]
+
+确认无误后开始初始化？
+```
+
+等待用户确认后再继续。
 
 ### 3. 拉取模板
+
+> **重要**：用户已在项目目录中执行 `/hz-init`，不能直接 clone 到当前目录。
+> 必须 clone 到临时目录，再复制内容过来。
 
 ```bash
 # 创建临时目录
@@ -85,12 +140,11 @@ rm -rf "$TEMP_DIR"
 
 **4.1 配置文件定制**
 
-复制 `server/config.example.yaml` 为 `server/config.yaml`，修改：
-- `system.db-type` → 用户选择的数据库类型
-- `mysql.db-name` → 项目名（MySQL 时）
-- `jwt.signing-key` → 新生成的 UUID（`uuidgen`）
+修改 `server/config.example.yaml`（模板参考文件，入库），只改非敏感字段：
 - `autocode.module` → 项目名
 - `zap.prefix` → `'[<项目名>]'`
+
+> 敏感配置（数据库密码、JWT key）在步骤 6 通过 `config.local.yaml` 配置，不入库。
 
 **4.2 Dockerfile 定制**
 
@@ -123,66 +177,238 @@ npm install zustand axios react-router-dom
 cd server && go build ./...
 ```
 
-### 5. 链接 hz-agents
+### 5. 数据库准备与初始化
+
+参考 `.claude/skills/hz-project/modules/11-database-setup.md`。
+
+使用 AskUserQuestion 工具进行向导式交互，所有技术操作自动完成，用户只需做选择。
+
+---
+
+**【第一轮】根据步骤 2 的数据库选择分流**
+
+如果选了 SQLite → 直接跳到「SQLite 自动初始化」
+如果选了 MySQL → 进入 MySQL 引导流程
+
+---
+
+**【SQLite 自动初始化】**
+
+无需用户操作，自动执行：
 
 ```bash
-# 创建 .claude 目录
-mkdir -p .claude
-
-# 生成 link.sh
-cat > .claude/link.sh << 'SCRIPT'
-#!/bin/bash
-set -e
-HZ_AGENTS="/Users/luca/work/hz-agents"
-
-# 创建目标目录
-mkdir -p skills commands agents
-
-# 链接所有组件
-for dir in skills commands agents; do
-  if [ -d "$HZ_AGENTS/$dir" ]; then
-    for item in "$HZ_AGENTS/$dir"/*; do
-      ln -sf "$item" "$dir/$(basename "$item")"
-    done
-  fi
-done
-
-echo "hz-agents 链接完成"
-SCRIPT
-chmod +x .claude/link.sh
-
-# 执行链接
-cd .claude && bash link.sh && cd ..
-
-# 生成 settings.local.json
-cat > .claude/settings.local.json << 'JSON'
-{
-  "permissions": {
-    "allow": [
-      "Bash(npm:*)",
-      "Bash(npx:*)",
-      "Bash(go:*)",
-      "Bash(python3:*)",
-      "Bash(docker:*)",
-      "Bash(git:*)",
-      "Bash(cd:*)",
-      "Bash(mkdir:*)",
-      "Bash(cp:*)",
-      "Bash(mv:*)",
-      "Bash(rm:*)",
-      "Bash(ls:*)",
-      "Bash(cat:*)",
-      "Bash(grep:*)",
-      "Bash(find:*)",
-      "Bash(sed:*)",
-      "Bash(chmod:*)"
-    ]
-  }
-}
-JSON
+sqlite3 server/data.db < server/docs/hab-sqlite.sql
 ```
 
-### 6. 初始化 Git（如需）
+告知用户：「数据库已准备好，无需额外安装任何软件」→ 跳到【管理员密码】
+
+---
+
+**【MySQL 引导流程 — 第二轮交互】**
+
+AskUserQuestion:
+- question: "你的电脑上是否已经安装了 MySQL 数据库？（不确定也没关系）"
+- options:
+  - "已经安装了" — 我已有 MySQL 在运行，可以直接使用
+  - "没有 / 不确定" — 帮我安装一个（推荐）
+
+→ 如果「已经安装了」→ 跳到【收集连接信息】
+→ 如果「没有 / 不确定」→ 进入【安装 MySQL】
+
+---
+
+**【安装 MySQL — 第三轮交互】**
+
+先自动检测环境：
+
+```bash
+docker --version 2>/dev/null   # 记录是否有 Docker
+mysql --version 2>/dev/null    # 记录是否有 MySQL
+brew --version 2>/dev/null     # 记录是否有 Homebrew
+```
+
+根据检测结果，给出**最适合的建议**（不让用户做复杂判断）：
+
+**场景 A：检测到已有 MySQL**
+
+→ 告知用户：「检测到你的电脑上已经有 MySQL，我们直接使用它」
+→ 跳到【收集连接信息】
+
+**场景 B：检测到已有 Docker**
+
+→ 告知用户：「检测到你的电脑上有 Docker，我用它来安装 MySQL，这是最简单的方式」
+
+AskUserQuestion:
+- question: "请设置 MySQL 的密码（用于数据库登录，请记住这个密码）"
+- options:
+  - "使用默认密码 root123" — 简单好记，适合本地开发
+  - "自己设置" — 输入你想要的密码
+
+→ 自动执行：
+  1. 生成 docker-compose.yml 到项目根目录（挂载 hab.sql 自动导入）
+  2. `docker-compose up -d`
+  3. 等待 MySQL 就绪（轮询检测，最多 60 秒）
+  4. 告知用户：「MySQL 已安装并启动」
+→ 跳到【管理员密码】（Docker 挂载方式已自动导入数据）
+
+**场景 C：什么都没有（最常见）**
+
+AskUserQuestion:
+- question: "需要先安装一些基础工具。你希望用哪种方式？"
+- options:
+  - "一键安装（推荐）" — 我来帮你自动安装 Docker 和 MySQL，全程无需手动操作
+  - "我自己安装" — 给我安装指南，我手动完成后再继续
+
+→ 如果「一键安装」：
+
+  **Step 1: 检测 Homebrew**
+
+  ```bash
+  brew --version 2>/dev/null
+  ```
+
+  → 有 Homebrew → 跳到 Step 2
+  → 没有 Homebrew：
+
+  AskUserQuestion:
+  - question: "需要先安装 Homebrew（macOS 的软件安装工具）。这个工具是安装其他软件的基础，安装过程需要几分钟。确认安装吗？"
+  - options:
+    - "确认安装 Homebrew" — 将自动执行安装命令，过程中可能需要输入电脑密码
+    - "取消" — 我稍后自己处理
+
+  → 确认后执行：
+  ```bash
+  /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
+  ```
+  → 等待完成，验证 `brew --version`
+  → 失败则告知用户，建议手动操作
+
+  **Step 2: 安装 Docker Desktop**
+
+  AskUserQuestion:
+  - question: "接下来需要安装 Docker Desktop（一个运行数据库的容器工具）。安装包约 600MB，安装后会出现一个鲸鱼图标的应用。确认安装吗？"
+  - options:
+    - "确认安装 Docker Desktop" — 通过 Homebrew 自动下载安装
+    - "取消" — 我稍后自己处理
+
+  → 确认后执行：
+  ```bash
+  brew install --cask docker
+  ```
+
+  **Step 3: 启动 Docker Desktop**
+
+  AskUserQuestion:
+  - question: "Docker Desktop 已安装完成。现在需要启动它。启动后屏幕上会弹出 Docker 的窗口，请点击「Accept」同意条款。准备好了吗？"
+  - options:
+    - "启动 Docker" — 将自动打开 Docker Desktop 应用
+    - "等一下" — 我还没准备好
+
+  → 确认后执行：
+  ```bash
+  open /Applications/Docker.app
+  ```
+  → 告知用户：「Docker 正在启动中，请在弹出的窗口中点击 Accept，然后等待右上角的鲸鱼图标不再转动...」
+  → 轮询等待 `docker info` 成功（最多 120 秒，每 15 秒提示一次进度）
+  → 成功：「Docker 已启动！」→ 回到场景 B 的 docker-compose 流程
+  → 超时：告知用户「Docker 启动可能需要更长时间，请等鲸鱼图标稳定后告诉我」
+
+→ 如果「我自己安装」：
+  告知用户详细安装步骤（简洁版），并说「安装好后告诉我，我继续」
+  等待用户回复后，重新检测环境
+
+---
+
+**【收集连接信息 — 交互】**
+
+AskUserQuestion:
+- question: "MySQL 的连接地址是？（本机安装的一般不用改）"
+- options:
+  - "本机默认 (127.0.0.1:3306)" — MySQL 安装在这台电脑上
+  - "其他地址" — MySQL 在远程服务器上，我来填写地址
+
+→ 如果「本机默认」→ host=127.0.0.1, port=3306
+→ 如果「其他地址」→ 追问 host 和 port
+
+AskUserQuestion:
+- question: "MySQL 的登录用户名和密码？"
+- options:
+  - "root / root123" — 常见的本地开发默认配置
+  - "自己填写" — 我来输入用户名和密码
+
+→ 收集完毕后，自动测试连接：
+
+```bash
+mysql -h<host> -P<port> -u<user> -p<password> -e "SELECT 1"
+```
+
+→ 成功：「连接成功！」→ 继续
+→ 失败：告知用户具体错误（用通俗语言），引导修正：
+  - "连接被拒绝" → "MySQL 服务可能没有启动，请检查"
+  - "密码错误" → "密码不对，请重新输入"
+  - "找不到主机" → "地址不对，请确认 MySQL 的地址"
+
+连接成功后，自动执行数据库初始化：
+
+```bash
+mysql -h<host> -P<port> -u<user> -p<password> \
+  -e "CREATE DATABASE IF NOT EXISTS \`<project-name>\` DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci;"
+mysql -h<host> -P<port> -u<user> -p<password> <project-name> < server/docs/hab.sql
+```
+
+告知用户：「数据库已创建并导入初始数据」
+
+---
+
+**【管理员密码 — 交互】**
+
+AskUserQuestion:
+- question: "设置后台管理系统的登录密码（账号固定为 admin）"
+- options:
+  - "使用默认密码 123456" — 简单好记，后续可在系统中修改
+  - "自己设置密码" — 输入你想要的登录密码
+
+→ 如果自定义密码：
+  1. 自动生成 bcrypt hash：`cd server && go run ./cmd/hashpw/main.go <新密码>`
+  2. 执行 UPDATE（根据数据库类型选择工具）：
+     - MySQL: `mysql ... -e "UPDATE sys_users SET password='<hash>' WHERE username='admin';"`
+     - SQLite: `sqlite3 server/data.db "UPDATE sys_users SET password='<hash>' WHERE username='admin';"`
+  3. 告知用户：「管理员密码已设置」
+
+→ 最终确认：
+  ```
+  数据库准备完成！
+  - 数据库类型：MySQL / SQLite
+  - 管理员账号：admin
+  - 管理员密码：***（你设置的密码）
+  请记住这些信息，后续登录系统时需要使用。
+  ```
+
+### 6. 生成 config.local.yaml
+
+基于 `server/config.example.yaml` 复制为 `server/config.local.yaml`，覆盖以下字段：
+
+**通用配置：**
+- `jwt.signing-key` → 新生成 UUID（`uuidgen`）
+- `autocode.module` → <project-name>
+- `zap.prefix` → `'[<project-name>]'`
+
+**SQLite 时：**
+- `system.db-type` → sqlite
+- 无需改 mysql 配置（SQLite 使用默认 data.db 路径）
+
+**MySQL 时：**
+- `system.db-type` → mysql
+- `mysql.path` → <host>
+- `mysql.port` → "<port>"
+- `mysql.db-name` → <project-name>
+- `mysql.username` → <user>
+- `mysql.password` → <password>
+
+> config.local.yaml 在 .gitignore 中，含敏感信息不入库。
+> 同时保留 config.example.yaml 作为模板参考（已入库）。
+
+### 7. 初始化 Git（如需）
 
 ```bash
 # 如果不是 git 仓库
@@ -201,6 +427,9 @@ client/dist/
 # Config (contain secrets)
 server/config.yaml
 server/config.local.yaml
+
+# Database
+server/data.db
 
 # Logs
 server/log/
@@ -221,7 +450,7 @@ EOF
 fi
 ```
 
-### 7. 调用 PM 初始化业务需求
+### 8. 调用 PM 初始化业务需求
 
 启动 hz-pm agent，通过 brainstorming 与用户确定业务需求，初始化 docs/：
 
@@ -247,7 +476,7 @@ Agent tool:
     所有主要决策必须由用户确认。
 ```
 
-### 8. 输出总结
+### 9. 输出总结
 
 向用户展示：
 
@@ -258,7 +487,8 @@ Agent tool:
 
 项目名称: <name>
 项目形态: server + web [+ client]
-数据库:   SQLite / MySQL / PostgreSQL
+数据库:   MySQL (Docker) / SQLite
+管理员:   admin / ******
 
 项目结构:
   server/     — Go 后端 (hab 框架)
@@ -270,14 +500,17 @@ Agent tool:
 下一步建议:
   1. cd server && go run .        # 启动后端
   2. cd web && npm run serve      # 启动管理后台
-  3. /review-tech                  # Tech Lead 做技术方案
-  4. /unify-dev                    # 全团队协作开发
+  3. 浏览器打开 http://localhost:8080 → 用 admin 登录
+  4. /review-tech                  # Tech Lead 做技术方案
+  5. /unify-dev                    # 全团队协作开发
 ========================================
 ```
 
 ## Important Notes
 
-- 模板拉取使用 `git clone --depth 1`，可靠且不需要 GitHub token
+- 模板拉取使用 `git clone --depth 1` 到临时目录，再复制到项目目录，避免覆盖 .claude/ 等已有内容
 - Go module、import 路径、全局变量前缀统一保持 `hab` / `HAB_`，**不做替换**
 - Client 目录不从模板复制（模板中没有 client/），用 create-vite 新建
-- hz-agents 路径在 link.sh 中硬编码，用户换机器需要修改
+- `config.example.yaml` 只含非敏感配置（入库），`config.local.yaml` 含数据库密码和 JWT key（不入库）
+- SQLite 数据库文件 `server/data.db` 在 .gitignore 中，不入库
+- Docker 方式安装 MySQL 时，docker-compose.yml 会挂载 hab.sql 自动导入，无需手动执行 SQL

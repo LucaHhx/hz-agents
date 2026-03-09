@@ -30,6 +30,7 @@
 | 8 | 环境配置 | modules/08-config.md | config, 配置, 环境变量, yaml | 后端/前端环境配置规范 |
 | 9 | 部署指南 | modules/09-deploy.md | 部署, deploy, docker, 发布 | 本地/远程部署指南 |
 | 10 | 常见问题 | modules/10-faq.md | 问题, 报错, 失败, 排查 | FAQ 与故障排查 |
+| 11 | 数据库准备 | modules/11-database-setup.md | 数据库, MySQL, SQLite, 安装, 初始化 | 数据库选择、安装、初始化 |
 
 ## 参考文件
 
