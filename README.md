@@ -9,7 +9,7 @@ HZ-Agents 是一个面向全栈软件开发的多 Agent 协作系统。它定义
 **核心特性:**
 
 - **6 个专业 Agent** — PM 规划需求、Tech Lead 架构设计、前后端并行开发、UI 设计、QA 测试
-- **13 个 Slash Command** — 4 个统一调度 + 1 个团队调度 + 6 个单角色 + 2 个工具命令
+- **14 个 Slash Command** — 4 个统一调度 + 1 个团队调度 + 6 个单角色 + 3 个工具命令
 - **19 个模块化 Skills** — 可复用的能力组件（项目管理、文档管理、代码生成、UI 设计、数据库操作等）
 - **三层文档体系** — L1 项目级 / L2 需求级 / L3 技术级，自动化文档管理
 - **项目模板** — 基于 [hz-admin-base](https://github.com/LucaHhx/hz-admin-base.git)（GVA 框架），一键初始化后台管理项目
@@ -315,19 +315,22 @@ Show the full command reference:
 工具:
   /hz-init [项目名]                  # 交互式项目初始化
   /cmd-autocode                     # AutoCode 代码生成向导
+  /hz-agents-update                 # 更新 hz-agents 并修复链接
 ```
 
-更新只需：`cd ~/.hz-agents && git pull`，所有项目自动生效。
+更新只需：`/hz-agents-update`，自动拉取最新代码并修复符号链接，所有项目自动生效。
 
 ---
 
 ## Updating
 
-To update HZ-Agents to the latest version, simply:
+To update HZ-Agents to the latest version:
 
-```bash
-cd ~/.hz-agents && git pull
 ```
+/hz-agents-update
+```
+
+Or manually: `cd ~/.hz-agents && git pull`
 
 Because we use symlinks, all projects using HZ-Agents will automatically get the update.
 
@@ -431,7 +434,7 @@ ln -s ~/.hz-agents/skills   .claude/skills
 | `hz-ui` | UI 设计师 | 设计稿产出（merge.html）、设计系统、视觉审查 |
 | `hz-qa` | QA 测试 | API 测试、浏览器 E2E 测试、验收报告 |
 
-### 13 个 Slash Command
+### 14 个 Slash Command
 
 #### 统一调度命令
 
@@ -465,6 +468,7 @@ ln -s ~/.hz-agents/skills   .claude/skills
 |------|------|------|
 | `/hz-init` | 交互式项目初始化（从模板创建） | `/hz-init [项目名]` |
 | `/cmd-autocode` | AutoCode CRUD 代码生成向导 | `/cmd-autocode` |
+| `/hz-agents-update` | 更新 hz-agents 并修复符号链接 | `/hz-agents-update` |
 
 ### 开发流程
 
@@ -605,7 +609,7 @@ hz-agents/
 │   ├── hz-backend.md                    # 后端开发
 │   ├── hz-ui.md                         # UI 设计师
 │   └── hz-qa.md                         # QA 测试
-├── commands/                            # 13 个 Slash 命令
+├── commands/                            # 14 个 Slash 命令
 │   ├── unify-dev.md                     # [统一调度] 团队开发
 │   ├── unify-doc-review.md              # [统一调度] 文档评审
 │   ├── unify-fix.md                     # [统一调度] Bug 修复
@@ -618,7 +622,8 @@ hz-agents/
 │   ├── review-ui.md                     # [单角色] UI 设计
 │   ├── review-qa.md                     # [单角色] QA 测试
 │   ├── hz-init.md                       # [工具] 项目初始化
-│   └── cmd-autocode.md                  # [工具] 代码生成向导
+│   ├── cmd-autocode.md                  # [工具] 代码生成向导
+│   └── hz-agents-update.md             # [工具] 框架更新
 └── skills/                              # 19 个模块化能力
     ├── hz-project/                      # 项目全生命周期管理
     │   ├── SKILL.md                     # 索引入口
