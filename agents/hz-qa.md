@@ -36,7 +36,7 @@ skills:
   - brainstorming
   - create-docs
   - agent-browser
-  - pm-mcp-guide
+  - process-manager
   - wda
 ---
 
@@ -127,17 +127,21 @@ curl -s -X POST http://localhost:8080/api/auth/register \
 
 ### 5. 阶段 B — 浏览器 E2E 测试（有头模式）
 
-#### 5.1 使用 pm-mcp 启动前后端服务
+#### 5.1 使用 process-manager scripts 启动前后端服务
 
 **必须按顺序启动：后端先，前端后。**
 
-```
-步骤:
-1. mcp__pm-mcp__list_processes → 检查是否已有服务运行，避免重复
-2. mcp__pm-mcp__start_process(name="backend", command="go run ./cmd/server", cwd="server/")
-3. mcp__pm-mcp__grep_logs(id, pattern="listening on|started") → 确认后端就绪
-4. mcp__pm-mcp__start_process(name="frontend", command="npm run dev", cwd="frontend/")
-5. mcp__pm-mcp__grep_logs(id, pattern="ready in|Local:") → 确认前端就绪
+```bash
+# 1. 检查是否已有服务运行，避免重复
+.claude/skills/process-manager/scripts/list.sh
+# 2. 启动后端
+.claude/skills/process-manager/scripts/start.sh backend "go run ./cmd/server" --cwd server/
+# 3. 确认后端就绪
+.claude/skills/process-manager/scripts/search.sh backend "listening on|started"
+# 4. 启动前端
+.claude/skills/process-manager/scripts/start.sh frontend "npm run dev" --cwd frontend/
+# 5. 确认前端就绪
+.claude/skills/process-manager/scripts/search.sh frontend "ready in|Local:"
 ```
 
 **注意:** 如果端口被占用 (`EADDRINUSE`)，先终止旧进程再重启。
@@ -192,8 +196,8 @@ agent-browser snapshot -i
 
 ```
 1. agent-browser close → 关闭浏览器
-2. mcp__pm-mcp__terminate_all_processes → 停止所有服务
-3. mcp__pm-mcp__clear_finished → 清理进程记录
+2. .claude/skills/process-manager/scripts/stop.sh --all → 停止所有服务
+3. .claude/skills/process-manager/scripts/clean.sh → 清理进程记录
 ```
 
 ### 6. 记录测试结果

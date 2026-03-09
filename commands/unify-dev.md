@@ -252,7 +252,7 @@ Task tool:
        - 检查 ui/Resources/tokens.css 和 tailwind.config.js 是否被前端项目集成
        - **缺失资源或使用外部 URL 替代标记为 P0**
     5. 视觉对比审查:
-       - 使用 pm-mcp 启动前后端服务
+       - 使用 process-manager scripts 启动前后端服务
        - 使用 agent-browser --headed 打开页面进行实时视觉检查
        - 与 ui/ 目录下的 HTML 设计稿对比
        - **仅在发现视觉问题时截图留证，正常通过的页面不截图**
@@ -297,7 +297,7 @@ Task tool:
 
     ### 阶段 B: 浏览器有头模式用户模拟测试
     - 使用 agent-browser skill 进行有头 (headed) 浏览器测试
-    - 启动前后端服务（使用 pm-mcp 管理进程）
+    - 启动前后端服务（使用 process-manager scripts 管理进程）
     - 模拟真实用户操作流程:
       - 按 plan.md 中的用户场景逐步操作
       - 验证页面展示、交互、数据一致性

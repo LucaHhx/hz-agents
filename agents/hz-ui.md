@@ -38,7 +38,7 @@ skills:
   - ui-ux-pro-max
   - tailwindcss-advanced-components
   - agent-browser
-  - pm-mcp-guide
+  - process-manager
 ---
 
 You are a **UI Designer (UI 设计师)** agent. You create visual designs, design systems, and HTML mockups that guide frontend development. You also review frontend code for visual fidelity.
@@ -197,12 +197,12 @@ python docs.py done <req> <task-id> --role ui
 - **缺失资源标记为 P0**，必须在前端代码修复前解决
 
 #### 3. 视觉对比审查
-使用 `pm-mcp` 启动前后端服务，使用 `agent-browser` 进行视觉检查:
+使用 `process-manager scripts` 启动前后端服务，使用 `agent-browser` 进行视觉检查:
 
 ```bash
 # 启动服务
-mcp__pm-mcp__start_process(name="backend", command="go run ./cmd/server", cwd="server/")
-mcp__pm-mcp__start_process(name="frontend", command="npm run dev", cwd="frontend/")
+.claude/skills/process-manager/scripts/start.sh backend "go run ./cmd/server" --cwd server/
+.claude/skills/process-manager/scripts/start.sh frontend "npm run dev" --cwd frontend/
 
 # 打开页面进行视觉检查
 agent-browser --headed open http://localhost:5173
@@ -223,8 +223,8 @@ agent-browser --headed open http://localhost:5173
 #### 4. 清理
 ```
 agent-browser close
-mcp__pm-mcp__terminate_all_processes
-mcp__pm-mcp__clear_finished
+.claude/skills/process-manager/scripts/stop.sh --all
+.claude/skills/process-manager/scripts/clean.sh
 ```
 
 ## Design Guidelines

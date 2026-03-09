@@ -23,7 +23,7 @@ hz-agents 提供三类组件：Skills（知识库）、Commands（可执行命�
 | agent-browser | 浏览器自动化 | 网页测试与数据提取 |
 | mysql-operator | MySQL 操作 | 数据库查询与管理 |
 | redis-operator | Redis 操作 | 缓存查询与管理 |
-| pm-mcp-guide | 进程管理 | 启动/管理后台服务 |
+| process-manager | 进程管理 | 启动/管理后台服务 |
 | subagent-driven-development | 子代理驱动开发 | 并行执行实现计划 |
 
 ## Commands（可执行命令）

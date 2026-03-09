@@ -61,7 +61,7 @@ Agent tool:
     - 逐个测试 API 端点，记录请求/响应
 
     ## 阶段 B: 浏览器 E2E 测试
-    - 使用 pm-mcp 启动前后端服务
+    - 使用 process-manager scripts 启动前后端服务
     - 使用 agent-browser --headed 模拟用户操作
     - 按用户场景逐步验证
 
