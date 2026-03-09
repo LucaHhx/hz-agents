@@ -184,25 +184,26 @@ AskUserQuestion:
 ### 4. 拉取模板
 
 > **重要**：用户已在项目目录中执行 `/hz-init`，不能直接 clone 到当前目录。
-> 必须 clone 到临时目录，再复制内容过来。
+> 每次都删除旧缓存重新 clone，确保使用最新模板。
 
 ```bash
-# 创建临时目录
-TEMP_DIR=$(mktemp -d)
+CACHE_DIR="$HOME/.hz-templates/hz-admin-base"
 
-# 拉取模板
-git clone --depth 1 https://github.com/LucaHhx/hz-admin-base.git "$TEMP_DIR/template"
+# 删除旧缓存，重新 clone 最新模板
+rm -rf "$CACHE_DIR"
+mkdir -p "$HOME/.hz-templates"
+git clone --depth 1 https://github.com/LucaHhx/hz-admin-base.git "$CACHE_DIR"
 
 # 按选择复制
-cp -r "$TEMP_DIR/template/server" ./server/
+cp -r "$CACHE_DIR/server" ./server/
 
 # 复制 web（形态 A 或 B）
 if [ "$FORM" != "C" ]; then
-  cp -r "$TEMP_DIR/template/web" ./web/
+  cp -r "$CACHE_DIR/web" ./web/
 fi
 
-# 清理
-rm -rf "$TEMP_DIR"
+# 复制完成后删除缓存
+rm -rf "$CACHE_DIR"
 ```
 
 如果 clone 失败（网络问题），提示用户手动 clone 或检查网络。
@@ -613,7 +614,7 @@ Agent tool:
 
 ## Important Notes
 
-- 模板拉取使用 `git clone --depth 1` 到临时目录，再复制到项目目录，避免覆盖 .claude/ 等已有内容
+- 模板拉取每次都删除旧缓存（`~/.hz-templates/hz-admin-base`）重新 `git clone --depth 1`，确保始终使用最新模板，再复制到项目目录，避免覆盖 .claude/ 等已有内容
 - Go module、import 路径、全局变量前缀统一保持 `hab` / `HAB_`，**不做替换**
 - Client 目录不从模板复制（模板中没有 client/），用 create-vite 新建
 - `config.example.yaml` 只含非敏感配置（入库），`config.local.yaml` 含数据库密码和 JWT key（不入库）
