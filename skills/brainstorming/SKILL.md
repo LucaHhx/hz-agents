@@ -18,10 +18,13 @@ Do NOT invoke any implementation skill, write any code, scaffold any project, or
 <HARD-GATE>
 TECH STACK IS FIXED. Do NOT propose, recommend, or select alternative technologies. The HZ system mandates:
 - Backend: Go (Gin + GORM + Redis + Zap), `server/` directory
-- Frontend: React 19 + Vite + Tailwind CSS + Zustand, `web/` directory
+- Frontend: Detect project type by checking directory structure:
+  - If `web/` exists and contains Vue/Element Plus → `web/` = Vue 3 + Element Plus (管理后台, from hz-admin-base template)
+  - If `client/` exists → `client/` = flexible choice (default: React 19 + Vite + Tailwind CSS + Zustand)
+  - If only `web/` exists and is a React project → React 19 + Vite + Tailwind CSS + Zustand (backward compatible)
 - Desktop: Tauri 2
 - Mobile: Capacitor
-- Project structure: `server/` + `web/` + `docs/`
+- Project structure: `server/` + `web/` + `client/`(optional) + `docs/`
 
 When a PRD mentions different technologies (e.g., Expo, React Native, drizzle-orm, SQLite client-side, monorepo with apps/packages), you MUST map those requirements to the fixed tech stack above. Brainstorming explores FEATURES and ARCHITECTURE within these constraints, NOT technology selection.
 

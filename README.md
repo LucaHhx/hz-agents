@@ -9,14 +9,16 @@ HZ-Agents 是一个面向全栈软件开发的多 Agent 协作系统。它定义
 **核心特性:**
 
 - **6 个专业 Agent** — PM 规划需求、Tech Lead 架构设计、前后端并行开发、UI 设计、QA 测试
-- **11 个 Slash Command** — 4 个统一调度 + 1 个团队调度 + 6 个单角色命令，灵活组合
-- **16 个模块化 Skills** — 可复用的能力组件（文档管理、UI 设计、浏览器自动化、桌面控制等）
+- **13 个 Slash Command** — 4 个统一调度 + 1 个团队调度 + 6 个单角色 + 2 个工具命令
+- **19 个模块化 Skills** — 可复用的能力组件（项目管理、文档管理、代码生成、UI 设计、数据库操作等）
 - **三层文档体系** — L1 项目级 / L2 需求级 / L3 技术级，自动化文档管理
+- **项目模板** — 基于 [hz-admin-base](https://github.com/LucaHhx/hz-admin-base.git)（GVA 框架），一键初始化后台管理项目
+- **多端项目支持** — server + web（Vue 3 管理后台）+ client（React 客户端），按需组合
 - **质量门禁** — 文档审查 → 代码评审 + 视觉审查 → QA 自动化测试
 
 ## 前置要求
 
-- [Claude Code CLI](https://docs.anthropic.com/en/docs/claude-code) 已安装（或其他支持 `.claude/` 目录结构的 AI 编程工具，如 Codex）
+- [Claude Code CLI](https://docs.anthropic.com/en/docs/claude-code) 已安装（或其他支持 `.claude/` 目录结构的 AI 编程工具）
 - Python 3.10+（文档 CLI 工具需要）
 - Node.js 18+（前端开发和浏览器自动化需要）
 - Go 1.25+（后端开发需要）
@@ -36,8 +38,8 @@ instructions below. First determine which scenario applies:
 Trigger keywords: "更新", "update", "upgrade", "pull latest", "同步最新",
 or user provides a URL like:
   - https://github.com/LucaHhx/hz-agents
-  - https://github.com/LucaHhx/hz-agents/tree/split
-  - https://github.com/LucaHhx/hz-agents/blob/split/README.md
+  - https://github.com/LucaHhx/hz-agents/tree/hz-project
+  - https://github.com/LucaHhx/hz-agents/blob/hz-project/README.md
 
 ### How to update:
 
@@ -86,9 +88,9 @@ Follow these steps EXACTLY:
 ## Step 1: Parse the URL and clone hz-agents
 
 IMPORTANT: The user may provide a URL that includes a branch path, such as:
-  - https://github.com/LucaHhx/hz-agents/tree/split           → branch = "split"
+  - https://github.com/LucaHhx/hz-agents/tree/hz-project     → branch = "hz-project"
   - https://github.com/LucaHhx/hz-agents/tree/main            → branch = "main"
-  - https://github.com/LucaHhx/hz-agents/blob/split/README.md → branch = "split"
+  - https://github.com/LucaHhx/hz-agents/blob/hz-project/README.md → branch = "hz-project"
   - https://github.com/LucaHhx/hz-agents                      → branch = default (main)
 
 You MUST extract the branch name from the URL if `/tree/<branch>` or `/blob/<branch>/` is present.
@@ -211,7 +213,7 @@ ASK the user before installing anything. Do NOT silently install tools.
 | Dependency | Required by | What it does | Install command (macOS) |
 |------------|-------------|--------------|------------------------|
 | `python3` (3.10+) | create-docs (docs.py CLI) | Document management CLI | `brew install python` |
-| `node` (18+) + `npm` | create-web, agent-browser | Frontend dev, browser automation | `brew install node` |
+| `node` (18+) + `npm` | Frontend dev, browser automation | Frontend and tooling | `brew install node` |
 | `go` (1.25+) | Backend development | Go backend compilation | `brew install go` |
 | `tmux` | Claude Code teammateMode | Multi-agent parallel panes | `brew install tmux` |
 | `agent-browser` | agent-browser skill | Browser automation CLI | `npm install -g @anthropic/agent-browser` |
@@ -269,158 +271,53 @@ IMPORTANT:
 - `go` is only needed if the project has a Go backend
 - At minimum, `python3`, `node`, and `tmux` are recommended for core functionality
 
-## Step 8: Confirm to user and explain how to use
+## Step 8: Confirm to user and show quick start
 
 After installation, you MUST:
 1. Briefly explain what HZ-Agents is
-2. ASK the user their role in the team
-3. Based on their role, show the relevant commands and workflow
-
-Use the user's language (Chinese if they spoke Chinese, English if English, etc.).
-
-### 8.1 — Explain what HZ-Agents is
+2. Show the quick start workflow below
 
 Tell the user:
 
-> HZ-Agents is a multi-agent software development framework. 6 specialized AI agents
-> (PM, Tech Lead, Frontend, Backend, UI Designer, QA) collaborate to build full-stack
-> applications — from requirements planning to QA testing.
+> HZ-Agents 已安装完成！这是一个多智能体软件开发框架，6 个专业 AI Agent（PM、Tech Lead、前端、后端、UI 设计师、QA）协作完成全栈应用开发。
 
-### 8.2 — Ask the user's role
-
-Ask the user (use AskUserQuestion or equivalent):
-
-> What is your role in the team?
-
-Options:
-- PM (Product Manager)
-- Tech Lead
-- UI Designer
-- Frontend Developer
-- Backend Developer
-- QA Tester
-
-### 8.3 — Show role-specific command guide
-
-Based on the user's answer, show the corresponding section below:
-
-#### If PM:
-
-Your core command is `/review-pm` — create and review requirement documents.
+Show the quick start:
 
 ```
-/review-pm 新建需求：用户积分系统     # Create a new requirement
-/review-pm 7                         # Review requirement #7
-/review-pm 7 补充验收标准             # Add acceptance criteria to #7
-/review-pm                           # Auto-scan, pick a requirement
+新项目？从这里开始：
+  /hz-init                          # 从 hz-admin-base 模板创建项目
+
+已有项目？从这里开始：
+  /unify-doc-review                 # 初始化文档 + 团队评审
+  /unify-dev <需求名>                # 全团队协作开发
 ```
 
-After finishing, notify Tech Lead to run `/review-tech` and UI Designer to run `/review-ui`.
-
-#### If Tech Lead:
-
-Your core commands are `/review-tech` (design) and `/dev-tech` (lead development).
+Show the full command reference:
 
 ```
-# Technical design
-/review-tech 7                       # Create technical design for requirement #7
-/review-tech 7 追加OAuth登录支持      # Update design: add OAuth support
-/review-tech 7 缓存策略改用Redis      # Update design: switch to Redis cache
+统一调度（多 Agent 协作）:
+  /unify-doc-review [需求名]         # PM + Tech Lead + UI 文档协作评审
+  /review-all [需求名]               # PM + Tech Lead + UI 三端对齐
+  /unify-dev [需求名]                # 全团队开发（开发 + 视觉审查 + QA）
+  /unify-fix <问题描述>              # 自动诊断修复 Bug
 
-# Lead development (Tech Lead + Frontend + Backend, with code review)
-/dev-tech 7                          # Lead team to develop requirement #7
-/dev-tech 7 先实现登录模块            # Lead team, prioritize login module
-/dev-tech 7 只做后端API部分           # Lead team, backend API only
+团队调度:
+  /dev-tech [需求名]                 # Tech Lead 带队开发 + 代码审查
+
+单角色:
+  /review-pm [需求名]                # PM 评审需求文档
+  /review-tech [需求名]              # Tech Lead 技术方案
+  /review-ui [需求名]                # UI 设计师设计稿
+  /dev-frontend [需求名]             # 前端开发
+  /dev-backend [需求名]              # 后端开发
+  /review-qa [需求名]                # QA 验收测试
+
+工具:
+  /hz-init [项目名]                  # 交互式项目初始化
+  /cmd-autocode                     # AutoCode 代码生成向导
 ```
 
-After `/review-tech`, use `/dev-tech` to lead the development team (includes code review).
-Or notify Frontend to run `/dev-frontend` and Backend to run `/dev-backend` separately.
-
-#### If UI Designer:
-
-Your core command is `/review-ui` — produce design mockups and design systems.
-
-```
-/review-ui 7                         # Create UI design for requirement #7
-/review-ui 7 按钮改成圆角风格         # Iterate: rounded button style
-/review-ui 7 增加空状态和加载骨架屏    # Add empty state and skeleton screens
-```
-
-Deliverables: `ui/merge.html` (mockup), `ui/design.md` (design system), `ui/Resources/` (icons).
-
-#### If Frontend Developer:
-
-Your core command is `/dev-frontend` — implement frontend pages and interactions.
-
-```
-/dev-frontend 7                      # Implement all frontend tasks for #7
-/dev-frontend 7 先实现登录页          # Start with the login page
-/dev-frontend 7 只做表单验证部分      # Only do form validation
-```
-
-Note: Always use local resources from `ui/Resources/`, never external URLs.
-
-#### If Backend Developer:
-
-Your core command is `/dev-backend` — implement APIs and business logic.
-
-```
-/dev-backend 7                       # Implement all backend tasks for #7
-/dev-backend 7 只做用户CRUD接口       # Only do user CRUD APIs
-/dev-backend 7 先做数据库迁移         # Start with database migration
-```
-
-#### If QA Tester:
-
-Your core command is `/review-qa` — run API + E2E acceptance tests.
-
-```
-/review-qa 7                         # Full test for requirement #7
-/review-qa 7 重点测试并发和边界场景    # Focus on concurrency and edge cases
-/review-qa 7 回归测试用户列表功能      # Regression test user list feature
-```
-
-### 8.4 — Show the unified orchestration commands and dependency chain
-
-After the role-specific guide, ALWAYS also show:
-
-**Unified orchestration commands** (coordinate multiple roles at once):
-
-```
-/unify-doc-review [req]    # PM + Tech Lead + UI collaborate on docs and design
-/review-all [req]          # PM + Tech Lead + UI cross-review and align docs
-/unify-dev [req]           # Full team: dev → code review + UI review → QA test
-/dev-tech [req]            # Lightweight: Tech Lead + Frontend + Backend + code review
-/unify-fix <description>   # Smart bug fix: auto-assemble repair team
-```
-
-**Command dependency chain** (the order commands should be run):
-
-```
-/review-pm ──┬── /review-tech ──┐
-             │                  ├── /review-all ──┬── /dev-tech ─────────┐
-             └── /review-ui ────┘   (三端对齐)    │  (Tech Lead 带队)    │
-                                                  │     — 或者 —         │
-                                                  ├── /dev-backend ──┐  │
-                                                  │                  ├──┴── /review-qa
-                                                  └── /dev-frontend ─┘
-```
-
-**Recommended workflow:**
-
-1. If the project has no `docs/` directory yet, run `/unify-doc-review` to initialize.
-   The PM will discuss requirements with you, and the Tech Lead will plan the architecture.
-2. Optionally run `/review-all [req]` to cross-review and align PM + Tech + UI docs.
-3. After docs are ready, choose your development path:
-   - `/unify-dev [req]` — full process with UI review + QA testing
-   - `/dev-tech [req]` — faster iteration with just code review
-4. If bugs are found later, use `/unify-fix <description>` to diagnose and fix.
-
-**Updating HZ-Agents:**
-```
-cd ~/.hz-agents && git pull
-```
-All linked projects update automatically.
+更新只需：`cd ~/.hz-agents && git pull`，所有项目自动生效。
 
 ---
 
@@ -448,7 +345,7 @@ AI 会自动完成以下操作：
 3. 通过符号链接将 agents / commands / skills 链接到项目中
 4. 配置工具所需的设置（如 Claude Code 的团队模式、权限等）
 5. 添加 `.gitignore` 规则
-6. 检测缺失的依赖工具（python3 / node / go / tmux / agent-browser 等），询问你是否安装
+6. 检测缺失的依赖工具，询问是否安装
 
 更新只需 `cd ~/.hz-agents && git pull`，所有项目自动生效。
 
@@ -459,7 +356,6 @@ AI 会自动完成以下操作：
 git clone https://github.com/LucaHhx/hz-agents.git ~/.hz-agents
 
 # 2. 在项目根目录创建符号链接
-#    将 .claude 替换为你使用的工具对应的目录（.codex / .cursor 等）
 cd your-project
 mkdir -p .claude
 ln -s ~/.hz-agents/agents   .claude/agents
@@ -469,18 +365,30 @@ ln -s ~/.hz-agents/skills   .claude/skills
 
 ## 快速开始
 
-安装完成后，在项目目录中启动 Claude Code 即可使用。
-
-### 从零开始一个新项目
+### 创建新项目（推荐）
 
 ```bash
-# 第一步：初始化文档
-# PM 和 Tech Lead 会与你交互确认需求和技术方案
+# 使用 /hz-init 从 hz-admin-base 模板创建项目
+# 交互式选择项目形态、数据库、技术栈
+/hz-init my-project
+```
+
+`/hz-init` 会引导你完成：
+1. 选择项目形态（纯后台 / 后台+客户端 / 纯API）
+2. 从 hz-admin-base 模板拉取代码
+3. 定制化配置（数据库、JWT、日志前缀等）
+4. 链接 hz-agents
+5. 与 PM 协作定义业务需求
+
+### 已有项目接入
+
+```bash
+# 第一步：初始化文档（PM 和 Tech Lead 会与你交互确认需求和技术方案）
 /unify-doc-review
 
-# 第二步：启动团队开发第一个需求（两种方式任选）
-/unify-dev 1-account-system           # 完整流程：开发 + 视觉审查 + QA 测试
-/dev-tech 1-account-system            # 轻量开发：Tech Lead 带队 + 代码审查
+# 第二步：启动团队开发（两种方式任选）
+/unify-dev 1-user-system              # 完整流程：开发 + 视觉审查 + QA
+/dev-tech 1-user-system               # 轻量开发：Tech Lead 带队 + 代码审查
 
 # 第三步：修复 Bug（可选）
 /unify-fix 登录页在 iOS 上有额外滚动条
@@ -490,22 +398,24 @@ ln -s ~/.hz-agents/skills   .claude/skills
 
 ```bash
 # 统一调度 —— 多角色协作
-/unify-doc-review 2-quick-bookkeeping   # 文档评审（初始化或补充文档）
-/review-all 2-quick-bookkeeping         # 三端文档对齐评审（PM+Tech+UI 交叉检查）
-/unify-dev 2-quick-bookkeeping          # 团队开发（完整流程：开发+视觉审查+QA）
-/unify-fix 记账接口返回 500 错误        # Bug 修复
+/unify-doc-review 2-order-module      # 文档评审
+/review-all 2-order-module            # 三端对齐
+/unify-dev 2-order-module             # 团队开发
+/unify-fix 订单接口返回 500           # Bug 修复
 
 # 团队开发 —— Tech Lead 带队
-/dev-tech 3-transaction-list            # Tech Lead 带队开发（轻量：开发+代码审查）
-/dev-tech 3 先实现列表页                # 带指令，指定优先级
+/dev-tech 3-payment 先实现支付接口     # 带指令
 
-# 单角色 —— 精准控制单个 Agent
-/review-pm 3-transaction-list           # PM 评审需求文档
-/review-tech 3-transaction-list         # Tech Lead 制定技术方案
-/review-ui 3-transaction-list           # UI 设计师产出设计稿
-/dev-frontend 3-transaction-list        # 前端独立开发
-/dev-backend 3-transaction-list         # 后端独立开发
-/review-qa 3-transaction-list           # QA 执行测试
+# 单角色 —— 精准控制
+/review-pm 新建需求：积分系统          # PM 新建需求
+/review-tech 3-payment                # Tech Lead 技术方案
+/review-ui 3-payment                  # UI 设计师设计稿
+/dev-frontend 3-payment               # 前端独立开发
+/dev-backend 3-payment                # 后端独立开发
+/review-qa 3-payment                  # QA 测试
+
+# 代码生成 —— AutoCode
+/cmd-autocode                         # 交互式 CRUD 代码生成
 ```
 
 ## 架构
@@ -516,59 +426,66 @@ ln -s ~/.hz-agents/skills   .claude/skills
 |-------|------|------|
 | `hz-pm` | 产品经理 | 需求规划、业务文档、任务拆分、验收标准 |
 | `hz-tech-lead` | 技术负责人 | 架构设计、技术方案、代码审查、团队协调 |
-| `hz-frontend` | 前端开发 | 页面实现、组件开发、UI 还原、状态管理 |
-| `hz-backend` | 后端开发 | API 实现、数据库设计、业务逻辑、数据同步 |
+| `hz-frontend` | 前端开发 | 页面实现、组件开发、UI 还原、多端任务路由 |
+| `hz-backend` | 后端开发 | API 实现、数据库设计、业务逻辑 |
 | `hz-ui` | UI 设计师 | 设计稿产出（merge.html）、设计系统、视觉审查 |
 | `hz-qa` | QA 测试 | API 测试、浏览器 E2E 测试、验收报告 |
 
-### 11 个 Slash Command
-
-命令分为三类：**统一调度**（多 Agent 协作）、**团队调度**（Tech Lead 带队）和**单角色**（独立执行）。
+### 13 个 Slash Command
 
 #### 统一调度命令
 
 | 命令 | 说明 | 用法 |
 |------|------|------|
-| `/unify-doc-review` | 启动 PM + Tech Lead + UI 设计师协作完善文档和设计稿 | `/unify-doc-review [需求名称]` |
-| `/unify-dev` | 启动 Tech Lead + UI + Frontend + Backend + QA 团队开发 | `/unify-dev [需求名称]` |
+| `/unify-doc-review` | PM + Tech Lead + UI 协作完善文档和设计 | `/unify-doc-review [需求名]` |
+| `/unify-dev` | Tech Lead + UI + Frontend + Backend + QA 团队开发 | `/unify-dev [需求名]` |
 | `/unify-fix` | 诊断并修复 Bug，自动组建修复团队 | `/unify-fix <问题描述>` |
-| `/review-all` | 启动 PM + Tech Lead + UI 三端文档对齐评审 | `/review-all [需求名称]` |
+| `/review-all` | PM + Tech Lead + UI 三端文档对齐评审 | `/review-all [需求名]` |
 
 #### 团队调度命令
 
 | 命令 | 说明 | 用法 |
 |------|------|------|
-| `/dev-tech` | Tech Lead 带队前后端开发，含开发指导和代码审查 | `/dev-tech [需求名称] [指令]` |
+| `/dev-tech` | Tech Lead 带队前后端开发 + 代码审查 | `/dev-tech [需求名] [指令]` |
 
 #### 单角色命令
 
 | 命令 | 说明 | 用法 |
 |------|------|------|
-| `/review-pm` | PM 评审/完善需求业务文档，或新建需求 | `/review-pm [需求名称] [指令]` |
-| `/review-tech` | Tech Lead 创建/更新技术方案和任务 | `/review-tech [需求名称] [指令]` |
-| `/review-ui` | UI 设计师产出/更新设计稿和设计系统 | `/review-ui [需求名称] [指令]` |
-| `/dev-frontend` | 前端开发实现前端代码 | `/dev-frontend [需求名称] [指令]` |
-| `/dev-backend` | 后端开发实现后端代码 | `/dev-backend [需求名称] [指令]` |
-| `/review-qa` | QA 执行 API + E2E 验收测试 | `/review-qa [需求名称] [指令]` |
+| `/review-pm` | PM 评审/完善需求业务文档 | `/review-pm [需求名] [指令]` |
+| `/review-tech` | Tech Lead 创建/更新技术方案 | `/review-tech [需求名] [指令]` |
+| `/review-ui` | UI 设计师产出/更新设计稿 | `/review-ui [需求名] [指令]` |
+| `/dev-frontend` | 前端开发实现代码 | `/dev-frontend [需求名] [指令]` |
+| `/dev-backend` | 后端开发实现代码 | `/dev-backend [需求名] [指令]` |
+| `/review-qa` | QA 执行验收测试 | `/review-qa [需求名] [指令]` |
+
+#### 工具命令
+
+| 命令 | 说明 | 用法 |
+|------|------|------|
+| `/hz-init` | 交互式项目初始化（从模板创建） | `/hz-init [项目名]` |
+| `/cmd-autocode` | AutoCode CRUD 代码生成向导 | `/cmd-autocode` |
 
 ### 开发流程
 
 ```
-用户需求
+需求输入
   ↓
-/unify-doc-review ─── PM 需求规划 + Tech Lead 架构设计 + UI 设计稿产出
+/hz-init ──────────── 新项目初始化（可选，仅首次）
   ↓
-/review-all ────────── PM + Tech Lead + UI 三端交叉评审对齐（可选）
+/unify-doc-review ─── PM 需求规划 + Tech Lead 架构 + UI 设计稿
+  ↓
+/review-all ────────── PM + Tech Lead + UI 三端对齐（可选）
   ↓
   ├─ 路径 A（完整流程）:
-  │  /unify-dev ────── 文档检查 → Frontend + Backend 并行开发
+  │  /unify-dev ────── Frontend + Backend 并行开发
   │                      ↓
   │                    Tech Lead 代码审查 + UI 视觉审查（并行）
   │                      ↓
   │                    QA 测试（API + 浏览器 E2E）
   │
   └─ 路径 B（轻量开发）:
-     /dev-tech ──────── 文档检查 → Frontend + Backend 并行开发
+     /dev-tech ──────── Frontend + Backend 并行开发
                           ↓
                         Tech Lead 代码审查（最多 3 轮）
                           ↓
@@ -579,77 +496,101 @@ ln -s ~/.hz-agents/skills   .claude/skills
 
 **两条开发路径对比:**
 
-| | `/unify-dev`（完整流程） | `/dev-tech`（轻量开发） |
+| | `/unify-dev`（完整） | `/dev-tech`（轻量） |
 |---|---|---|
-| 参与角色 | Tech Lead + Frontend + Backend + UI + QA | Tech Lead + Frontend + Backend |
-| UI 视觉审查 | 有（与代码审查并行） | 无 |
-| QA 测试 | 自动执行（API + E2E） | 需手动运行 `/review-qa` |
-| 适用场景 | 完整需求交付 | 快速迭代、仅需代码审查 |
+| 参与角色 | TL + FE + BE + UI + QA | TL + FE + BE |
+| UI 视觉审查 | 有 | 无 |
+| QA 测试 | 自动执行 | 需手动 `/review-qa` |
+| 适用场景 | 完整需求交付 | 快速迭代 |
 
-**关键机制:**
+## 项目结构
 
-- **文档检查是硬门槛** — `/unify-dev` 和 `/dev-tech` 都会先检查文档完整性，不通过则停止
-- **代码审查 + UI 视觉审查并行** — Tech Lead 审代码质量，UI 设计师审视觉还原（`/unify-dev`）
-- **审查不通过自动循环修复** — 创建修复任务 → 开发者修复 → 重新审查（上限 3 轮）
-- **QA 测试两阶段** — 先 API 接口测试，再浏览器有头模式 E2E 测试
+### 三种项目形态
 
-## 项目结构约定
-
-使用本框架开发的项目遵循统一结构：
-
-```
+```bash
+# A: 纯后台管理系统（默认）
 project/
-├── .claude/
-│   ├── agents/       # Agent 定义（从 hz-agents 复制）
-│   ├── commands/     # Slash 命令（从 hz-agents 复制）
-│   └── skills/       # 模块化能力（从 hz-agents 复制）
-├── server/           # Go 后端
-├── web/              # React 前端
-└── docs/             # 三层文档
-    ├── project.md         # L1 项目概述
-    ├── tasks.md           # L1 需求列表
-    ├── CHANGELOG.md       # 变更日志
-    └── <N>-<需求名>/      # L2 需求目录
-        ├── plan.md        # 需求计划 + 验收标准
-        ├── tasks.md       # 功能任务列表
-        ├── log.md         # 变更记录
-        ├── backend/       # L3 后端技术文档 + 任务
-        ├── frontend/      # L3 前端技术文档 + 任务
-        ├── ui/            # L3 UI 设计稿 + 资源
-        └── qa/            # L3 测试方案 + 任务
+├── server/        # Go 后端（hab 框架）
+├── web/           # Vue 3 + Element Plus 管理后台
+├── docs/          # 三层文档
+└── .claude/       # hz-agents 链接
+
+# B: 后台 + 客户端
+project/
+├── server/        # Go 后端
+├── web/           # Vue 3 管理后台
+├── client/        # React 19 客户端前端
+├── docs/          # 三层文档
+└── .claude/
+
+# C: 纯 API 服务
+project/
+├── server/        # Go 后端
+├── docs/          # 三层文档
+└── .claude/
 ```
+
+### 三层文档体系
+
+```
+docs/
+├── project.md              # L1 项目概述
+├── tasks.md                # L1 需求列表
+├── CHANGELOG.md            # 变更日志
+└── <N>-<需求名>/            # L2 需求目录
+    ├── plan.md             # 需求计划 + 验收标准
+    ├── tasks.md            # 功能任务列表
+    ├── log.md              # 变更记录
+    ├── backend/            # L3 后端技术文档 + 任务
+    ├── frontend/           # L3 前端技术文档 + 任务
+    ├── ui/                 # L3 UI 设计稿 + 资源
+    └── qa/                 # L3 测试方案 + 任务
+```
+
+### 多端项目任务路由
+
+当项目同时包含 `web/` 和 `client/` 时，前端任务通过标签路由：
+
+| 标签 | 代码目录 | 技术栈 |
+|------|---------|--------|
+| `[web]` | `web/` | Vue 3 + Element Plus |
+| `[client]` | `client/` | React 19 + Tailwind CSS |
+| 无标签 | 根据项目结构自动判断 | — |
 
 ## 默认技术栈
 
 | 层级 | 技术 |
 |------|------|
-| 后端 | Go 1.25+, Gin, GORM, SQLite, JWT, Viper, Zap |
-| 前端 | React 19, TypeScript 5.9+, Vite 7+, Tailwind CSS 4+, Zustand, Axios |
+| 后端 | Go 1.25+, Gin, GORM, SQLite/MySQL/PostgreSQL, JWT, Viper, Zap |
+| 管理后台（web/） | Vue 3, Element Plus, Pinia, Vue Router, Vite |
+| 客户端前端（client/） | React 19, TypeScript 5.9+, Vite 7+, Tailwind CSS 4+, Zustand |
 | 桌面端 | Tauri 2.x (Rust) |
 | 移动端 | Capacitor 8+ (iOS/Android) |
 
-> 技术栈可在 `/unify-doc-review` 初始化阶段与 Tech Lead 讨论调整。
+> 项目模板基于 [hz-admin-base](https://github.com/LucaHhx/hz-admin-base.git)（GVA 框架定制版），后端统一使用 `hab` module 和 `HAB_` 变量前缀。
 
 ## Skills 能力模块
 
-Skills 是可复用的能力组件，供各 Agent 按需调用。
-
 | 分类 | Skill | 说明 |
 |------|-------|------|
-| **开发流程** | `create-docs` | 三层文档管理系统，含 `docs.py` CLI |
+| **项目管理** | `hz-project` | 项目全生命周期管理知识库（10 个模块） |
+| | `create-docs` | 三层文档管理系统，含 `docs.py` CLI |
 | | `brainstorming` | 需求探索与设计验证 |
-| | `subagent-driven-development` | 子 Agent 驱动开发 + 两阶段代码审查 |
-| **项目脚手架** | `create-web` | React + TypeScript 脚手架（20+ 组件模板） |
-| | `tauri-v2` | Tauri 2 跨平台应用开发 |
+| **代码生成** | `hab-autocode` | AutoCode API 操作指南（CRUD 模块生成） |
+| | `subagent-driven-development` | 子 Agent 驱动开发 + 代码审查 |
 | **UI/设计** | `ui-ux-pro-max` | 综合 UI/UX 设计系统（50+ 风格） |
 | | `ios-glass-ui-designer` | iOS 玻璃材质设计规范 |
 | | `tailwindcss-advanced-components` | Tailwind CSS 高级组件模式 |
-| **自动化测试** | `agent-browser` | 无头/有头浏览器自动化 |
-| | `desktop-control` | 桌面自动化控制（PyAutoGUI） |
+| **数据库** | `mysql-operator` | MySQL 数据库操作 |
+| | `redis-operator` | Redis 缓存操作 |
+| **自动化** | `agent-browser` | 无头/有头浏览器自动化 |
+| | `desktop-control` | 桌面自动化控制 |
 | | `wda` | iOS WebDriverAgent 自动化 |
+| | `ios-device-automation` | iOS 设备视觉自动化 |
 | | `pm-mcp-guide` | 后端服务进程管理 |
+| **跨平台** | `tauri-v2` | Tauri 2 桌面应用开发 |
 | **框架扩展** | `create-agent` | Agent 创建指南 |
-| | `create-command` | Slash Command 创建指南 |
+| | `create-command` | Command 创建指南 |
 | | `create-skill` | Skill 创建指南 |
 | | `find-skills` | Skill 发现与安装 |
 
@@ -664,31 +605,39 @@ hz-agents/
 │   ├── hz-backend.md                    # 后端开发
 │   ├── hz-ui.md                         # UI 设计师
 │   └── hz-qa.md                         # QA 测试
-├── commands/                            # 11 个 Slash 命令
+├── commands/                            # 13 个 Slash 命令
 │   ├── unify-dev.md                     # [统一调度] 团队开发
 │   ├── unify-doc-review.md              # [统一调度] 文档评审
 │   ├── unify-fix.md                     # [统一调度] Bug 修复
-│   ├── review-all.md                    # [统一调度] 三端文档对齐评审
-│   ├── dev-tech.md                      # [团队调度] Tech Lead 带队开发
+│   ├── review-all.md                    # [统一调度] 三端对齐
+│   ├── dev-tech.md                      # [团队调度] Tech Lead 带队
 │   ├── dev-frontend.md                  # [单角色] 前端开发
 │   ├── dev-backend.md                   # [单角色] 后端开发
 │   ├── review-pm.md                     # [单角色] PM 评审
 │   ├── review-tech.md                   # [单角色] Tech Lead 评审
 │   ├── review-ui.md                     # [单角色] UI 设计
-│   └── review-qa.md                     # [单角色] QA 测试
-└── skills/                              # 16 个模块化能力
+│   ├── review-qa.md                     # [单角色] QA 测试
+│   ├── hz-init.md                       # [工具] 项目初始化
+│   └── cmd-autocode.md                  # [工具] 代码生成向导
+└── skills/                              # 19 个模块化能力
+    ├── hz-project/                      # 项目全生命周期管理
+    │   ├── SKILL.md                     # 索引入口
+    │   ├── modules/                     # 10 个知识模块
+    │   └── references/                  # 参考文件
     ├── create-docs/                     # 三层文档管理（含 CLI）
     ├── brainstorming/                   # 需求头脑风暴
+    ├── hab-autocode/                    # AutoCode 代码生成
     ├── subagent-driven-development/     # 子 Agent 驱动开发
-    ├── create-web/                      # React 项目脚手架
-    ├── tauri-v2/                        # Tauri 桌面应用
     ├── ui-ux-pro-max/                   # UI/UX 设计系统
     ├── ios-glass-ui-designer/           # iOS 原生设计
     ├── tailwindcss-advanced-components/ # Tailwind 组件库
+    ├── mysql-operator/                  # MySQL 操作
+    ├── redis-operator/                  # Redis 操作
     ├── agent-browser/                   # 浏览器自动化
     ├── desktop-control/                 # 桌面自动化
     ├── wda/                             # iOS 自动化
     ├── pm-mcp-guide/                    # 进程管理
+    ├── tauri-v2/                        # Tauri 桌面应用
     ├── create-agent/                    # Agent 创建框架
     ├── create-command/                  # 命令创建框架
     ├── create-skill/                    # Skill 创建框架
@@ -697,23 +646,15 @@ hz-agents/
 
 ## 实际案例
 
-### [Keep Account（记账本）](https://github.com/LucaHhx/keep-account)
-
-一款由 HZ-Agents 全流程驱动开发的多端云同步记账应用。
-
-- **产品定位** — 面向个人的极简记账工具，主打"3 秒记一笔账"
-- **技术实现** — Go + Gin + SQLite / React 19 + Tailwind / Tauri 2
-- **开发过程** — 8 个需求迭代，每个需求包含三层文档、代码评审和 QA 验证
-
 ### [GO PLUS（在线娱乐平台）](https://github.com/LucaHhx/go-plus)
 
 > 声明：本项目仅用于测试 HZ-Agents 多智能体开发框架的能力，不用于任何商业运营或实际部署。
 
-一款由 HZ-Agents 全流程驱动开发的在线娱乐平台测试项目，验证框架在中大型复杂项目中的编排能力。
+验证框架在中大型复杂项目中的编排能力。多端架构：Go 后端 + React 客户端 + Vue 3 管理后台。
 
-- **测试目的** — 复杂 UI 设计稿精确还原、多需求并行推进、三期递进交付
-- **技术实现** — Go + Gin + SQLite / React 19 + TypeScript + Tailwind / 管理后台独立部署
-- **开发过程** — 第一期 6 个需求迭代，前端 1:1 还原 UI 设计图纸，完整的三层文档和质量门禁
+### [Keep Account（记账本）](https://github.com/LucaHhx/keep-account)
+
+由 HZ-Agents 全流程驱动开发的多端云同步记账应用。8 个需求迭代，完整三层文档 + 代码评审 + QA 验证。
 
 ## 许可证
 

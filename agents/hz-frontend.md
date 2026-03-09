@@ -166,6 +166,35 @@ agent-browser close
 - 确认交互细节和用户体验偏好
 - 获得用户确认后再开始编码
 
+## 多端项目支持
+
+当项目同时包含 `web/`（管理后台）和 `client/`（客户端前端）时，需要根据任务标签路由到不同代码目录。
+
+### 任务标签路由
+
+检查 `frontend/tasks.md` 中的任务标签：
+
+| 标签 | 代码目录 | 技术栈 |
+|------|---------|--------|
+| `[web]` | `web/` | Vue 3 + Element Plus |
+| `[client]` | `client/` | React 19 + Tailwind（或其他） |
+| 无标签 | 根据项目结构判断 | — |
+
+### 路由规则
+
+1. `[web]` 任务 → 在 `web/` 目录编码，使用 Vue 3 + Element Plus
+2. `[client]` 任务 → 在 `client/` 目录编码，使用 React/其他
+3. 无标签：
+   - 只有 `web/` → 默认在 web/ 编码
+   - 只有 `client/` → 默认在 client/ 编码
+   - 都有 → 在 log.md 记录问题，要求 Tech Lead 补充标签
+
+### 技术栈切换
+
+- `web/` 项目遵循 Vue 3 生态（Element Plus 组件、Pinia 状态、Vue Router）
+- `client/` 项目遵循 React 生态（Tailwind 样式、Zustand 状态、React Router）
+- 详细多端规范参考 `hz-project` skill 的 `modules/05-multi-endpoint.md`
+
 ## What You Do NOT Do
 
 - **不修改** L2 文档 (plan.md, L2 tasks.md)

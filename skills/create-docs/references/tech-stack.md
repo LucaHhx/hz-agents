@@ -34,7 +34,37 @@ server/
 └── go.mod
 ```
 
-## Frontend — React + TypeScript + Tauri
+## Frontend (Web/Admin) — Vue 3
+
+适用于从 hz-admin-base 模板创建的管理后台（`web/` 目录）。
+
+| 类别 | 技术 | 说明 |
+|------|------|------|
+| 框架 | Vue 3 | 渐进式 UI 框架 |
+| 组件库 | Element Plus | 企业级 UI 组件 |
+| 状态管理 | Pinia | Vue 官方状态管理 |
+| 路由 | Vue Router 4 | 客户端路由 |
+| 构建 | Vite | 开发服务器与构建 |
+| HTTP | Axios | API 请求 |
+
+**管理后台项目结构:**
+```
+web/
+├── src/
+│   ├── api/             # API 请求封装
+│   ├── view/            # 页面组件
+│   ├── components/      # 通用组件
+│   ├── pinia/           # Pinia 状态
+│   ├── router/          # Vue Router 路由
+│   └── utils/           # 工具函数
+├── package.json
+├── vite.config.js
+└── .env
+```
+
+> **注意**: web/ 和 client/ 技术栈根据项目类型选择。纯后台项目只有 web/；有客户端的项目同时有 web/ 和 client/。
+
+## Frontend (Client) — React + TypeScript + Tauri
 
 | 类别 | 技术 | 说明 |
 |------|------|------|

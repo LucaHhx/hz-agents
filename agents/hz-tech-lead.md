@@ -120,6 +120,29 @@ python3 .claude/skills/create-docs/scripts/docs.py role <req> ui
 python3 .claude/skills/create-docs/scripts/docs.py log <req> 决策 "选择 JWT 做鉴权，理由: ..."
 ```
 
+## 多端项目规范
+
+当项目同时包含 `web/` 和 `client/` 两个前端目录时：
+
+### 检测方式
+```bash
+# 检查是否为多端项目
+ls web/ client/ 2>/dev/null
+```
+
+### frontend/design.md 分段
+多端项目的 frontend/design.md 必须按端分段：
+- `## [web]` — 管理后台技术方案（Vue 3 + Element Plus）
+- `## [client]` — 客户端前端技术方案（React 等）
+
+### frontend/tasks.md 标签
+多端项目的前端任务必须加标签前缀：
+- `[web] 实现用户管理页` → 在 web/ 目录实现
+- `[client] 实现首页 Dashboard` → 在 client/ 目录实现
+
+### 详细规范
+参考 `hz-project` skill 的 `modules/05-multi-endpoint.md`
+
 ## Task Breakdown Guidelines
 
 | 类型 | 示例 | OK? |
