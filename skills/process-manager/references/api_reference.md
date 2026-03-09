@@ -15,18 +15,21 @@
 启动一个后台进程。自动检查同名进程是否已在运行。
 
 ```
-用法: start.sh <name> "<command>" [--cwd <dir>]
+用法: start.sh <name> "<command>" [--cwd <dir>] [--env "K=V K2=V2"]
 
 参数:
   name      进程名称（如 backend, frontend）
   command   要执行的命令（需引号包裹）
   --cwd     工作目录（默认当前目录）
+  --env     环境变量（空格分隔多个，需引号包裹）
 ```
 
 示例：
 ```bash
-$PM/start.sh backend "go run ./cmd/server" --cwd ./server
+$PM/start.sh backend "go run ." --cwd ./server
+$PM/start.sh backend "go run ." --cwd ./server --env "HAB_CONFIG=config.local.yaml"
 $PM/start.sh frontend "npm run dev" --cwd ./web
+$PM/start.sh backend "go run ." --cwd ./server --env "HAB_CONFIG=config.local.yaml GIN_MODE=release"
 ```
 
 ---

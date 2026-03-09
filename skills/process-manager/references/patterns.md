@@ -2,12 +2,29 @@
 
 > 以下示例中 `$PM` = `.claude/skills/process-manager/scripts`
 
-## 前后端开发环境
-
-典型 Go + React/Tauri 项目启动：
+## HAB/GVA 项目（最常用）
 
 ```bash
-# 检查已有进程
+$PM/list.sh
+
+# 后端（必须指定 HAB_CONFIG）
+$PM/start.sh backend "go run ." --cwd ./server --env "HAB_CONFIG=config.local.yaml"
+sleep 3
+$PM/search.sh backend "server run success|listening on"
+
+# 前端
+$PM/start.sh frontend "npm run serve" --cwd ./web
+sleep 3
+$PM/search.sh frontend "ready in|Local:|compiled"
+```
+
+就绪标志：
+- 后端：`server run success on`, `listening on`
+- 前端：`ready in`, `compiled successfully`, `Local:`
+
+## 前后端开发环境（通用）
+
+```bash
 $PM/list.sh
 
 # 先启动后端
@@ -28,7 +45,6 @@ $PM/search.sh frontend "ready in|Local:"
 $PM/start.sh auth-svc "go run ./cmd/auth" --cwd ./server
 $PM/start.sh user-svc "go run ./cmd/user" --cwd ./server
 
-# 确认都就绪
 sleep 3
 $PM/search.sh auth-svc "listening on"
 $PM/search.sh user-svc "listening on"
@@ -48,14 +64,9 @@ $PM/start.sh test-watch "npx vitest --watch" --cwd ./web
 ## 服务健康检查
 
 ```bash
-# 列出所有进程状态
 $PM/list.sh
-
-# 查看各服务最新日志
 $PM/logs.sh backend --lines 10
 $PM/logs.sh frontend --lines 10
-
-# 搜索错误
 $PM/search.sh backend "error|panic|fatal"
 $PM/search.sh frontend "error|Error"
 ```
@@ -66,12 +77,10 @@ $PM/search.sh frontend "error|Error"
 # 按依赖反向顺序关闭
 $PM/stop.sh frontend
 $PM/stop.sh backend
-
-# 清理记录
 $PM/clean.sh
 ```
 
-或一键关闭：
+或一键：
 
 ```bash
 $PM/stop.sh --all

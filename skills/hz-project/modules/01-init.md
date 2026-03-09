@@ -59,7 +59,7 @@ my-project/
 - 配置：Viper（YAML）
 - 日志：Zap
 - 认证：JWT
-- 数据库：SQLite（默认）/ MySQL / PostgreSQL
+- 数据库：SQLite（默认）/ MySQL
 
 ### 管理后台前端（web/）
 - Vue 3 + Element Plus
@@ -81,9 +81,26 @@ my-project/
 ## 初始化流程概览
 
 1. 检测当前目录状态
-2. 交互问答收集项目信息
-3. 拉取模板（git clone --depth 1）
-4. 项目定制化（批量替换 module、prefix 等）
-5. 链接 hz-agents
-6. 启动 PM 进行业务需求 brainstorming
-7. 输出总结与下一步建议
+2. 交互问答收集项目信息（逐步引导，每次一个问题）
+3. 拉取模板（git clone --depth 1 到临时目录，再复制到项目目录）
+4. 项目定制化（config.example.yaml、Dockerfile、web 配置）
+5. 数据库准备与初始化（SQLite 自动导入 / MySQL 引导安装）
+6. 生成 config.local.yaml（含数据库连接信息 + JWT key）
+7. 初始化 Git
+8. 启动 PM 进行业务需求 brainstorming
+9. 输出总结与下一步建议
+
+## 初始化后如何启动
+
+```bash
+# 启动后端
+cd server && HAB_CONFIG=config.local.yaml go run .
+
+# 启动前端（另一个终端）
+cd web && npm install && npm run serve
+
+# 浏览器打开 http://localhost:8091
+# 用 admin / 123456（或自定义密码）登录
+```
+
+详细配置说明见 `modules/08-config.md`。

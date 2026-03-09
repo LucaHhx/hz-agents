@@ -27,7 +27,7 @@
 | 5 | 多端规范 | modules/05-multi-endpoint.md | 多端, web, client, 前端, 标签 | 多端项目结构与任务路由 |
 | 6 | 扩展指南 | modules/06-extension.md | 扩展, 自定义, 新skill, 新command | 如何扩展 hz-agents |
 | 7 | AutoCode | modules/07-autocode.md | autocode, 代码生成, CRUD | AutoCode 代码生成入口 |
-| 8 | 环境配置 | modules/08-config.md | config, 配置, 环境变量, yaml | 后端/前端环境配置规范 |
+| 8 | 环境配置与启动 | modules/08-config.md | config, 配置, 环境变量, yaml, 启动, start, .env, 端口 | 配置文件、环境变量、项目启动指南 |
 | 9 | 部署指南 | modules/09-deploy.md | 部署, deploy, docker, 发布 | 本地/远程部署指南 |
 | 10 | 常见问题 | modules/10-faq.md | 问题, 报错, 失败, 排查 | FAQ 与故障排查 |
 | 11 | 数据库准备 | modules/11-database-setup.md | 数据库, MySQL, SQLite, 安装, 初始化 | 数据库选择、安装、初始化 |

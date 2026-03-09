@@ -25,11 +25,86 @@ ls -la server/ web/ client/ 2>/dev/null
 - 如果是 git 仓库且有未提交更改 → **警告用户**，建议先提交
 - 空目录或只有 .git → 安全继续
 
-### 2. 交互问答
+### 2. 开发环境检查
+
+自动检测必备工具，缺失时引导安装。**不逐个询问用户，而是一次性检测、汇报、修复。**
+
+```bash
+# 一次性检测所有工具
+git --version 2>/dev/null
+go version 2>/dev/null
+node --version 2>/dev/null
+npm --version 2>/dev/null
+sqlite3 --version 2>/dev/null
+brew --version 2>/dev/null
+```
+
+**必备工具清单：**
+
+| 工具 | 用途 | 必需 |
+|------|------|------|
+| git | 拉取模板、版本管理 | 始终必需 |
+| Go (1.21+) | 后端编译运行 | 始终必需 |
+| Node.js (18+) + npm | 前端构建 | 有 web/ 或 client/ 时必需 |
+| sqlite3 | SQLite 数据库初始化 | 选 SQLite 时必需（步骤 6 再检查） |
+
+**检测结果处理：**
+
+将检测结果汇总后一次性展示给用户：
+
+```
+开发环境检测：
+  ✓ git 2.43.0
+  ✓ Go 1.22.5
+  ✗ Node.js — 未安装
+  ✗ npm — 未安装
+```
+
+→ 全部通过：直接继续
+→ 有缺失：给出安装方案，使用 AskUserQuestion 确认
+
+**安装方案（macOS）：**
+
+AskUserQuestion:
+- question: "以上工具缺失，需要安装后才能继续。确认自动安装吗？"
+- options:
+  - "自动安装（推荐）" — 我来执行安装命令，全程自动
+  - "我自己安装" — 给我命令，我手动执行后再继续
+
+→ 自动安装流程：
+
+**Step 1: 确保 Homebrew 可用**（所有工具的安装基础）
+```bash
+brew --version 2>/dev/null
+```
+→ 已有 → 跳到 Step 2
+→ 没有 → 安装：
+```bash
+/bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
+```
+等待完成，验证 `brew --version`
+
+**Step 2: 用 Homebrew 安装缺失工具**（Homebrew 就绪后才执行）
+```bash
+# 按需执行（只装缺失的）
+brew install go       # Go 缺失时
+brew install node     # Node.js 缺失时
+# sqlite3 macOS 自带，一般不需要安装
+```
+
+每个安装完成后验证版本号。
+
+→ 手动安装：列出上述命令，等用户说"好了"后重新检测
+
+**安装完成后再次验证，确保所有工具可用后才继续。**
+
+### 3. 交互问答
 
 **逐步引导式收集项目信息，每次只问一个问题，使用 AskUserQuestion 工具。**
 
 如果 `$ARGUMENTS` 提供了项目名称，跳过名称询问。
+
+> 注意：步骤 2 检测到缺少工具时已完成安装，此处无需再检查。
 
 ---
 
@@ -106,7 +181,7 @@ AskUserQuestion:
 
 等待用户确认后再继续。
 
-### 3. 拉取模板
+### 4. 拉取模板
 
 > **重要**：用户已在项目目录中执行 `/hz-init`，不能直接 clone 到当前目录。
 > 必须 clone 到临时目录，再复制内容过来。
@@ -132,30 +207,41 @@ rm -rf "$TEMP_DIR"
 
 如果 clone 失败（网络问题），提示用户手动 clone 或检查网络。
 
-### 4. 项目定制化
+### 5. 项目定制化
 
 读取 `.claude/skills/hz-project/references/init-checklist.md` 获取完整清单。
 
 > **注意**: Go module、import 路径、全局变量前缀保持 `hab` / `HAB_` 不变。
 
-**4.1 配置文件定制**
+**5.1 配置文件定制**
 
 修改 `server/config.example.yaml`（模板参考文件，入库），只改非敏感字段：
 - `autocode.module` → 项目名
 - `zap.prefix` → `'[<项目名>]'`
 
-> 敏感配置（数据库密码、JWT key）在步骤 6 通过 `config.local.yaml` 配置，不入库。
+> 敏感配置（数据库密码、JWT key）在步骤 7 通过 `config.local.yaml` 配置，不入库。
 
-**4.2 Dockerfile 定制**
+**5.2 Dockerfile 定制**
 
 如果存在 Dockerfile，替换工作目录和二进制名。
 
-**4.3 前端定制**（web/ 存在时）
+**5.3 前端定制**（web/ 存在时）
 
 - `web/index.html` 中的 `<title>` → 项目描述或名称
-- `web/.env` 中的端口配置（按需调整）
+- 复制 `.env.example` 为 `.env.development`（vite serve 需要此文件）：
+  ```bash
+  cp web/.env.example web/.env.development
+  ```
+- 创建 `src/plugin/` 空目录（vite-auto-import-svg 插件需要扫描此目录）：
+  ```bash
+  mkdir -p web/src/plugin
+  ```
+- 安装 npm 依赖：
+  ```bash
+  cd web && npm install
+  ```
 
-**4.4 Client 初始化**（形态 B 时）
+**5.4 Client 初始化**（形态 B 时）
 
 ```bash
 # 使用 create-vite 创建客户端
@@ -170,14 +256,24 @@ npm install -D tailwindcss @tailwindcss/vite
 npm install zustand axios react-router-dom
 ```
 
-**4.5 验证**
+**5.5 编译验证**
 
 ```bash
-# 编译检查
 cd server && go build ./...
 ```
 
-### 5. 数据库准备与初始化
+如果编译报缺少 `tests` 包（如 `hab/service/tests`、`hab/model/tests`、`hab/api/v1/tests`、`hab/router/tests`），说明模板中的 `enter.go` 引用了 tests 子包但目录为空。需要自动创建这些空包：
+
+```bash
+# 检查 enter.go 中引用的 tests 包，按需创建
+mkdir -p server/service/tests server/api/v1/tests server/router/tests server/model/tests
+```
+
+每个目录创建 `enter.go`，包含对应的空结构体（参考同级 `enter.go` 中的导入模式）。然后检查 `initialize/router_biz.go` 中是否有未实现的方法调用（如 `InitOrderRouter`），需一并创建对应的空方法文件。
+
+**反复编译直到 `go build ./...` 通过。**
+
+### 6. 数据库准备与初始化
 
 参考 `.claude/skills/hz-project/modules/11-database-setup.md`。
 
@@ -185,7 +281,7 @@ cd server && go build ./...
 
 ---
 
-**【第一轮】根据步骤 2 的数据库选择分流**
+**【第一轮】根据步骤 3 的数据库选择分流**
 
 如果选了 SQLite → 直接跳到「SQLite 自动初始化」
 如果选了 MySQL → 进入 MySQL 引导流程
@@ -384,7 +480,7 @@ AskUserQuestion:
   请记住这些信息，后续登录系统时需要使用。
   ```
 
-### 6. 生成 config.local.yaml
+### 7. 生成 config.local.yaml
 
 基于 `server/config.example.yaml` 复制为 `server/config.local.yaml`，覆盖以下字段：
 
@@ -395,7 +491,16 @@ AskUserQuestion:
 
 **SQLite 时：**
 - `system.db-type` → sqlite
-- 无需改 mysql 配置（SQLite 使用默认 data.db 路径）
+- **必须确保 `sqlite:` 配置段存在**（如果 config.example.yaml 中没有，需要添加）：
+  ```yaml
+  sqlite:
+    db-name: data
+    path: ""
+    max-idle-conns: 10
+    max-open-conns: 100
+    log-mode: info
+  ```
+  > 如果缺少此段，`GormSqlite()` 会因为 `Dbname == ""` 返回 nil，导致服务启动时 panic。
 
 **MySQL 时：**
 - `system.db-type` → mysql
@@ -408,7 +513,7 @@ AskUserQuestion:
 > config.local.yaml 在 .gitignore 中，含敏感信息不入库。
 > 同时保留 config.example.yaml 作为模板参考（已入库）。
 
-### 7. 初始化 Git（如需）
+### 8. 初始化 Git（如需）
 
 ```bash
 # 如果不是 git 仓库
@@ -450,7 +555,7 @@ EOF
 fi
 ```
 
-### 8. 调用 PM 初始化业务需求
+### 9. 调用 PM 初始化业务需求
 
 启动 hz-pm agent，通过 brainstorming 与用户确定业务需求，初始化 docs/：
 
@@ -476,7 +581,7 @@ Agent tool:
     所有主要决策必须由用户确认。
 ```
 
-### 9. 输出总结
+### 10. 输出总结
 
 向用户展示：
 
@@ -498,11 +603,11 @@ Agent tool:
   .claude/    — hz-agents 链接
 
 下一步建议:
-  1. cd server && go run .        # 启动后端
-  2. cd web && npm run serve      # 启动管理后台
+  1. cd server && HAB_CONFIG=config.local.yaml go run .   # 启动后端
+  2. cd web && npm run serve                               # 启动管理后台
   3. 浏览器打开 http://localhost:8080 → 用 admin 登录
-  4. /review-tech                  # Tech Lead 做技术方案
-  5. /unify-dev                    # 全团队协作开发
+  4. /review-tech                                          # Tech Lead 做技术方案
+  5. /unify-dev                                            # 全团队协作开发
 ========================================
 ```
 
