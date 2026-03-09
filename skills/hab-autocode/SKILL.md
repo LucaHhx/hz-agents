@@ -146,7 +146,7 @@ curl -s -X POST "http://localhost:9688/autoCode/createPackage" \
 | packageName | string | 是 | 包名 (小写英文，不含 / \ ..) |
 | label | string | 否 | 展示名 |
 | desc | string | 否 | 描述 |
-| template | string | 是 | 模板类型: "package" 或 "plugin" |
+| template | string | 是 | 模板类型: "package"、"plugin" 或 "storage" |
 
 创建包会自动生成 `api/v1/<pkg>/enter.go`、`router/<pkg>/enter.go`、`service/<pkg>/enter.go` 等目录结构。
 

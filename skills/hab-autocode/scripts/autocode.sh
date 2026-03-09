@@ -75,9 +75,6 @@ case "$CMD" in
     create)
         api_post_file "/autoCode/createTemp" "$1"
         ;;
-    add-func)
-        api_post "/autoCode/addFunc" "$1"
-        ;;
     get-db)
         api_get "/autoCode/getDB"
         ;;
@@ -120,7 +117,6 @@ case "$CMD" in
         echo "  delete-package <id>         Delete a package"
         echo "  preview <json_file>         Preview generated code"
         echo "  create <json_file>          Generate code"
-        echo "  add-func <json>             Add method to module"
         echo "  get-db                      List databases"
         echo "  get-tables [dbName]         List tables"
         echo "  get-columns <tableName>     List columns"
