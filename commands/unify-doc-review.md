@@ -189,6 +189,11 @@ Task tool:
 
     先读取 create-docs skill 的 SKILL.md (.claude/skills/create-docs/SKILL.md) 了解文档规范和 CLI 用法。
 
+    ## UI 设计范围
+    注意: 并非所有页面都需要 UI 设计。AutoCode 标准 CRUD 页面使用框架默认样式，不需要设计。
+    只为自定义页面和需要二次定制的 CRUD 页面产出 merge.html。
+    如果项目有 client/ 端，额外产出 merge-client.html 覆盖客户端设计。
+
     你的工作流程:
     1. 等待 PM 完成文档评审（确保 plan.md 内容稳定）
     2. 阅读 docs/ 下的需求 plan.md，了解用户场景和验收标准
@@ -223,6 +228,28 @@ Task tool:
 ### 5. 清理团队
 
 发送 shutdown_request → TeamDelete
+
+### 6. Git 提交
+
+1. 运行 `git status` + `git diff --stat` 展示变更概要
+2. 使用 AskUserQuestion 询问用户是否提交 git:
+   - 选项: 提交 / 不提交 / 修改后再提交
+3. 用户批准后提交:
+   - commit message: `docs($REQ_NAME): doc-review 文档协作评审完成`
+   - 如果是初始化（Phase 2），commit message: `docs: doc-review 初始化项目文档`
+4. **绝不自动提交**，必须等待用户明确批准
+
+### 7. 后续建议
+
+汇总报告末尾增加后续建议:
+
+```
+后续建议:
+  1. /review-all $REQ_NAME        — 三端文档对齐评审（推荐）
+  2. /cmd-autocode                — 生成 CRUD 模块代码（如有 [autocode] 任务）
+  3. /unify-dev $REQ_NAME         — 直接进入全团队开发
+  4. /dev-tech $REQ_NAME          — Tech Lead 带队精简开发
+```
 
 ## Important Notes
 

@@ -62,6 +62,9 @@ You bridge business acceptance criteria (L2) and technical implementation (L3) t
 ### Read-Write
 - `docs/<req>/qa/design.md` — 测试策略和测试计划
 - `docs/<req>/qa/tasks.md` — 通过 `docs.py` CLI 操作任务状态
+- `docs/<req>/qa/test-report.md` — 测试报告（每轮测试追加结果，可转发给修复 agent）
+- `docs/<req>/qa/api-tests.md` — API 测试记录（标准请求/响应 JSON 格式）
+- `docs/<req>/qa/bugs.md` — Bug 清单（结构化问题跟踪，多轮修复历史）
 - `docs/<req>/log.md` — 追加测试结果记录（通过 CLI 自动）
 - `docs/<req>/qa/screenshots/` — 浏览器测试截图存放目录
 
@@ -72,9 +75,10 @@ You bridge business acceptance criteria (L2) and technical implementation (L3) t
 3. **测试策略**: 在 qa/design.md 中编写测试策略和测试计划
 4. **测试用例**: 设计覆盖功能、集成、边界情况的测试用例
 5. **执行测试**: 分两阶段 — 先 API 测试，再浏览器 E2E 测试
-6. **记录证据**: 保存 API 请求/响应、浏览器截图到文档
-7. **缺陷报告**: 在 log.md 中记录发现的问题
-8. **更新状态**: 使用 `docs.py start/done --role qa` 更新任务状态
+6. **记录证据**: 保存 API 请求/响应到 `qa/api-tests.md`，浏览器截图到 `qa/screenshots/`
+7. **测试报告**: 每轮测试结果写入 `qa/test-report.md`（追加段落，保留历史）
+8. **Bug 跟踪**: 发现的问题记录到 `qa/bugs.md`（结构化 Bug 清单，支持多轮修复跟踪）
+9. **更新状态**: 使用 `docs.py start/done --role qa` 更新任务状态
 
 ## Workflow
 
@@ -125,7 +129,7 @@ curl -s -X POST http://localhost:8080/api/auth/register \
 - 错误处理（无效参数、未授权、重复数据）
 - 边界条件（空值、超长输入、特殊字符）
 
-将所有 API 测试结果写入 `docs/<req>/log.md`。
+将所有 API 测试的请求/响应详细记录写入 `docs/<req>/qa/api-tests.md`（按模板格式）。
 
 #### 数据验证
 API 测试后，使用 mysql-operator 验证数据持久化:
@@ -210,34 +214,36 @@ agent-browser snapshot -i
 
 ### 6. 记录测试结果
 
-**所有测试结果必须写入文档，包含证据:**
+**所有测试结果必须写入结构化文档:**
 
-在 `docs/<req>/log.md` 中记录:
-```markdown
-## YYYY-MM-DD QA 验收测试
+#### 6.1 更新测试报告 (`qa/test-report.md`)
 
-### API 测试结果
-| 接口 | 方法 | 状态码 | 结果 |
-|------|------|--------|------|
-| /api/auth/register | POST | 200 | 通过 |
-| /api/auth/login | POST | 200 | 通过 |
+每轮测试完成后，在 `docs/<req>/qa/test-report.md` 中追加「第 N 轮测试结果」段落:
+- 填写测试概要表格（API/E2E 通过率、Bug 统计）
+- 填写 API 和 E2E 测试结果表格
+- 对照 plan.md 验收清单逐项确认
+- 更新测试轮次记录汇总表
+- 给出本轮结论和修复建议
 
-#### 详细记录
-**TC-001: 用户注册**
-- 请求: `POST /api/auth/register {"username":"test","password":"123456"}`
-- 响应: `200 {"code":0,"data":{"access_token":"..."}}`
-- 结果: 通过
+#### 6.2 记录 API 测试详情 (`qa/api-tests.md`)
 
-### 浏览器 E2E 测试结果
-| 场景 | 步骤数 | 截图 | 结果 |
-|------|--------|------|------|
-| 用户注册流程 | 5 | screenshots/step-01~05 | 通过 |
-| 用户登录流程 | 3 | screenshots/step-06~08 | 通过 |
+在 `docs/<req>/qa/api-tests.md` 中按模板格式记录每个接口的完整请求/响应:
+- 每个 API 一个段落（API-001, API-002...）
+- 每个测试用例含请求 JSON、预期、实际响应、结论
+- 包含正常流程、异常参数、未授权等用例
 
-#### 截图索引
-- `screenshots/step-01-register-page.png` — 注册页面初始状态
-- `screenshots/step-02-fill-form.png` — 填写注册表单
-- ...
+#### 6.3 记录 Bug (`qa/bugs.md`)
+
+发现 Bug 时在 `docs/<req>/qa/bugs.md` 中追加:
+- Bug 汇总表新增一行
+- 创建完整的 Bug 详情块（复现步骤、预期/实际结果、证据、修复建议）
+- 后续修复验证时追加「修复与验证历史」记录
+
+#### 6.4 同步到 log.md
+
+在 `docs/<req>/log.md` 中追加测试摘要（通过 `docs.py log` 命令）:
+```bash
+python docs.py log <req> 测试 "第N轮验收测试: API X/Y 通过, E2E X/Y 通过, 新增 N 个 Bug"
 ```
 
 ### 7. 完成任务

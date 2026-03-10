@@ -11,6 +11,8 @@ Usage:
     docs.py done <req-name> <task-num> [--note] [--role R] [--root] 完成任务
     docs.py log <req-name> <type> <message> [--root]         添加日志
     docs.py status [req-name] [--root]                       查看状态
+    docs.py check <req-name> --phase <phase>                 前置检查
+    docs.py pipeline [req-name] [--root]                     查看流水线状态
 """
 
 import sys
@@ -27,6 +29,8 @@ from cmd_task import cmd_task, cmd_start, cmd_done
 from cmd_log import cmd_log
 from cmd_status import cmd_status
 from cmd_fix import cmd_fix, cmd_fix_list
+from cmd_check import cmd_check
+from cmd_pipeline import cmd_pipeline
 
 
 def main():
@@ -82,12 +86,22 @@ def main():
     s = sub.add_parser("fix-list", help="查看修复记录")
     s.add_argument("--root", help="项目根目录")
 
+    s = sub.add_parser("check", help="前置检查")
+    s.add_argument("req_name", help="需求名称")
+    s.add_argument("--phase", required=True, help="阶段: review-tech/review-ui/review-all/dev/dev-full/qa")
+    s.add_argument("--root", help="项目根目录")
+
+    s = sub.add_parser("pipeline", help="查看流水线状态")
+    s.add_argument("req_name", nargs="?", help="需求名称 (不指定则全部)")
+    s.add_argument("--root", help="项目根目录")
+
     args = p.parse_args()
     cmds = {
         "init": cmd_init, "req": cmd_req, "role": cmd_role,
         "task": cmd_task, "start": cmd_start, "done": cmd_done,
         "log": cmd_log, "status": cmd_status,
         "fix": cmd_fix, "fix-list": cmd_fix_list,
+        "check": cmd_check, "pipeline": cmd_pipeline,
     }
     if args.cmd not in cmds:
         p.print_help()

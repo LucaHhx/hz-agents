@@ -111,6 +111,13 @@ python3 $SCRIPT fix-list                               # 查看修复列表
 
 # 状态总览 (三层展示)
 python3 $SCRIPT status [req-name]
+
+# 前置检查 (流水线阶段文件检查)
+python3 $SCRIPT check <req-name> --phase <phase>
+# phase: review-tech / review-ui / review-all / dev / dev-full / qa
+
+# 流水线状态 (查看需求当前进度)
+python3 $SCRIPT pipeline [req-name]
 ```
 
 > **名称解析**: 所有命令中的 `<req>` 参数支持短名称 (`user-system`) 和全名 (`1-user-system`)。
@@ -138,6 +145,30 @@ python3 $SCRIPT status [req-name]
 2. Run `docs.py role <req-name> <role-name>`
 3. Fill `design.md`: 技术选型 / 架构设计 / 关键决策
 4. Fill `tasks.md`: 技术级任务拆解
+
+### QA Role Special Structure
+
+当 `role-name` 为 `qa` 时，`docs.py role` 会创建扩展目录结构:
+
+```
+qa/
+├── design.md            ← 测试策略（技术方案模板）
+├── tasks.md             ← 测试任务清单
+├── test-report.md       ← 测试报告（可转发给修复 agent，多轮追加）
+├── api-tests.md         ← API 测试记录（请求/响应原始数据）
+├── bugs.md              ← Bug 清单（结构化问题跟踪，多轮修复历史）
+└── screenshots/         ← E2E 截图目录
+    └── .gitkeep
+```
+
+| 文件 | 用途 |
+|------|------|
+| `design.md` | 测试策略：测试范围、类型、环境、测试数据 |
+| `tasks.md` | QA 测试任务清单 |
+| `test-report.md` | 测试报告模板：每轮测试追加结果段落，保留完整历史 |
+| `api-tests.md` | API 测试记录：标准请求/响应 JSON 格式，含认证 Token 获取 |
+| `bugs.md` | Bug 清单：状态流转 (Open→Fixing→Fixed→Verified→Closed)，多轮修复跟踪 |
+| `screenshots/` | 浏览器 E2E 测试截图存放目录 |
 
 ### UI Role Special Structure
 

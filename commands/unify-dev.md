@@ -71,6 +71,8 @@ Task tool:
     你是开发团队的 Tech Lead，负责检查需求 $REQ_NAME 的技术文档是否完善，可以进入开发阶段。
 
     先读取 create-docs skill 的 SKILL.md (.claude/skills/create-docs/SKILL.md) 了解文档规范。
+    再读取 references/tech-stack.md (.claude/skills/create-docs/references/tech-stack.md) 了解项目技术栈。
+    再读取 hz-project skill (.claude/skills/hz-project/SKILL.md) 了解项目全生命周期规范。
 
     检查以下文件是否存在且内容完整:
     - docs/$REQ_NAME/plan.md — 需求计划和验收标准
@@ -156,6 +158,10 @@ Task tool:
 
     先读取 create-docs skill 的 SKILL.md (.claude/skills/create-docs/SKILL.md) 了解文档规范和 CLI 用法。
 
+    {如果 USER_INSTRUCTIONS 非空，追加以下段落}
+    ## 用户指令（优先级最高）
+    $USER_INSTRUCTIONS
+
     你的工作流程:
     1. 从 TaskList 获取你的任务，标记为 in_progress
     2. 读取 docs/$REQ_NAME/frontend/design.md 了解技术方案
@@ -189,6 +195,10 @@ Task tool:
 
     先读取 create-docs skill 的 SKILL.md (.claude/skills/create-docs/SKILL.md) 了解文档规范和 CLI 用法。
 
+    {如果 USER_INSTRUCTIONS 非空，追加以下段落}
+    ## 用户指令（优先级最高）
+    $USER_INSTRUCTIONS
+
     你的工作流程:
     1. 从 TaskList 获取你的任务，标记为 in_progress
     2. 读取 docs/$REQ_NAME/backend/design.md 了解技术方案
@@ -211,6 +221,19 @@ Task tool:
     你是开发团队的 Tech Lead，负责需求 $REQ_NAME 的代码质量审查和团队协调。
 
     先读取 create-docs skill 的 SKILL.md (.claude/skills/create-docs/SKILL.md) 了解文档规范。
+    再读取 references/tech-stack.md (.claude/skills/create-docs/references/tech-stack.md) 了解项目技术栈。
+    再读取 hz-project skill (.claude/skills/hz-project/SKILL.md) 了解项目全生命周期规范。
+
+    {如果 USER_INSTRUCTIONS 非空，追加以下段落}
+    ## 用户指令（优先级最高）
+    $USER_INSTRUCTIONS
+    将此指令传达给相关开发者，确保按用户要求调整开发优先级或方式。
+
+    ## AutoCode 预生成（可选）
+    如果 backend/tasks.md 中有标注 [autocode] 的任务：
+    1. 使用 hab-autocode 预览并生成这些模块的基础代码
+    2. 编译检查通过后，标记对应任务为已完成
+    3. 后续 backend 开发者在此基础上实现自定义逻辑
 
     你的工作流程:
 
@@ -290,6 +313,10 @@ Task tool:
 
     先读取 create-docs skill 的 SKILL.md (.claude/skills/create-docs/SKILL.md) 了解文档规范和 CLI 用法。
 
+    {如果 USER_INSTRUCTIONS 非空，追加以下段落}
+    ## 用户指令（优先级最高）
+    $USER_INSTRUCTIONS
+
     你的工作流程:
     1. 从 TaskList 获取你的任务（等待代码审查通过后开始）
     2. 标记任务为 in_progress
@@ -322,6 +349,13 @@ Task tool:
        - API 测试通过率
        - 用户场景测试结果
        - 发现的问题列表（如有）
+
+    ## 测试产物
+    测试过程中必须写入以下文档:
+    - `qa/test-report.md` — 每轮测试追加「第 N 轮测试结果」段落（按模板格式填写）
+    - `qa/api-tests.md` — 记录每个 API 的完整请求/响应（按模板格式）
+    - `qa/bugs.md` — 发现 Bug 时追加 Bug 详情块（含复现步骤、证据）
+    使用 `docs.py log` 在 log.md 记录测试摘要。
 
     需求目录: docs/$REQ_NAME/
 ```
@@ -371,9 +405,23 @@ Task tool:
 
 ### 后续待办
 - [如有未完成项或问题，列出]
+
+### 后续建议
+- 运行 `/review-qa $REQ_NAME` 进行独立验收测试（如需更全面的测试）
+- 运行 `/unify-fix <问题描述>` 修复发现的 Bug
+- 查看流水线状态: `python3 .claude/skills/create-docs/scripts/docs.py pipeline $REQ_NAME`
 ```
 
-### 7. 清理团队
+### 7. Git 提交
+
+1. 运行 `git status` + `git diff --stat` 展示变更概要
+2. 使用 AskUserQuestion 询问用户是否提交 git:
+   - 选项: 提交 / 不提交 / 修改后再提交
+3. 用户批准后提交:
+   - commit message: `feat($REQ_NAME): unify-dev 完成全团队协作开发`
+4. **绝不自动提交**，必须等待用户明确批准
+
+### 8. 清理团队
 
 发送 shutdown_request 给所有成员 → 等待确认 → TeamDelete
 
@@ -400,7 +448,10 @@ If 文档检查不通过:
 If 代码审查不通过:
 - Tech Lead 合并代码问题和 UI 视觉问题，创建修复任务，指定给对应开发者
 - 开发者修复后 Tech Lead + UI 重新审查
-- 如果连续 3 轮不通过，上报给用户决策
+- 如果连续 3 轮不通过，使用 AskUserQuestion 上报给用户，提供明确选项:
+  - 继续修复（再给 2 轮机会）
+  - 回退到文档阶段（重新审查 design.md）
+  - 接受当前状态（标记为 PARTIAL，记录遗留问题）
 
 If QA 发现严重 bug:
 - 通知 Tech Lead

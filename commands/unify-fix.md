@@ -22,7 +22,14 @@ argument-hint: <问题描述>
 
 读取用户提供的 `$ARGUMENTS` 问题描述。
 
-**用 Explore agent 快速定位问题**（搜索相关代码、日志、配置），然后判断三个维度：
+**用 Agent tool (subagent_type: "Explore") 快速定位问题**（搜索相关代码、日志、配置）。
+
+如果 `docs/` 目录存在，先检查是否有 QA 测试报告可参考:
+- 读取 `docs/*/qa/test-report.md` — 测试报告，了解失败的测试项
+- 读取 `docs/*/qa/bugs.md` — Bug 清单，查找已知问题和修复建议
+- 读取 `docs/*/qa/api-tests.md` — API 测试详情，查看失败接口的请求/响应
+
+然后判断三个维度：
 
 **问题分类:**
 
@@ -91,7 +98,7 @@ TeamCreate: team_name: "fix-<简短描述>"
 
 **Tech Lead（必有）:**
 ```
-Agent tool:
+Task tool:
   subagent_type: "hz-tech-lead"
   team_name: "fix-<name>"
   name: "tech-lead"
@@ -116,7 +123,7 @@ Agent tool:
 
 **Frontend（仅前端/全栈问题时启动）:**
 ```
-Agent tool:
+Task tool:
   subagent_type: "hz-frontend"
   team_name: "fix-<name>"
   name: "frontend"
@@ -135,7 +142,7 @@ Agent tool:
 
 **Backend（仅后端/全栈问题时启动）:**
 ```
-Agent tool:
+Task tool:
   subagent_type: "hz-backend"
   team_name: "fix-<name>"
   name: "backend"
@@ -154,7 +161,7 @@ Agent tool:
 
 **QA（仅 P0 或涉及数据变更时启动）:**
 ```
-Agent tool:
+Task tool:
   subagent_type: "hz-qa"
   team_name: "fix-<name>"
   name: "qa"
@@ -201,7 +208,19 @@ Agent tool:
 
 ### 修复记录
 已记录到 docs/fixes/<N>-<slug>.md
+
+### 后续建议
+- 运行 `/review-qa` 进行回归测试验证修复
 ```
+
+### 4. Git 提交
+
+1. 运行 `git status` + `git diff --stat` 展示变更概要
+2. 使用 AskUserQuestion 询问用户是否提交 git:
+   - 选项: 提交 / 不提交 / 修改后再提交
+3. 用户批准后提交:
+   - commit message: `fix: <修复标题>`
+4. **绝不自动提交**，必须等待用户明确批准
 
 ## 路径选择示例
 

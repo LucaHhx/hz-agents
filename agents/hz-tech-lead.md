@@ -147,6 +147,23 @@ python3 .claude/skills/create-docs/scripts/docs.py role <req> ui
 - **qa/design.md**: 测试策略、测试范围
 - **ui/**: 由 UI 设计师负责填充设计稿和设计文档
 
+### 3.5 标注页面 UI 设计需求
+
+在 frontend/design.md 中明确标注每个页面的 UI 设计需求:
+
+| 页面 | UI 设计 | 说明 |
+|------|---------|------|
+| 标准 CRUD 管理页 | 不需要（AutoCode 生成） | 使用框架默认样式 |
+| 自定义页面 | 需要（/review-ui 产出） | 在 merge.html 中设计 |
+| CRUD 页面定制 | 需要（仅定制部分） | merge.html 聚焦差异 |
+
+### 3.6 消费 QA 测试报告
+
+在修复阶段，读取 QA 产出的测试文档定位问题:
+- `qa/test-report.md` — 测试报告总览，了解通过率和失败项
+- `qa/bugs.md` — Bug 清单，获取复现步骤和修复建议
+- `qa/api-tests.md` — API 测试详情，查看失败接口的请求/响应
+
 ### 4. 拆解技术任务 (tasks.md)
 
 | L2 功能任务 | L3 技术任务示例 |

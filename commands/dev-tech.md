@@ -102,7 +102,7 @@ TeamCreate: team_name: "dev-tech-$REQ_NAME"
 
 **Tech Lead agent (team leader):**
 ```
-Agent tool:
+Task tool:
   subagent_type: "hz-tech-lead"
   team_name: "dev-tech-$REQ_NAME"
   name: "tech-lead"
@@ -169,7 +169,7 @@ Agent tool:
 
 **Frontend agent:**
 ```
-Agent tool:
+Task tool:
   subagent_type: "hz-frontend"
   team_name: "dev-tech-$REQ_NAME"
   name: "frontend"
@@ -209,7 +209,7 @@ Agent tool:
 
 **Backend agent:**
 ```
-Agent tool:
+Task tool:
   subagent_type: "hz-backend"
   team_name: "dev-tech-$REQ_NAME"
   name: "backend"

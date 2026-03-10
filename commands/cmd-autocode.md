@@ -15,6 +15,24 @@ argument-hint: [操作描述，如"创建订单模块"或"查看包列表"]
 
 ---
 
+## Step 0：扫描 [autocode] 标注任务（快捷入口）
+
+如果 `docs/` 目录存在，先扫描所有需求的 `backend/tasks.md`，找出标注 `[autocode]` 的待办任务:
+
+```bash
+# 搜索所有 [autocode] 标注的待办任务
+grep -r "\[autocode\]" docs/*/backend/tasks.md 2>/dev/null | grep "待办"
+```
+
+如果找到 [autocode] 任务:
+- 列出这些任务及对应需求
+- 直接使用任务中的模块信息进入执行阶段（跳过 brainstorming 探索）
+- 如果用户未指定具体模块，使用 AskUserQuestion 让用户选择
+
+如果没有找到或 docs/ 不存在 → 继续正常流程。
+
+---
+
 ## 阶段一：探索与需求确认（brainstorming + hab-autocode 查询）
 
 使用 `brainstorming` skill 引导用户明确意图。在 brainstorming 过程中，调用 hab-autocode 的**只读 API** 获取真实数据辅助沟通。
@@ -108,12 +126,27 @@ cd server && go build ./...
 - 缺少 `gorm.io/gorm` 导入 → 添加到 import
 - 未使用的 import → 移除
 
-### 9. 输出总结
+### 9. 更新文档状态
+
+如果 `docs/` 目录存在且有对应需求:
+- 使用 `docs.py done` 标记 [autocode] 任务为已完成
+- 使用 `docs.py log` 在 log.md 记录生成信息:
+  ```bash
+  python3 .claude/skills/create-docs/scripts/docs.py log <req> 新增 "AutoCode 生成模块: <模块名>, 文件: <文件列表摘要>"
+  ```
+
+### 10. 输出总结
 
 编译通过后，输出：
 - 生成的文件清单（后端 + 前端）
 - 自动完成的操作（建表、API 注册、菜单创建等）
 - 如果修复了编译问题，说明修复内容
+- **后续建议**:
+  ```
+  后续建议:
+    1. /unify-dev <REQ_NAME>       — 启动全团队开发（含 QA）
+    2. /dev-tech <REQ_NAME>        — Tech Lead 带队开发（无 QA）
+  ```
 
 ---
 

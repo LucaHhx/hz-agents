@@ -570,7 +570,7 @@ fi
 启动 hz-pm agent，通过 brainstorming 与用户确定业务需求，初始化 docs/：
 
 ```
-Agent tool:
+Task tool:
   subagent_type: "hz-pm"
   prompt: |
     先读取 create-docs skill 的 SKILL.md (.claude/skills/create-docs/SKILL.md) 了解文档规范。
@@ -612,12 +612,21 @@ Agent tool:
   docs/       — 项目文档
   .claude/    — hz-agents 链接
 
-下一步建议:
+启动验证:
   1. cd server && HAB_CONFIG=config.local.yaml go run .   # 启动后端
   2. cd web && npm run serve                               # 启动管理后台
   3. 浏览器打开 http://localhost:<VITE_CLI_PORT> → 用 admin 登录
-  4. /review-tech                                          # Tech Lead 做技术方案
-  5. /unify-dev                                            # 全团队协作开发
+
+流水线下一步:
+  4. /review-tech                  — Tech Lead 创建技术方案
+  5. /review-ui                    — UI 设计师产出设计稿（自定义页面）
+  6. /review-all                   — 三端文档对齐评审（推荐）
+  7. /cmd-autocode                 — 生成 CRUD 模块代码
+  8. /unify-dev                    — 全团队协作开发
+  9. /review-qa                    — QA 验收测试
+
+查看流水线状态:
+  python3 .claude/skills/create-docs/scripts/docs.py pipeline
 ========================================
 ```
 

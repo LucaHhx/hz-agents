@@ -41,6 +41,39 @@ def _create_ui_role(role_dir, req_name):
     (icons_dir / ".gitkeep").touch()
 
 
+def _create_qa_role(role_dir, req_name):
+    """创建 QA 角色的扩展目录结构。"""
+    # design.md ← 标准模板
+    content = render("design.md", REQ_NAME=req_name, ROLE="qa")
+    if content:
+        (role_dir / "design.md").write_text(content, encoding="utf-8")
+
+    # tasks.md ← 标准模板
+    content = render("tasks.md", PLAN_NAME=f"{req_name}/qa")
+    if content:
+        (role_dir / "tasks.md").write_text(content, encoding="utf-8")
+
+    # test-report.md ← qa-test-report.md 模板
+    content = render("qa-test-report.md", REQ_NAME=req_name)
+    if content:
+        (role_dir / "test-report.md").write_text(content, encoding="utf-8")
+
+    # api-tests.md ← qa-api-tests.md 模板
+    content = render("qa-api-tests.md", REQ_NAME=req_name)
+    if content:
+        (role_dir / "api-tests.md").write_text(content, encoding="utf-8")
+
+    # bugs.md ← qa-bugs.md 模板
+    content = render("qa-bugs.md", REQ_NAME=req_name)
+    if content:
+        (role_dir / "bugs.md").write_text(content, encoding="utf-8")
+
+    # screenshots/ 目录
+    screenshots_dir = role_dir / "screenshots"
+    screenshots_dir.mkdir()
+    (screenshots_dir / ".gitkeep").touch()
+
+
 def cmd_role(args):
     root = find_project_root(args.root)
     req_name = args.req_name
@@ -58,6 +91,8 @@ def cmd_role(args):
 
     if role_name == "ui":
         _create_ui_role(role_dir, req_name)
+    elif role_name == "qa":
+        _create_qa_role(role_dir, req_name)
     else:
         content = render("design.md", REQ_NAME=req_name, ROLE=role_name)
         if content:
