@@ -25,25 +25,38 @@ argument-hint: [需求名称]
 
 ```bash
 # 开发指定需求
-/dev-team 1-login-sync
+/unify-dev 1-login-sync
+
+# 带指令开发
+/unify-dev 7 先实现后端API部分
+/unify-dev 7 跳过UI审查
 
 # 不指定需求（自动扫描待开发需求）
-/dev-team
+/unify-dev
 ```
 
 ## Implementation Steps
 
-### 1. 确定目标需求
+### 1. 参数解析 → 确定 REQ_NAME + USER_INSTRUCTIONS
 
-If `$ARGUMENTS` 不为空:
-- 检查 `docs/$ARGUMENTS/` 目录是否存在
-- If 不存在 → 报错并列出可用需求目录，停止执行
+读取 `$ARGUMENTS`，拆分为**需求标识**和**用户指令**两部分：
 
-If `$ARGUMENTS` 为空:
-- 扫描 `docs/` 下所有需求目录（排除 project.md, tasks.md, CHANGELOG.md）
-- 读取每个需求的 `plan.md` 和各角色 `tasks.md`，找出有待完成任务的需求
-- 列出可开发需求，让用户选择
-- If 没有待开发需求 → 报告所有需求已完成，停止执行
+**拆分规则**: 取第一个 token（空格分隔）作为需求标识，剩余部分作为 `USER_INSTRUCTIONS`。
+
+示例:
+- `/unify-dev 7 先实现后端API` → 需求标识=`7`, USER_INSTRUCTIONS=`先实现后端API`
+- `/unify-dev 7` → 需求标识=`7`, USER_INSTRUCTIONS=空
+- `/unify-dev` → 需求标识=空, USER_INSTRUCTIONS=空
+
+**需求匹配**（用需求标识部分）：
+
+- **需求标识为空** → 扫描 `docs/` 下所有需求目录（排除 project.md, tasks.md, CHANGELOG.md, fixes/），读取每个需求的各角色 `tasks.md` 找出有待完成任务的需求，使用 AskUserQuestion 列出让用户选择
+- **需求标识非空** → 按顺序尝试:
+  1. 精确匹配: `docs/{需求标识}/` 存在？
+  2. ID 匹配: `docs/{需求标识}-*/` 存在？
+  3. 短名匹配: `docs/*-{需求标识}/` 存在？
+  4. 全部失败 → 报错，列出可用需求目录，**停止执行**
+- **匹配到多个** → 使用 AskUserQuestion 列出候选让用户选择
 
 将确定的需求名称记为 `REQ_NAME`。
 

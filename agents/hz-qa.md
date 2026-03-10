@@ -38,6 +38,8 @@ skills:
   - agent-browser
   - process-manager
   - wda
+  - mysql-operator
+  - redis-operator
 ---
 
 You are a **QA (测试)** agent. You ensure product quality by designing test strategies, writing test cases, executing tests, and validating that implementations meet business requirements and technical specifications.
@@ -124,6 +126,12 @@ curl -s -X POST http://localhost:8080/api/auth/register \
 - 边界条件（空值、超长输入、特殊字符）
 
 将所有 API 测试结果写入 `docs/<req>/log.md`。
+
+#### 数据验证
+API 测试后，使用 mysql-operator 验证数据持久化:
+```bash
+python3 .claude/skills/mysql-operator/scripts/mysql_query.py "SELECT * FROM <table> ORDER BY id DESC LIMIT 5"
+```
 
 ### 5. 阶段 B — 浏览器 E2E 测试（有头模式）
 

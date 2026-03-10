@@ -233,6 +233,7 @@ rm -rf "$CACHE_DIR"
   ```bash
   cp web/.env.example web/.env.development
   ```
+- 确保 `web/.env.development` 中 `VITE_SERVER_PORT` 与 config 中 `system.addr` 一致
 - 创建 `src/plugin/` 空目录（vite-auto-import-svg 插件需要扫描此目录）：
   ```bash
   mkdir -p web/src/plugin
@@ -255,6 +256,11 @@ npm install -D tailwindcss @tailwindcss/vite
 
 # 安装状态管理
 npm install zustand axios react-router-dom
+```
+
+创建 `client/.env.development`:
+```bash
+VITE_API_URL=http://127.0.0.1:9689  # 对应 system.api-addr
 ```
 
 **5.5 编译验证**
@@ -485,6 +491,9 @@ AskUserQuestion:
 
 基于 `server/config.example.yaml` 复制为 `server/config.local.yaml`，覆盖以下字段：
 
+> 完整配置参考 `server/config.example.yaml`（所有字段带中文注释）。
+> 极简配置参考 `server/config.minimal.yaml`（只需 db-type + jwt key）。
+
 **通用配置：**
 - `jwt.signing-key` → 新生成 UUID（`uuidgen`）
 - `autocode.module` → <project-name>
@@ -606,7 +615,7 @@ Agent tool:
 下一步建议:
   1. cd server && HAB_CONFIG=config.local.yaml go run .   # 启动后端
   2. cd web && npm run serve                               # 启动管理后台
-  3. 浏览器打开 http://localhost:8080 → 用 admin 登录
+  3. 浏览器打开 http://localhost:<VITE_CLI_PORT> → 用 admin 登录
   4. /review-tech                                          # Tech Lead 做技术方案
   5. /unify-dev                                            # 全团队协作开发
 ========================================

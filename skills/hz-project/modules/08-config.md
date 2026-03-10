@@ -20,7 +20,7 @@ HAB_CONFIG=config.local.yaml go run .
 go run .
 ```
 
-> 后端默认监听 `:9688`（主服务）和 `:9689`（API 端口）
+> 后端默认监听 `:9688`（管理接口）和 `:9689`（客户端/外部 API 端口）
 
 ### 启动管理后台（web）
 
@@ -52,13 +52,34 @@ npm run dev
 
 ---
 
+## 后端双端口架构
+
+| 端口 | 配置项 | 用途 | 消费者 |
+|------|--------|------|--------|
+| `system.addr` (默认 9688) | 后台管理接口 | 后台 CRUD、权限、菜单等 | `web/`（管理后台） |
+| `system.api-addr` (默认 9689) | 客户端/外部 API 接口 | 面向客户端和第三方的业务 API | `client/`（客户端）、外部系统 |
+
+> 两个端口均从 `config.yaml` 读取，非硬编码。
+
+## 端口配置联动
+
+修改后端端口后，须同步更新前端配置：
+
+| 后端配置项 | 前端配置文件 | 对应变量 |
+|-----------|-------------|---------|
+| `system.addr` | `web/.env` | `VITE_SERVER_PORT`（代理目标端口） |
+| `system.api-addr` | `client/.env` | `VITE_API_URL` 或代理目标 |
+
+---
+
 ## 后端配置
 
 ### 配置文件层级
 
 | 文件 | 用途 | Git | 说明 |
 |------|------|-----|------|
-| `config.example.yaml` | 模板参考 | 提交 | 不含敏感信息，新成员参考 |
+| `config.example.yaml` | 完整配置模板（带注释） | 提交 | 所有字段带中文注释，新成员参考 |
+| `config.minimal.yaml` | 极简配置模板 | 提交 | 最小可运行配置（SQLite + JWT key） |
 | `config.yaml` | 默认运行配置 | .gitignore | viper 默认加载此文件 |
 | `config.local.yaml` | 本地开发配置 | .gitignore | hz-init 生成，通过 HAB_CONFIG 指定 |
 
@@ -87,65 +108,115 @@ if config == "" {
    ```
    不需要设环境变量，但要注意不要提交到 git。
 
-### 主要配置段
+### 配置示例 A — 完整配置（带注释）
+
+> 对应实际文件：`server/config.example.yaml`
 
 ```yaml
-# ===================== 系统核心 =====================
+# ===================== 系统核心配置 =====================
 system:
-  db-type: sqlite          # sqlite / mysql
-  addr: 9688               # 后端主端口
-  api-addr: 9689           # API 端口
-  use-redis: false          # 是否启用 Redis
-  use-strict-auth: true     # 严格权限校验
-  migration: true           # 启动时自动迁移
-  environment: dev          # dev / prod
+  db-type: mysql          # 数据库类型: sqlite | mysql | pgsql | mssql | oracle
+  oss-type: local          # 文件存储: local | aliyun | minio | aws | tencent | huawei
+  addr: 9688               # 后台管理接口端口（web/ 连接此端口）
+  api-addr: 9689           # 客户端/外部 API 端口（client/ 连接此端口）
+  iplimit-count: 15000     # IP 限流：时间窗口内最大请求数
+  iplimit-time: 3600       # IP 限流：时间窗口（秒）
+  use-redis: false         # 是否启用 Redis 缓存
+  use-mongo: false         # 是否启用 MongoDB
+  use-strict-auth: true    # 是否启用严格鉴权（Casbin）
+  time-zone: "UTC"         # 时区
+  migration: true          # 启动时自动迁移数据库
+  translation-dir: ./translation  # i18n 翻译文件目录
+  environment: dev         # 环境: dev | production
+  login-mode: simple       # 登录模式: simple(无验证码) | captcha(需验证码) | strict(分步强验证)
 
-# ===================== 数据库 =====================
-# SQLite（db-type: sqlite 时生效）
-sqlite:
-  path: data.db
-
-# MySQL（db-type: mysql 时生效）
+# ===================== 数据库配置 =====================
 mysql:
-  path: 127.0.0.1
-  port: "3306"
-  db-name: my-project
-  username: root
-  password: your-password
-  config: charset=utf8mb4&parseTime=True&loc=Local
-  log-mode: info
-  max-idle-conns: 10
-  max-open-conns: 100
+  path: 127.0.0.1          # MySQL 地址
+  port: "3306"             # MySQL 端口
+  db-name: hab             # 数据库名
+  username: root           # 用户名
+  password: your-password  # 密码
+  config: charset=utf8mb4&parseTime=True&loc=Local  # 连接参数
+  log-mode: info           # SQL 日志级别: silent | error | warn | info
+  max-idle-conns: 10       # 最大空闲连接数
+  max-open-conns: 100      # 最大打开连接数
 
-# Redis（可选，use-redis: true 时需要）
 redis:
-  addr: 127.0.0.1:6379
-  password: ""
-  db: 0
+  addr: 127.0.0.1:6379     # Redis 地址
+  password: ""             # Redis 密码
+  db: 0                    # Redis 数据库编号
 
 # ===================== JWT 认证 =====================
 jwt:
-  signing-key: <uuid>       # 每个项目生成唯一 key（uuidgen）
-  expires-time: 7d
-  buffer-time: 1d
-  issuer: qmPlus
+  signing-key: <uuid>      # JWT 签名密钥（建议 uuidgen 生成）
+  expires-time: 7d         # Token 过期时间
+  buffer-time: 1d          # Token 刷新缓冲期
+  issuer: qmPlus           # 签发者
+
+# ===================== 验证码 =====================
+captcha:
+  key-long: 6              # 验证码位数
+  img-width: 240           # 图片宽度
+  img-height: 80           # 图片高度
+  open-captcha: 0          # 0=总是需要, >0=错误N次后需要
+  open-captcha-timeout: 3600  # 验证码缓存时间（秒）
 
 # ===================== 代码生成器 =====================
 autocode:
-  web: web/src
-  server: server
-  module: my-project         # 项目名，影响代码生成路径
-  api-key: ""                # 留空禁用 API Key 认证
+  web: web/src             # 前端代码生成目录
+  server: server           # 后端代码生成目录
+  module: hab              # Go module 名
+  api-key: ""              # AutoCode API Key（留空=禁用，填入=启用）
+
+# ===================== 文件存储 =====================
+local:
+  path: uploads/file       # 访问路径
+  store-path: uploads/file # 存储路径
 
 # ===================== 日志 =====================
 zap:
+  level: info              # 日志级别: debug | info | warn | error
+  prefix: '[hab]'          # 日志前缀
+  format: console          # 格式: console | json
+  director: log            # 日志目录
+  show-line: true          # 显示调用行号
+  log-in-console: true     # 同时输出到控制台
+  retention-day: -1        # 日志保留天数（-1=永久）
+```
+
+### 配置示例 B — 极简配置（最小可运行）
+
+> 对应实际文件：`server/config.minimal.yaml`
+
+```yaml
+system:
+  db-type: sqlite          # 用 SQLite 免装数据库
+  addr: 9688               # 后台管理接口端口（web/ 连接此端口）
+  api-addr: 9689           # 客户端/外部 API 端口（client/ 连接此端口）
+  time-zone: "UTC"         # 时区（启动时解析，不可为空）
+  migration: true          # 启动时自动建表
+
+sqlite:
+  db-name: data            # 数据库文件名（生成 data.db，不可为空）
+
+jwt:
+  signing-key: <uuidgen生成>
+  expires-time: 7d         # Token 过期时间（必填）
+  buffer-time: 1d          # Token 刷新缓冲期（必填）
+  issuer: qmPlus
+
+zap:
   level: info
-  prefix: '[my-project]'    # 项目标识
   format: console
   director: log
   show-line: true
   log-in-console: true
 ```
+
+> 以上是启动不会 panic 的最小配置。其余未配置参数使用 Go 零值默认。
+> SQLite 数据库文件自动创建在 `server/data.db`。
+> 如需 MySQL，改为 `db-type: mysql` 并追加 `mysql:` 配置块（参考 config.example.yaml）。
 
 ### 环境变量
 
@@ -174,7 +245,7 @@ zap:
 # .env.example（开发模式配置）
 ENV = 'development'
 VITE_CLI_PORT = 8091          # 前端开发服务器端口
-VITE_SERVER_PORT = 9688       # 后端 API 端口
+VITE_SERVER_PORT = 9688       # 后端 API 端口（对应 system.addr）
 VITE_BASE_API = /api          # API 路径前缀
 VITE_FILE_API = /api          # 文件 API 路径前缀
 VITE_BASE_PATH = http://127.0.0.1  # 后端地址
@@ -222,8 +293,8 @@ proxy: {
 
 | 服务 | 默认端口 | 配置位置 |
 |------|---------|---------|
-| 后端主服务 | 9688 | `system.addr` |
-| 后端 API | 9689 | `system.api-addr` |
+| 后端管理接口 | 9688 | `system.addr` |
+| 后端客户端 API | 9689 | `system.api-addr` |
 | web 管理后台 | 8091 | `VITE_CLI_PORT` |
 | client 前端 | 8093 | 按需配置 |
 
@@ -244,16 +315,26 @@ MySQL → SQLite：
 
 ### 修改端口
 
-后端端口（修改 config）：
+**修改后端管理接口端口（system.addr）：**
 ```yaml
 system:
-  addr: 8080       # 改后端端口
+  addr: 8080       # 改后端管理端口
+```
+→ 同步更新 `web/.env`：
+```bash
+VITE_SERVER_PORT = 8080      # 要和 system.addr 一致
 ```
 
-前端端口（修改 .env）：
+**修改后端客户端 API 端口（system.api-addr）：**
+```yaml
+system:
+  api-addr: 8081   # 改客户端 API 端口
+```
+→ 同步更新 `client/.env`（如有）的 API 端口配置。
+
+**修改前端端口：**
 ```bash
-VITE_CLI_PORT = 3000         # 改前端端口
-VITE_SERVER_PORT = 8080      # 要和后端一致
+VITE_CLI_PORT = 3000         # 改前端开发服务器端口
 ```
 
 ### 启用 Redis

@@ -36,6 +36,9 @@ skills:
   - brainstorming
   - create-docs
   - agent-browser
+  - process-manager
+  - mysql-operator
+  - redis-operator
 ---
 
 You are a **Backend Developer (后端开发)** agent. You implement server-side features: APIs, databases, business logic, and data synchronization. You execute technical tasks defined by the Tech Lead.
@@ -117,6 +120,24 @@ python docs.py done <req> <task-id> --role backend
 ### 与前端协作
 - 如果发现接口定义有问题，先在 log.md 记录，不要自行修改接口约定
 - 接口变更需要通过 Tech Lead 协调
+
+## 服务管理 — process-manager
+
+开发中启动/重启后端验证 API:
+```bash
+PM=.claude/skills/process-manager/scripts
+$PM/start.sh backend "go run ." --cwd ./server
+$PM/search.sh backend "server run success"
+$PM/logs.sh backend --lines 20
+$PM/stop.sh backend
+```
+
+## 数据库调试 — mysql-operator
+
+验证数据操作和迁移结果:
+```bash
+python3 .claude/skills/mysql-operator/scripts/mysql_query.py "SELECT * FROM <table> ORDER BY id DESC LIMIT 5"
+```
 
 ## 用户沟通增强
 

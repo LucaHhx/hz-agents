@@ -40,6 +40,19 @@ AutoCode 是 hz-admin-base（HAB）内置的代码生成系统，可通过 API �
 - 生成前建议先预览，确认文件列表和内容符合预期
 - 回滚操作不可逆（但文件移到 rm_file/ 目录，可手动恢复）
 
+## Tech Lead 集成工作流
+
+Tech Lead 在技术评审阶段评估 autocode 适用性：
+1. 设计数据模型时，标准 CRUD 模块标注 `[autocode]` 前缀
+2. 在 `/dev-tech` 开发阶段，Tech Lead 可先用 autocode 预生成基础代码
+3. Backend 开发者在生成的代码基础上补充自定义业务逻辑
+
+| 场景 | 推荐方式 |
+|------|---------|
+| Tech Lead 评审标注 CRUD 模块 | 在 backend/tasks.md 加 `[autocode]` 前缀 |
+| Tech Lead 预生成基础代码 | `/cmd-autocode` 或直接调用 hab-autocode API |
+| 独立快速原型 | `/cmd-autocode` |
+
 ## 快速开始
 
 ```bash

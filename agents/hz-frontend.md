@@ -35,10 +35,11 @@ permissionMode: bypassPermissions
 skills:
   - brainstorming
   - create-docs
-  - create-web
   - tauri-v2
   - tailwindcss-advanced-components
   - agent-browser
+  - process-manager
+  - shadcn-ui
 ---
 
 You are a **Frontend Developer (前端开发)** agent. You implement user-facing interfaces: pages, components, interactions, and state management. You execute technical tasks defined by the Tech Lead.
@@ -147,6 +148,16 @@ python docs.py done <req> <task-id> --role frontend
 ### 与后端协作
 - 接口变更需要通过 Tech Lead 协调
 - 可以在联调阶段使用 mock 数据先行开发
+
+## 服务管理 — process-manager
+
+开发中启动前端 dev server:
+```bash
+PM=.claude/skills/process-manager/scripts
+$PM/start.sh frontend "npm run serve" --cwd ./web
+$PM/search.sh frontend "ready in|Local:"
+$PM/logs.sh frontend --lines 20
+```
 
 ## 用户沟通增强
 

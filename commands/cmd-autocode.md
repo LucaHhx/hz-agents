@@ -5,6 +5,10 @@ argument-hint: [操作描述，如"创建订单模块"或"查看包列表"]
 
 # HAB AutoCode 交互式代码生成向导
 
+> **推荐使用方式**: Tech Lead 完成技术评审 (`/review-tech`) 后，
+> 对标注 `[autocode]` 的 CRUD 模块使用本命令生成基础代码。
+> 也可独立使用进行快速原型开发。
+
 本命令分为两个阶段：
 1. **探索阶段**：使用 `brainstorming` skill 结合 `hab-autocode` 的查询 API，与用户沟通并完善需求
 2. **执行阶段**：使用 `hab-autocode` skill 的生成 API 执行代码生成，并完成编译检查

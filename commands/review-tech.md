@@ -60,7 +60,11 @@ Agent tool:
     2. 创建角色目录（backend, frontend, qa, ui）
     3. 编写各角色 design.md 技术方案
     4. 拆解技术任务到各角色 tasks.md
-    5. 在 log.md 记录技术决策
+    5. 评估 autocode 适用性:
+       - 检查 backend/design.md 中的数据模型
+       - 标准 CRUD 模块在 backend/tasks.md 中加 [autocode] 前缀
+       - 在 log.md 中记录 autocode 使用计划
+    6. 在 log.md 记录技术决策
 
     {如果 USER_INSTRUCTIONS 非空，追加以下段落}
     ## 用户指令（优先级最高）

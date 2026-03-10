@@ -111,11 +111,18 @@ Agent tool:
 
     先读取 create-docs skill 的 SKILL.md (.claude/skills/create-docs/SKILL.md) 了解文档规范。
     再读取 references/tech-stack.md (.claude/skills/create-docs/references/tech-stack.md) 了解项目技术栈。
+    再读取 hz-project skill (.claude/skills/hz-project/SKILL.md) 了解项目全生命周期规范。
 
     {如果 USER_INSTRUCTIONS 非空，追加以下段落}
     ## 用户指令（优先级最高）
     {USER_INSTRUCTIONS}
     将此指令传达给相关开发者，确保按用户要求调整开发优先级或方式。
+
+    ## AutoCode 预生成（可选）
+    如果 backend/tasks.md 中有标注 [autocode] 的任务：
+    1. 使用 hab-autocode 预览并生成这些模块的基础代码
+    2. 编译检查通过后，标记对应任务为已完成
+    3. 后续 backend 开发者在此基础上实现自定义逻辑
 
     ## 链接浏览
     如果用户指令中包含 URL 链接，使用 agent-browser 浏览这些链接，提取技术细节后传达给开发者。
