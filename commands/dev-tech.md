@@ -12,11 +12,13 @@ argument-hint: [需求名称或ID] [用户指令]
 ```
 1. 前置文档检查 ── 不通过 → 暂停，提示用户先完善文档
                      ↓ 通过
-2. 创建团队，Frontend + Backend 并行开发
+2. Tech Lead AutoCode 预生成 ── 扫描 [autocode] 任务 → 生成 CRUD 基础代码 + 编译检查
+                     ↓ 完成（或无 [autocode] 任务则跳过）
+3. 创建团队，Frontend + Backend 并行开发（Backend 在 autocode 基础上补充自定义逻辑）
                      ↓
-3. Tech Lead 代码审查 ── 不通过 → 创建修复任务，回到步骤 2
+4. Tech Lead 代码审查 ── 不通过 → 创建修复任务，回到步骤 3
                      ↓ 通过       （最多 3 轮，超过上报用户）
-4. 汇总报告 + Git 提交
+5. 汇总报告 + Git 提交
 ```
 
 ## Usage
@@ -72,6 +74,56 @@ argument-hint: [需求名称或ID] [用户指令]
 
 如有不满足项 → 列出缺失项 + 对应前置命令，**停止执行**。
 
+### 2.5. Tech Lead AutoCode 预生成（文档检查通过后、创建团队前）
+
+**此步骤在创建开发团队之前执行**，由 Tech Lead 独立完成 CRUD 代码生成，为后续开发奠定基础。
+
+使用 Agent 工具启动 Tech Lead agent（非团队模式，独立执行）:
+
+```
+Agent tool:
+  subagent_type: "hz-tech-lead"
+  prompt: |
+    你是开发团队的 Tech Lead，负责需求 $REQ_NAME 的 AutoCode 预生成。
+
+    先读取 create-docs skill 的 SKILL.md (.claude/skills/create-docs/SKILL.md) 了解文档规范。
+    再读取 hab-autocode skill 的 SKILL.md (.claude/skills/hab-autocode/SKILL.md) 了解 AutoCode API 用法。
+
+    ## 你的任务
+
+    1. 读取 docs/$REQ_NAME/backend/tasks.md，扫描所有标注 [autocode] 的待办任务
+    2. 如果没有 [autocode] 任务 → 输出 {"autocode": false, "summary": "无 [autocode] 任务，跳过"} 并结束
+    3. 如果有 [autocode] 任务 → 按以下流程执行:
+
+    ### AutoCode 执行流程
+    a. 确保 HAB server 已启动（使用 process-manager 启动，等待端口就绪）
+    b. 调用 getPackage 查看已有包，确认目标包是否存在
+    c. 如需创建新包，调用 createPackage
+    d. 读取 backend/design.md 中的数据模型定义，构建 AutoCode 请求 JSON:
+       - structName、tableName、packageName、description、fields
+       - 设置 gvaModel: true, autoMigrate: true, autoCreateApiToSql: true, autoCreateMenuToSql: true
+    e. 调用 preview 预览生成文件列表
+    f. 调用 createTemp 正式生成代码
+    g. 执行 `cd server && go build ./...` 编译检查
+    h. 如果编译失败，分析并修复问题，循环直到编译通过
+    i. 使用 docs.py done 标记 [autocode] 任务为已完成
+    j. 使用 docs.py log 记录 AutoCode 生成信息
+
+    4. 完成后停止 HAB server（如果是本步骤启动的）
+    5. 输出结果:
+    {
+      "autocode": true,
+      "generated_modules": ["模块1", "模块2", ...],
+      "generated_files": ["文件路径1", "文件路径2", ...],
+      "remaining_tasks": ["非 autocode 的待办任务描述", ...],
+      "summary": "一句话总结"
+    }
+```
+
+**处理 AutoCode 结果:**
+- `autocode: false` → 无 [autocode] 任务，直接进入创建团队
+- `autocode: true` → 记录生成信息，进入创建团队。Backend agent 将基于生成的代码补充自定义逻辑
+
 ### 3. 创建团队与任务
 
 ```
@@ -118,11 +170,9 @@ Task tool:
     {USER_INSTRUCTIONS}
     将此指令传达给相关开发者，确保按用户要求调整开发优先级或方式。
 
-    ## AutoCode 预生成（可选）
-    如果 backend/tasks.md 中有标注 [autocode] 的任务：
-    1. 使用 hab-autocode 预览并生成这些模块的基础代码
-    2. 编译检查通过后，标记对应任务为已完成
-    3. 后续 backend 开发者在此基础上实现自定义逻辑
+    ## 说明
+    AutoCode 预生成已在创建团队前由 Step 2.5 独立完成。[autocode] 标注的任务已生成并编译通过。
+    你的职责聚焦于开发指导和代码审查。
 
     ## 链接浏览
     如果用户指令中包含 URL 链接，使用 agent-browser 浏览这些链接，提取技术细节后传达给开发者。
@@ -226,15 +276,31 @@ Task tool:
     ## 链接浏览
     如果用户指令中包含 URL 链接，使用 agent-browser 浏览这些链接，提取 API 文档或技术参考。
 
+    ## 重要: AutoCode 预生成说明
+    Tech Lead 已在开发阶段之前使用 hab-autocode 预生成了标注 [autocode] 的 CRUD 模块基础代码。
+    这些模块的 model、api handler、router、service、前端页面已经自动生成并编译通过。
+
+    **你必须遵守以下规则:**
+    - **绝对不要重新创建** [autocode] 任务中已生成的 model 结构体、api handler、router、service 文件
+    - **不要修改** autocode 生成文件的基础结构（如字段定义、标准 CRUD 方法）
+    - 你的职责是在已生成的代码基础上 **补充自定义业务逻辑**:
+      - 非标准 CRUD 的 API（如 login、register 等需要特殊逻辑的接口）
+      - 在已有 service 中添加自定义方法
+      - 业务校验、权限控制、数据处理等自定义逻辑
+    - tasks.md 中标注 [autocode] 且状态为「已完成」的任务 **跳过不做**
+    - 只实现 tasks.md 中 **非 [autocode] 的待办任务**
+
     你的工作流程:
     1. 从 TaskList 获取你的任务，标记为 in_progress
     2. 读取 docs/{REQ_NAME}/backend/design.md 了解技术方案
     3. 读取 docs/{REQ_NAME}/backend/tasks.md 获取任务列表
-    4. 按任务列表逐项实现后端代码
-    5. 遇到接口定义不清或技术疑问时，发消息给 tech-lead 咨询
-    6. 每完成一个任务，使用 docs.py CLI 更新 tasks.md 状态
-    7. 全部完成后标记团队任务为 completed
-    8. 发送消息给 tech-lead 报告完成状态
+    4. **先检查哪些任务已标记 [autocode] 已完成** — 这些已由 Tech Lead 预生成，跳过
+    5. **浏览已生成的代码**，了解 autocode 产出的文件结构和内容
+    6. 在已有代码基础上，按 tasks.md 中剩余的非 [autocode] 任务逐项实现
+    7. 遇到接口定义不清或技术疑问时，发消息给 tech-lead 咨询
+    8. 每完成一个任务，使用 docs.py CLI 更新 tasks.md 状态
+    9. 全部完成后标记团队任务为 completed
+    10. 发送消息给 tech-lead 报告完成状态
 
     需求目录: docs/{REQ_NAME}/
 ```
@@ -291,6 +357,7 @@ Task tool:
 ## Important Notes
 
 - **文档检查是硬门槛** — design.md 和 tasks.md 缺失直接停止，不创建团队
+- **AutoCode 预生成在创建团队前完成** — Tech Lead 独立执行，生成 CRUD 基础代码（model/api/router/service/前端页面），Backend 开发者在此基础上补充自定义逻辑，**不得重复创建已生成的文件**
 - **代码审查是质量关卡** — 不通过必须修复后重新审查，最多 3 轮
 - **Frontend 和 Backend 并行开发**，互不阻塞
 - **Tech Lead 全程在线** — 开发阶段响应指导，完成后做代码审查

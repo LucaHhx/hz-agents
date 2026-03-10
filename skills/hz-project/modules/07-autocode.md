@@ -42,15 +42,29 @@ AutoCode 是 hz-admin-base（HAB）内置的代码生成系统，可通过 API �
 
 ## Tech Lead 集成工作流
 
-Tech Lead 在技术评审阶段评估 autocode 适用性：
-1. 设计数据模型时，标准 CRUD 模块标注 `[autocode]` 前缀
-2. 在 `/dev-tech` 开发阶段，Tech Lead 可先用 autocode 预生成基础代码
-3. Backend 开发者在生成的代码基础上补充自定义业务逻辑
+### 何时必须使用 AutoCode
+
+Tech Lead 在技术评审阶段（`/review-tech`）必须执行以下检测：
+
+**检测条件（两者同时满足 → 强制使用 AutoCode）：**
+1. **项目有后台管理页面** — `web/src/view/` 或 `web/src/api/` 存在，或 config.yaml 有 `autocode:` 配置段
+2. **任务涉及创建数据库表** — backend/design.md 中有新数据模型定义（含表名、字段、需要 GORM AutoMigrate 建表）
+
+**标记规则：**
+- 标准 CRUD 模块（增删改查 + 分页列表） → 在 backend/tasks.md 加 `[autocode]` 前缀，AutoCode 同时生成后端代码 + 前端管理页面
+- 复杂业务逻辑（登录、审批、第三方对接等） → 不标 `[autocode]`，开发者手写
+- 标准 CRUD + 自定义方法 → `[autocode]` 生成基础 + addFunc 添加方法
+
+**执行时机：**
+1. `/review-tech` 阶段 → Tech Lead 检测并标记 `[autocode]` 任务
+2. `/dev-tech` 或 `/unify-dev` 阶段 → Step 2.5 自动扫描并执行 AutoCode 预生成
+3. Backend 开发者在生成代码基础上补充自定义业务逻辑
 
 | 场景 | 推荐方式 |
 |------|---------|
 | Tech Lead 评审标注 CRUD 模块 | 在 backend/tasks.md 加 `[autocode]` 前缀 |
-| Tech Lead 预生成基础代码 | `/cmd-autocode` 或直接调用 hab-autocode API |
+| 开发阶段预生成（自动） | `/dev-tech` 或 `/unify-dev` 的 Step 2.5 自动执行 |
+| 手动预生成 | `/cmd-autocode` 或直接调用 hab-autocode API |
 | 独立快速原型 | `/cmd-autocode` |
 
 ## 快速开始

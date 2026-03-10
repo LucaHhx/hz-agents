@@ -173,6 +173,7 @@ Task tool:
     - design.md: 技术方案、架构、接口完整性
     - tasks.md: 技术任务具体可执行性
     - 业务需求是否有对应技术方案
+    - **AutoCode 标记检查**: 如果项目有后台管理页面（web/src/view/ 存在）且 backend/design.md 中有新数据模型需要建表，确认 backend/tasks.md 中对应的标准 CRUD 任务已加 [autocode] 前缀。缺失则补充标记。
 
     发现问题直接修复。完成后将结果发送给 pm 和 ui-designer。
     [如有需求参数: 只评审需求: $ARGUMENTS]
