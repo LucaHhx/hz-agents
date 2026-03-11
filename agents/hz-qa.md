@@ -170,7 +170,7 @@ $PM/search.sh frontend "ready in|Local:|compiled"
 
 ```bash
 # 打开前端页面（有头模式）
-agent-browser --headed open http://localhost:5173
+agent-browser --headed --args "--start-maximized" open http://localhost:5173 
 
 # 获取页面交互元素
 agent-browser snapshot -i
