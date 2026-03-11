@@ -10,6 +10,23 @@ description: |
 
 # Codex App-Server 使用指南
 
+## Claude 调用方式（首选）
+
+使用此 skill 目录下的 bridge 脚本与 Codex 交互。
+
+**定位脚本路径**：使用 Glob 工具搜索 `**/codex_bridge.py` 获取脚本绝对路径，然后用绝对路径调用。
+
+```bash
+# 示例（请替换为实际绝对路径）
+python3 /path/to/skills/codex-app-server/scripts/codex_bridge.py --cwd "$(pwd)" "任务描述"
+
+# 指定模型和 effort
+python3 /path/to/skills/codex-app-server/scripts/codex_bridge.py --cwd "$(pwd)" --model gpt-5.4 --effort high "任务描述"
+
+# 调试模式（查看原始 JSON 消息）
+python3 /path/to/skills/codex-app-server/scripts/codex_bridge.py --debug --cwd "$(pwd)" "任务描述"
+```
+
 ## 前置条件
 
 ```bash
@@ -65,7 +82,6 @@ which codex && codex --version
 
 ```
 ✗ "sandbox": "dangerFullAccess"              → 报错 unknown variant
-✗ "sandbox": {"type": "dangerFullAccess"}    → 报错 unknown variant
 ✓ "sandbox": "danger-full-access"            → 正确
 ✓ "sandbox": "read-only"                     → 正确
 ✓ "sandbox": "workspace-write"               → 正确
@@ -82,14 +98,12 @@ which codex && codex --version
 | `codex/event/exec_command_begin` | `item/started` (commandExecution) | 命令开始执行 |
 | `codex/event/exec_command_end` | `item/completed` (commandExecution) | 命令执行结束 |
 | `codex/event/task_complete` | `turn/completed` | 整个 turn 完成 |
-| `codex/event/item_started` | `item/started` | 通用 item 开始 |
-| `codex/event/item_completed` | `item/completed` | 通用 item 完成 |
 
-**两套命名都可能出现**，代码中应同时处理。
+**两套命名都可能出现**，代码中应同时处理。完整事件列表见 [references/api-reference.md](references/api-reference.md)。
 
 ### 坑3: thread/start 首次可能较慢
 
-首次创建 thread 时服务端需要初始化模型连接，wait timeout 建议设 15 秒以上。
+首次创建 thread 时服务端需要初始化模型连接，wait timeout 建议设 15-20 秒。
 
 ### 坑4: stdio 双向通信需要正确的管道处理
 
@@ -105,34 +119,59 @@ which codex && codex --version
 
 thread/start 返回的 id 是 UUID（如 `019cdc34-cba7-7662-...`），不能自己编造。
 
-## 使用 Bridge 脚本
+## Bridge 脚本用法
 
-运行 `scripts/codex_bridge.py` 快速与 Codex 交互：
+以下示例假设已 `cd` 到此 skill 目录，或将路径替换为绝对路径：
 
 ```bash
 # 基本用法 - 发送单个任务
-python3 scripts/codex_bridge.py "分析项目结构"
+python3 codex_bridge.py "分析项目结构"
 
 # 指定工作目录
-python3 scripts/codex_bridge.py --cwd /path/to/project "实现登录功能"
+python3 codex_bridge.py --cwd /path/to/project "实现登录功能"
 
 # 指定模型和 effort
-python3 scripts/codex_bridge.py --model gpt-5.3-codex --effort high "重构这个模块"
+python3 codex_bridge.py --model gpt-5.3-codex --effort high "重构这个模块"
+
+# 代码审查（使用原生 review/start API）
+python3 codex_bridge.py --review --cwd /path/to/project
+python3 codex_bridge.py --review --target baseBranch --cwd /path/to/project
+python3 codex_bridge.py --review --target commit --commit-sha abc123
+
+# JSON 结构化输出（适合程序化调用）
+python3 codex_bridge.py --json "分析项目结构"
+python3 codex_bridge.py --json --review --cwd /path/to/project
+
+# 调试模式
+python3 codex_bridge.py --debug "查看原始通信"
 
 # 多轮对话模式
-python3 scripts/codex_bridge.py --interactive
+python3 codex_bridge.py --interactive
 ```
 
-脚本自动处理初始化、thread 创建、事件收集、文本提取等全部细节。
+## 场景→API 映射表
+
+| 使用场景 | Bridge 模式 | 底层 API | 默认 sandbox | 复用 thread |
+|----------|-------------|----------|-------------|-------------|
+| 编码任务 | `"任务描述"` | `turn/start` | danger-full-access | 否 |
+| 未提交代码审查 | `--review` | `review/start` | read-only | 否 |
+| PR/base branch 审查 | `--review --target baseBranch` | `review/start` | read-only | 否 |
+| 指定 commit 审查 | `--review --target commit --commit-sha <sha>` | `review/start` | read-only | 否 |
+| 文档/架构评审 | `"审查 prompt"` + `--sandbox read-only` | `turn/start` | 按参数 | 否 |
+| 多轮对话/追问 | `--interactive` | `turn/start`（同 thread） | 按参数 | 是 |
+| 直接执行命令 | API only | `command/exec` | 按参数 | 否 |
+
+> **注意**：Bridge 脚本目前封装了 `initialize`、`thread/start`、`turn/start`、`turn/interrupt`、`review/start`、`model/list`。
+> 协议还支持 `thread/resume`、`thread/fork`、`thread/read`、`turn/steer` 等高级方法，可通过 `CodexBridge.send()` 直接调用。详见 [references/api-reference.md](references/api-reference.md)。
 
 ## 可用模型
 
-| 模型 | 说明 | 默认 effort |
-|------|------|-------------|
-| gpt-5.4 | 最新旗舰 agentic 模型 | medium |
-| gpt-5.3-codex | Codex 优化的 agentic 模型 | medium |
-| gpt-5.2-codex | 前代 Codex 优化模型 | medium |
-| gpt-5.1-codex-max | 深度推理 Codex 模型 | medium |
+| 模型 | 说明 |
+|------|------|
+| gpt-5.4 | 最新旗舰 agentic 模型（默认） |
+| gpt-5.3-codex | Codex 优化的 agentic 模型 |
+| gpt-5.2-codex | 前代 Codex 优化模型 |
+| gpt-5.1-codex-max | 深度推理 Codex 模型 |
 
 effort 选项: `low`（快速）、`medium`（平衡）、`high`（深度）、`xhigh`（最大深度）
 
