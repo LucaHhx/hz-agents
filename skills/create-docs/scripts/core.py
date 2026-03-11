@@ -100,6 +100,49 @@ def fmt_req_task_row(num, name, status, owner, note):
     return f"| {num} | {name} | {status} | {owner} | {note} |"
 
 
+def get_active_roles(req_dir):
+    """读取 tech/design.md 中的角色规划表，返回活跃角色列表。
+    降级策略：无规划表时扫描已存在的角色子目录。"""
+    design = req_dir / "tech" / "design.md"
+    if design.exists():
+        roles = _parse_role_manifest(design)
+        if roles is not None:
+            return roles
+    # 降级：扫描已有目录
+    known = {"tech", "backend", "frontend", "qa", "ui"}
+    return sorted(d.name for d in req_dir.iterdir() if d.is_dir() and d.name in known)
+
+
+def _parse_role_manifest(design_path):
+    """解析 ## 角色规划 表格，返回参与=✅ 的角色列表，找不到表格返回 None。"""
+    content = design_path.read_text(encoding="utf-8")
+    lines = content.splitlines()
+
+    # 找到 ## 角色规划 段落
+    in_section = False
+    role_re = re.compile(r"^\|\s*(\w+)\s*\|\s*(✅|❌)\s*\|")
+    roles = []
+    found_table = False
+
+    for line in lines:
+        stripped = line.strip()
+        if stripped.startswith("## 角色规划"):
+            in_section = True
+            continue
+        if in_section and stripped.startswith("## "):
+            break  # 下一个段落
+        if in_section:
+            m = role_re.match(stripped)
+            if m:
+                found_table = True
+                role_name = m.group(1)
+                status = m.group(2)
+                if status == "✅":
+                    roles.append(role_name)
+
+    return roles if found_table else None
+
+
 def add_log_entry(log_file, entry_type, message):
     """Append entry to log.md under today's date section (newest first)."""
     today = date.today().isoformat()

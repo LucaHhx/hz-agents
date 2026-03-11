@@ -60,17 +60,20 @@ argument-hint: [需求名称或ID] [用户指令]
 
 将确定的需求名称记为 `REQ_NAME`。
 
-### 2. 前置检查（硬门槛）
+### 2. 前置检查（硬门槛 — 动态角色）
 
-逐项检查以下条件，**任一不满足 → 严格拒绝执行**:
+**首先读取角色规划**: 读取 `docs/{REQ_NAME}/tech/design.md` 中的「## 角色规划」表格，确定活跃角色列表。如果没有角色规划表，降级扫描已存在的角色子目录。
+
+基础检查（总是需要）:
 
 | 检查项 | 条件 | 不满足时提示 |
 |--------|------|-------------|
 | plan.md | `docs/{REQ_NAME}/plan.md` 存在且非空 | "请先运行 `/review-pm {REQ_NAME}` 完善业务文档" |
-| frontend/design.md | `docs/{REQ_NAME}/frontend/design.md` 存在且非空 | "请先运行 `/review-tech {REQ_NAME}` 创建技术方案" |
-| backend/design.md | `docs/{REQ_NAME}/backend/design.md` 存在且非空 | "请先运行 `/review-tech {REQ_NAME}` 创建技术方案" |
-| frontend/tasks.md | `docs/{REQ_NAME}/frontend/tasks.md` 存在且有待办任务 | "前端无待办任务，请检查任务列表" |
-| backend/tasks.md | `docs/{REQ_NAME}/backend/tasks.md` 存在且有待办任务 | "后端无待办任务，请检查任务列表" |
+
+按活跃角色动态检查:
+- **backend ✅** → `backend/design.md` + `backend/tasks.md` 存在且非空
+- **frontend ✅** → `frontend/design.md` + `frontend/tasks.md` 存在且非空
+- 未标记的角色 → 不检查，不要求
 
 如有不满足项 → 列出缺失项 + 对应前置命令，**停止执行**。
 
@@ -135,33 +138,36 @@ Agent tool:
 - `autocode: false` → 无 [autocode] 任务，直接进入创建团队
 - `autocode: true` → 记录生成信息，进入创建团队。Backend agent 将基于生成的代码补充自定义逻辑
 
-### 3. 创建团队与任务
+### 3. 创建团队与任务（动态角色）
+
+根据活跃角色列表动态创建团队和任务。
 
 ```
 TeamCreate: team_name: "dev-tech-$REQ_NAME"
 ```
 
-创建以下任务:
+**根据活跃角色创建任务:**
 
-**任务 1 — Frontend 开发** (owner: frontend):
-- 读取 frontend/design.md 和 frontend/tasks.md
-- 参考 ui/ 设计稿实现视觉效果（如存在）
-- 按任务列表逐项实现前端代码
-- 完成后通知 tech-lead
+- **frontend ✅** → 任务: Frontend 开发 (owner: frontend)
+  - 读取 frontend/design.md 和 frontend/tasks.md
+  - 参考 ui/ 设计稿实现视觉效果（如存在）
+  - 按任务列表逐项实现前端代码
+  - 完成后通知 tech-lead
 
-**任务 2 — Backend 开发** (owner: backend):
-- 读取 backend/design.md 和 backend/tasks.md
-- 按任务列表逐项实现后端代码
-- 完成后通知 tech-lead
+- **backend ✅** → 任务: Backend 开发 (owner: backend)
+  - 读取 backend/design.md 和 backend/tasks.md
+  - 按任务列表逐项实现后端代码
+  - 完成后通知 tech-lead
 
-**任务 3 — Tech Lead 代码审查** (owner: tech-lead, blockedBy: 任务1, 任务2):
-- 审查前后端代码质量、架构一致性、接口对齐
-- 不通过 → 创建修复任务，通知开发者修复，重新审查
-- 通过 → 标记完成，汇总报告
+- **总是创建** → 任务: Tech Lead 代码审查 (owner: tech-lead, blockedBy: 活跃的开发任务)
+  - 审查代码质量、架构一致性
+  - 如有 backend + frontend → 检查接口对齐
+  - 不通过 → 创建修复任务，通知开发者修复，重新审查
+  - 通过 → 标记完成，汇总报告
 
-### 4. 启动团队成员
+### 4. 启动团队成员（按活跃角色动态启动）
 
-并行启动 3 个 agent:
+根据活跃角色列表启动对应 agent。Tech Lead 总是启动。
 
 **Tech Lead agent (team leader):**
 ```
@@ -228,7 +234,7 @@ Task tool:
     需求目录: docs/{REQ_NAME}/
 ```
 
-**Frontend agent:**
+**Frontend agent（仅当 frontend ✅ 时启动）:**
 ```
 Task tool:
   subagent_type: "hz-frontend"
@@ -269,7 +275,7 @@ Task tool:
     需求目录: docs/{REQ_NAME}/
 ```
 
-**Backend agent:**
+**Backend agent（仅当 backend ✅ 时启动）:**
 ```
 Task tool:
   subagent_type: "hz-backend"

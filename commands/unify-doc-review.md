@@ -81,8 +81,9 @@ Task tool:
        - 关键技术问题（如: 数据同步策略、认证方案、离线支持等，根据具体需求而定）
        - 部署方式（桌面/移动/Web 优先级）
     3. **用户确认后，创建技术文档**:
-       - 使用 `docs.py role <req> backend/frontend/qa/ui` 创建角色目录
-       - 编写 backend/design.md 和 frontend/design.md 的初始技术方案
+       - 根据需求分析在 tech/design.md 写入角色规划表（## 角色规划），标注每个角色 ✅/❌
+       - 只为活跃角色（✅）使用 `docs.py role <req> <role>` 创建角色目录
+       - 为活跃的开发角色编写 design.md 的初始技术方案
        - 在 log.md 记录技术决策及理由
 
     **关键: 技术选型不要直接拍板，提出选项让用户选择。特别是涉及架构级别的决策。**
@@ -111,7 +112,7 @@ TeamCreate: team_name: "doc-review"
 - 发现问题直接修复或记录建议
 - 完成后发送结果给 pm 和 ui-designer
 
-**任务 3 — UI 设计产出** (owner: ui-designer, blockedBy: 任务1):
+**任务 3 — UI 设计产出** (owner: ui-designer, blockedBy: 任务1, **仅当 ui 角色活跃时创建**):
 - 阅读 plan.md 用户场景，创建 UI 设计稿
 - 产出: merge.html（响应式效果图，覆盖所有断点，禁止使用外部 URL 引用本地资源）
 - 编写 design.md 设计系统文档和 Introduction.md 设计说明
@@ -168,8 +169,9 @@ Task tool:
     再读取 references/update-guide.md 了解更新规则。
 
     然后按照你的 agent 职责，评审 docs/ 下的 L3 技术文档:
-    - 角色目录是否已创建（包括 backend, frontend, qa, ui）
-    - 如果 ui 角色目录不存在，使用 docs.py role <req> ui 创建
+    - 读取 tech/design.md 的角色规划表，确认活跃角色
+    - 只检查活跃角色的目录和文件
+    - 如果活跃角色的目录不存在，使用 docs.py role <req> <role> 创建
     - design.md: 技术方案、架构、接口完整性
     - tasks.md: 技术任务具体可执行性
     - 业务需求是否有对应技术方案
@@ -179,7 +181,7 @@ Task tool:
     [如有需求参数: 只评审需求: $ARGUMENTS]
 ```
 
-**UI Designer agent:**
+**UI Designer agent（仅当 ui 角色活跃时启动）:**
 ```
 Task tool:
   subagent_type: "hz-ui"

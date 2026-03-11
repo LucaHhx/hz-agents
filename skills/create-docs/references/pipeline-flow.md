@@ -98,6 +98,18 @@ review-qa (回归测试) ←── 修复后重新验证
   1. /review-qa {REQ_NAME}         — 回归测试验证修复
 ```
 
+## 角色动态规划
+
+Tech Lead 在 review-tech 阶段根据需求性质决定参与角色，记录在 tech/design.md「## 角色规划」表格。
+下游所有命令根据此表格动态组建团队。
+
+典型配置：
+- 纯 AutoCode CRUD → tech only
+- 后端 API → tech + backend (+qa)
+- 前后端 → tech + backend + frontend (+qa +ui)
+
+降级策略：无角色规划表时，扫描已存在的角色子目录作为活跃角色（与旧行为一致）。
+
 ## UI 设计范围判断
 
 ```

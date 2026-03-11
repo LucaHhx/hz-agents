@@ -62,7 +62,9 @@ argument-hint: [需求名称]
 
 将确定的需求名称记为 `REQ_NAME`。
 
-### 2. Tech Lead 文档检查（硬门槛）
+### 2. Tech Lead 文档检查（硬门槛 — 动态角色）
+
+**首先读取角色规划**: 读取 `docs/$REQ_NAME/tech/design.md` 中的「## 角色规划」表格，确定活跃角色列表。如果没有角色规划表，降级扫描已存在的角色子目录。
 
 使用 Task 工具启动 Tech Lead agent（非团队模式，独立检查）:
 
@@ -76,25 +78,28 @@ Task tool:
     再读取 references/tech-stack.md (.claude/skills/create-docs/references/tech-stack.md) 了解项目技术栈。
     再读取 hz-project skill (.claude/skills/hz-project/SKILL.md) 了解项目全生命周期规范。
 
-    检查以下文件是否存在且内容完整:
+    ## 动态角色检查
+    先读取 docs/$REQ_NAME/tech/design.md 中的「## 角色规划」表格，确定哪些角色参与本需求。
+    只检查活跃角色（标注 ✅）的文件，不要求未参与角色的文件。
+
+    基础检查（总是需要）:
     - docs/$REQ_NAME/plan.md — 需求计划和验收标准
-    - docs/$REQ_NAME/frontend/design.md — 前端技术方案
-    - docs/$REQ_NAME/backend/design.md — 后端技术方案
-    - docs/$REQ_NAME/qa/design.md — 测试方案
-    - docs/$REQ_NAME/ui/design.md — UI 设计文档（如不存在记为警告，非阻塞）
-    - docs/$REQ_NAME/frontend/tasks.md — 前端任务列表
-    - docs/$REQ_NAME/backend/tasks.md — 后端任务列表
-    - docs/$REQ_NAME/qa/tasks.md — QA 任务列表
+
+    按活跃角色检查:
+    - backend ✅ → docs/$REQ_NAME/backend/design.md + backend/tasks.md
+    - frontend ✅ → docs/$REQ_NAME/frontend/design.md + frontend/tasks.md
+    - qa ✅ → docs/$REQ_NAME/qa/design.md + qa/tasks.md
+    - ui ✅ → docs/$REQ_NAME/ui/design.md + ui/merge.html（如不存在记为警告，非阻塞）
 
     检查内容:
-    1. 所有必需文件是否存在且非空
-    2. 前后端 API 接口契约是否对齐（请求/响应格式一致）
+    1. 活跃角色的必需文件是否存在且非空
+    2. 如有 backend + frontend → 前后端 API 接口契约是否对齐（请求/响应格式一致）
     3. 技术方案是否完整可执行（不是占位符内容）
     4. 任务拆分是否合理、可执行
-    5. **UI 资源完整性检查**（如果 ui/ 目录存在）:
+    5. **UI 资源完整性检查**（仅当 ui 角色活跃且 ui/ 目录存在时）:
        - merge.html 存在且可预览
-       - merge.html 中无外部 URL 引用本地应有的资源（grep 检查 src="http 或 href="http 指向图片/图标的引用）
-       - Resources/ 目录非空（不能只有 .gitkeep）
+       - merge.html 中无外部 URL 引用本地应有的资源
+       - Resources/ 目录非空
        - Resources/assets-manifest.md 存在且自检清单已填写
        - Resources/icons/ 下有 SVG 文件（如果 merge.html 中使用了图标）
        - 以上任一不满足 → pass: false
@@ -102,6 +107,7 @@ Task tool:
     最终输出一个 JSON 格式的检查结果:
     {
       "pass": true/false,
+      "active_roles": ["tech", "backend", ...],
       "issues": ["问题1", "问题2", ...],
       "warnings": ["警告1（非阻塞）", ...],
       "summary": "一句话总结"
@@ -176,43 +182,44 @@ Agent tool:
 - `autocode: false` → 无 [autocode] 任务，直接进入创建团队
 - `autocode: true` → 记录生成信息，进入创建团队。Backend agent 将基于生成的代码补充自定义逻辑
 
-### 3. 创建团队与任务
+### 3. 创建团队与任务（动态角色）
+
+根据 Step 2 检查结果中的 `active_roles` 动态创建团队和任务。
 
 ```
 TeamCreate: team_name: "dev-$REQ_NAME"
 ```
 
-创建以下任务:
+**根据活跃角色创建任务:**
 
-**任务 1 — Frontend 开发** (owner: frontend):
-- 读取 frontend/design.md 和 frontend/tasks.md
-- 参考 ui/ 设计稿实现视觉效果
-- 按任务列表逐项实现前端代码
-- 完成后通知 tech-lead
+- **frontend ✅** → 任务: Frontend 开发 (owner: frontend)
+  - 读取 frontend/design.md 和 frontend/tasks.md
+  - 参考 ui/ 设计稿实现视觉效果
+  - 按任务列表逐项实现前端代码
+  - 完成后通知 tech-lead
 
-**任务 2 — Backend 开发** (owner: backend):
-- 读取 backend/design.md 和 backend/tasks.md
-- [autocode] 标注的任务已由 Tech Lead 预生成完成，**不要重复创建**
-- 在 autocode 生成的基础代码上补充自定义业务逻辑（如非标准 CRUD 的 API）
-- 按 tasks.md 中剩余的非 [autocode] 任务逐项实现
-- 完成后通知 tech-lead
+- **backend ✅** → 任务: Backend 开发 (owner: backend)
+  - 读取 backend/design.md 和 backend/tasks.md
+  - [autocode] 标注的任务已由 Tech Lead 预生成完成，**不要重复创建**
+  - 在 autocode 生成的基础代码上补充自定义业务逻辑
+  - 完成后通知 tech-lead
 
-**任务 3 — Tech Lead 代码审查 + UI 视觉审查** (owner: tech-lead, blockedBy: 任务1, 任务2):
-- Tech Lead 审查前后端代码质量和接口对齐
-- UI 设计师审查前端视觉还原度（代码级 + 截图对比）
-- 两者并行，任一不通过 → 创建修复任务，通知开发者修复
-- 都通过 → 通知 QA 开始测试
+- **总是创建** → 任务: Tech Lead 代码审查 (owner: tech-lead, blockedBy: 活跃的开发任务)
+  - Tech Lead 审查代码质量和接口对齐
+  - 如有 ui 角色 → UI 设计师并行审查前端视觉还原度
+  - 任一不通过 → 创建修复任务
+  - 通过 → 通知 QA 开始测试（如有 qa 角色）
 
-**任务 4 — QA 验收测试** (owner: qa, blockedBy: 任务3):
-- 后端 API 接口测试
-- 浏览器有头模式模拟用户操作测试
-- 记录测试结果
+- **qa ✅** → 任务: QA 验收测试 (owner: qa, blockedBy: 代码审查)
+  - 后端 API 接口测试
+  - 浏览器有头模式模拟用户操作测试
+  - 记录测试结果
 
-### 4. 启动团队成员
+### 4. 启动团队成员（按活跃角色动态启动）
 
-并行启动 5 个 agent，使用 Task 工具:
+根据活跃角色列表，只启动对应的 agent。Tech Lead 总是启动。
 
-**Frontend agent:**
+**Frontend agent（仅当 frontend ✅ 时启动）:**
 ```
 Task tool:
   subagent_type: "hz-frontend"
@@ -250,7 +257,7 @@ Task tool:
     需求目录: docs/$REQ_NAME/
 ```
 
-**Backend agent:**
+**Backend agent（仅当 backend ✅ 时启动）:**
 ```
 Task tool:
   subagent_type: "hz-backend"
@@ -294,7 +301,7 @@ Task tool:
     需求目录: docs/$REQ_NAME/
 ```
 
-**Tech Lead agent:**
+**Tech Lead agent（总是启动）:**
 ```
 Task tool:
   subagent_type: "hz-tech-lead"
@@ -306,6 +313,10 @@ Task tool:
     先读取 create-docs skill 的 SKILL.md (.claude/skills/create-docs/SKILL.md) 了解文档规范。
     再读取 references/tech-stack.md (.claude/skills/create-docs/references/tech-stack.md) 了解项目技术栈。
     再读取 hz-project skill (.claude/skills/hz-project/SKILL.md) 了解项目全生命周期规范。
+
+    ## 活跃角色
+    本需求的活跃角色为: {active_roles 列表}
+    只协调和审查活跃角色的工作，不要求非活跃角色的产出。
 
     {如果 USER_INSTRUCTIONS 非空，追加以下段落}
     ## 用户指令（优先级最高）
@@ -319,30 +330,30 @@ Task tool:
     你的工作流程:
 
     ## 阶段一: 等待开发完成
-    1. 从 TaskList 获取你的任务（代码审查任务，blockedBy 前后端开发）
-    2. 等待 frontend 和 backend 完成开发
+    1. 从 TaskList 获取你的任务（代码审查任务，blockedBy 活跃的开发角色）
+    2. 等待活跃的开发角色（frontend/backend）完成开发
 
-    ## 阶段二: 代码质量审查（与 UI 视觉审查并行）
+    ## 阶段二: 代码质量审查
     3. 标记代码审查任务为 in_progress
-    4. 通知 ui-designer 开始视觉审查
-    5. 读取 docs/$REQ_NAME/ 下的 design.md 文件，对照检查代码实现:
+    4. 如有 ui 角色 → 通知 ui-designer 开始视觉审查
+    5. 读取 docs/$REQ_NAME/ 下活跃角色的 design.md 文件，对照检查代码实现:
        - 代码结构是否符合 design.md 中的架构设计
-       - 前后端 API 接口是否对齐（路由、参数、响应格式）
+       - 如有 backend + frontend → 前后端 API 接口是否对齐
        - 代码质量: 错误处理、类型安全、安全性
        - 是否有明显遗漏或偏离设计的实现
-    6. 等待 ui-designer 的视觉审查结果
+    6. 如有 ui 角色 → 等待 ui-designer 的视觉审查结果
     7. 综合审查结果处理:
-       - **不通过**: 合并代码问题和视觉问题，创建修复任务（TaskCreate），详细描述需要修复的问题，指定 owner 为对应开发者（frontend/backend）。发送消息通知开发者修复。等待修复完成后重新审查。
-       - **通过**: 标记审查任务为 completed，通知 QA 可以开始测试。
+       - **不通过**: 合并代码问题和视觉问题，创建修复任务（TaskCreate），详细描述需要修复的问题，指定 owner 为对应开发者。发送消息通知开发者修复。等待修复完成后重新审查。
+       - **通过**: 标记审查任务为 completed，如有 qa 角色 → 通知 QA 可以开始测试。
 
     ## 阶段三: 汇总
-    8. 等待 QA 完成测试
-    9. 汇总所有角色的完成状态，发送给团队 leader
+    8. 如有 qa 角色 → 等待 QA 完成测试
+    9. 汇总所有活跃角色的完成状态，发送给团队 leader
 
     需求目录: docs/$REQ_NAME/
 ```
 
-**UI Designer agent:**
+**UI Designer agent（仅当 ui ✅ 时启动）:**
 ```
 Task tool:
   subagent_type: "hz-ui"
@@ -383,7 +394,7 @@ Task tool:
     需求目录: docs/$REQ_NAME/
 ```
 
-**QA agent:**
+**QA agent（仅当 qa ✅ 时启动）:**
 ```
 Task tool:
   subagent_type: "hz-qa"
@@ -441,13 +452,14 @@ Task tool:
     需求目录: docs/$REQ_NAME/
 ```
 
-### 5. 监控团队进度
+### 5. 监控团队进度（按活跃角色）
 
-等待团队成员消息:
-- Frontend + Backend 完成 → Tech Lead 开始代码审查 + 通知 UI 设计师视觉审查
-- Tech Lead + UI 审查不通过 → 开发者修复 → 重新审查（循环直到通过）
-- 审查通过 → QA 开始测试
-- QA 完成 → Tech Lead 汇总报告
+等待团队成员消息（仅监控实际启动的角色）:
+- 活跃的开发角色（frontend/backend）完成 → Tech Lead 开始代码审查
+- 如有 ui 角色 → Tech Lead 通知 UI 设计师并行视觉审查
+- 审查不通过 → 开发者修复 → 重新审查（循环直到通过）
+- 审查通过 + 如有 qa 角色 → QA 开始测试
+- 所有活跃角色完成 → Tech Lead 汇总报告
 
 ### 6. 汇总开发报告
 

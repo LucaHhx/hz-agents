@@ -57,11 +57,20 @@ Agent tool:
 
     为需求 {REQ_NAME} 执行技术评审:
     1. 读取 docs/{REQ_NAME}/plan.md 和 tasks.md 理解业务需求
-    2. 创建角色目录（tech, backend, frontend, qa, ui）
+    2. 角色规划（必须在创建角色目录前完成）:
+       a. 分析需求性质：
+          - 是否涉及新数据库表 + 标准 CRUD？→ 可能只需 tech（AutoCode）
+          - 是否有后端自定义逻辑？→ 需要 backend
+          - 是否有前端页面需手工开发？→ 需要 frontend
+          - 是否有自定义 UI 设计？→ 需要 ui
+          - 是否需要测试验收？→ 需要 qa
+       b. 创建 tech 角色目录（总是需要）
+       c. 在 tech/design.md 的「## 角色规划」表格中，标注每个角色 ✅/❌ 及理由
+       d. 只对标注 ✅ 的角色创建目录和编写 design.md/tasks.md
     3. 编写 tech/design.md 架构决策和模块划分
-    4. 编写 tech/api-contracts.md API 契约（前后端并行开发的接口约定）
-    5. 编写各角色 design.md 技术方案
-    6. 拆解技术任务到各角色 tasks.md
+    4. 如有 backend + frontend 两个角色 → 编写 tech/api-contracts.md API 契约
+    5. 为每个活跃角色编写 design.md 技术方案
+    6. 为每个活跃角色拆解 tasks.md 技术任务
     7. **AutoCode 强制规则（必须执行）**:
 
        **步骤 A: 检测项目是否带后台管理页面**

@@ -2,42 +2,43 @@
 
 import re
 import json
-from core import find_project_root, resolve_req_dir
+from core import find_project_root, resolve_req_dir, get_active_roles
 
 TASK_ROW_RE = re.compile(
     r"\|\s*(\d+)\s*\|([^|]*)\|([^|]*)\|"
 )
 
-PHASE_REQUIREMENTS = {
+# 基础要求（不依赖角色）
+BASE_REQUIREMENTS = {
     "review-tech": {"required": ["plan.md", "tasks.md"]},
     "review-ui": {"required": ["plan.md"]},
-    "review-all": {
-        "required": [
-            "plan.md", "tasks.md",
-            "tech/design.md", "tech/tasks.md",
-            "backend/design.md", "frontend/design.md",
-            "backend/tasks.md", "frontend/tasks.md",
-            "ui/merge.html", "ui/design.md",
-        ]
-    },
-    "dev": {
-        "required": [
-            "plan.md",
-            "frontend/design.md", "backend/design.md",
-            "frontend/tasks.md", "backend/tasks.md",
-        ]
-    },
-    "dev-full": {
-        "required": [
-            "plan.md",
-            "frontend/design.md", "backend/design.md",
-            "frontend/tasks.md", "backend/tasks.md",
-            "qa/design.md",
-        ],
-        "optional_warn": ["ui/design.md", "ui/merge.html"],
-    },
     "qa": {"required": ["qa/design.md"]},
 }
+
+
+def _build_dynamic_requirements(phase, active_roles):
+    """根据活跃角色动态构建检查清单。"""
+    if phase in BASE_REQUIREMENTS:
+        return dict(BASE_REQUIREMENTS[phase])
+
+    req = {"required": ["plan.md"], "optional_warn": []}
+
+    if phase in ("review-all", "dev", "dev-full"):
+        # tech/design.md 总是需要（如果 tech 角色活跃）
+        if "tech" in active_roles:
+            req["required"].extend(["tech/design.md", "tech/tasks.md"])
+
+        for role in active_roles:
+            if role in ("backend", "frontend"):
+                req["required"].extend([f"{role}/design.md", f"{role}/tasks.md"])
+            elif role == "ui" and phase == "review-all":
+                req["required"].extend(["ui/merge.html", "ui/design.md"])
+            elif role == "ui" and phase in ("dev", "dev-full"):
+                req["optional_warn"].extend(["ui/design.md", "ui/merge.html"])
+            elif role == "qa" and phase == "dev-full":
+                req["required"].append("qa/design.md")
+
+    return req
 
 
 def _check_autocode_done(req_dir):
@@ -68,12 +69,16 @@ def cmd_check(args):
         return 1
 
     phase = args.phase
-    if phase not in PHASE_REQUIREMENTS:
-        phases = ", ".join(PHASE_REQUIREMENTS.keys())
+    valid_phases = list(BASE_REQUIREMENTS.keys()) + ["review-all", "dev", "dev-full"]
+    if phase not in valid_phases:
+        phases = ", ".join(valid_phases)
         print(f"错误: 未知阶段 '{phase}'，可选: {phases}")
         return 1
 
-    spec = PHASE_REQUIREMENTS[phase]
+    # 获取活跃角色并构建动态要求
+    active_roles = get_active_roles(req_dir)
+    spec = _build_dynamic_requirements(phase, active_roles)
+
     missing = []
     warnings = []
 
@@ -120,6 +125,7 @@ def cmd_check(args):
         "pass": passed,
         "missing": missing,
         "warnings": warnings,
+        "active_roles": active_roles,
         "suggested_fix": suggested_fix,
     }
     print(json.dumps(result, ensure_ascii=False, indent=2))

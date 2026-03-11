@@ -37,20 +37,23 @@ argument-hint: [需求名称或ID]
 
 将确定的需求名称记为 `REQ_NAME`。
 
-### 2. 文档完整性硬门槛检查
+### 2. 文档完整性硬门槛检查（动态角色）
 
-逐项检查以下文件是否存在且非空，**任一不满足 → 严格拒绝执行**:
+**首先读取角色规划**: 读取 `docs/{REQ_NAME}/tech/design.md` 中的「## 角色规划」表格，确定活跃角色列表。如果没有角色规划表，降级扫描已存在的角色子目录。
+
+基础检查（总是需要）:
 
 | 层级 | 检查项 | 条件 | 不满足时提示 |
 |------|--------|------|-------------|
 | L2 业务 | plan.md | `docs/{REQ_NAME}/plan.md` 存在且非空 | "请先运行 `/review-pm {REQ_NAME}` 完善业务文档" |
 | L2 业务 | tasks.md | `docs/{REQ_NAME}/tasks.md` 存在且非空 | "请先运行 `/review-pm {REQ_NAME}` 创建功能任务" |
-| L3 技术 | backend/design.md | `docs/{REQ_NAME}/backend/design.md` 存在且非空 | "请先运行 `/review-tech {REQ_NAME}` 完善技术方案" |
-| L3 技术 | frontend/design.md | `docs/{REQ_NAME}/frontend/design.md` 存在且非空 | "请先运行 `/review-tech {REQ_NAME}` 完善技术方案" |
-| L3 技术 | backend/tasks.md | `docs/{REQ_NAME}/backend/tasks.md` 存在且非空 | "请先运行 `/review-tech {REQ_NAME}` 拆解技术任务" |
-| L3 技术 | frontend/tasks.md | `docs/{REQ_NAME}/frontend/tasks.md` 存在且非空 | "请先运行 `/review-tech {REQ_NAME}` 拆解技术任务" |
-| L3 UI | ui/merge.html | `docs/{REQ_NAME}/ui/merge.html` 存在且非空 | "请先运行 `/review-ui {REQ_NAME}` 产出 UI 设计稿" |
-| L3 UI | ui/design.md | `docs/{REQ_NAME}/ui/design.md` 存在且非空 | "请先运行 `/review-ui {REQ_NAME}` 产出设计系统文档" |
+| L3 技术 | tech/design.md | `docs/{REQ_NAME}/tech/design.md` 存在且非空 | "请先运行 `/review-tech {REQ_NAME}` 创建技术方案" |
+
+按活跃角色动态检查:
+- **backend ✅** → `backend/design.md` + `backend/tasks.md` 存在且非空
+- **frontend ✅** → `frontend/design.md` + `frontend/tasks.md` 存在且非空
+- **ui ✅** → `ui/merge.html` + `ui/design.md` 存在且非空
+- 未标记的角色 → 不检查，不要求
 
 如有不满足项 → 列出所有缺失项 + 对应前置命令，**停止执行，不创建团队**。
 
@@ -60,38 +63,37 @@ argument-hint: [需求名称或ID]
 TeamCreate: team_name: "review-all-{REQ_NAME}"
 ```
 
-创建 4 个任务:
+根据活跃角色动态创建任务（如无 ui 角色则评审变为"两端对齐"）:
 
-**任务 1 — PM 业务文档评审** (owner: pm):
+**任务 1 — PM 业务文档评审** (owner: pm，总是创建):
 - 评审 plan.md、tasks.md 业务完整性和质量
 - 重点检查：验收标准是否可量化、用户场景是否覆盖完整、功能任务与验收标准是否一一对应
-- 记录发现的业务侧问题，发送给 tech-lead 和 ui-designer
+- 记录发现的业务侧问题，发送给 tech-lead（及 ui-designer，如有）
 
-**任务 2 — Tech Lead 技术文档评审** (owner: tech-lead):
-- 评审 backend/design.md、frontend/design.md 技术方案完整性
-- 重点检查：前后端 API 接口契约是否对齐、技术任务是否可执行、架构设计是否合理
+**任务 2 — Tech Lead 技术文档评审** (owner: tech-lead，总是创建):
+- 评审活跃角色的 design.md 技术方案完整性
+- 如有 backend + frontend → 重点检查 API 接口契约是否对齐
 - 检查技术方案与 plan.md 业务需求的对应关系
-- 记录发现的技术侧问题，发送给 pm 和 ui-designer
+- 记录发现的技术侧问题
 
-**任务 3 — UI 设计评审** (owner: ui-designer):
+**任务 3 — UI 设计评审** (owner: ui-designer，**仅当 ui ✅ 时创建**):
 - 评审 merge.html 设计稿与 plan.md 用户场景的覆盖度
 - 重点检查：设计稿是否覆盖所有用户场景、Resources/ 资源完整性、设计系统与前端 design.md 的一致性
-- 记录发现的设计侧问题，发送给 tech-lead 和 pm
+- 记录发现的设计侧问题
 
-**任务 4 — 三端交叉对齐** (pm + tech-lead + ui-designer 协作):
-- 汇总三端评审发现的问题
-- 检查三端一致性：
+**任务 4 — 交叉对齐** (活跃评审角色协作):
+- 汇总各端评审发现的问题
+- 检查一致性（根据活跃角色动态调整）：
   - 业务需求 ↔ 技术方案：每个业务场景是否有对应技术实现路径
-  - 业务需求 ↔ UI 设计：每个用户场景是否有对应设计页面
-  - 技术方案 ↔ UI 设计：前端技术方案是否与 UI 设计系统对齐（组件、样式、资源）
+  - 如有 ui 角色 → 业务需求 ↔ UI 设计、技术方案 ↔ UI 设计
 - **发现分歧或不一致 → 使用 brainstorming skill 与用户讨论，以用户决策为准**
 - 按决策结果修改对应文档
 
-### 4. 启动团队成员
+### 4. 启动团队成员（按活跃角色动态启动）
 
-并行启动三个 agent，使用 Task 工具:
+PM 和 Tech Lead 总是启动。UI Designer 仅当 ui 角色活跃时启动。
 
-**PM agent:**
+**PM agent（总是启动）:**
 ```
 Task tool:
   subagent_type: "hz-pm"
@@ -160,7 +162,7 @@ Task tool:
     5. 完成后将最终对齐结果发送给 pm 和 ui-designer
 ```
 
-**UI Designer agent:**
+**UI Designer agent（仅当 ui ✅ 时启动）:**
 ```
 Task tool:
   subagent_type: "hz-ui"

@@ -1,7 +1,7 @@
 """docs.py pipeline - 查看需求流水线状态"""
 
 import re
-from core import find_project_root, resolve_req_dir, REQ_DIR_RE, TASK_ROW_RE
+from core import find_project_root, resolve_req_dir, get_active_roles, REQ_DIR_RE, TASK_ROW_RE
 
 
 def _count_tasks(tasks_file):
@@ -32,18 +32,23 @@ def _check_files(req_dir, files):
 def _pipeline_status(req_dir):
     """Determine pipeline stage for a requirement directory."""
     stages = []
+    active_roles = get_active_roles(req_dir)
 
     # Stage 1: PM business docs
     has_pm = _check_files(req_dir, ["plan.md", "tasks.md"])
     stages.append(("PM 业务文档", "plan.md, tasks.md", has_pm, None))
 
-    # Stage 2: Tech design
-    has_tech = _check_files(req_dir, [
-        "tech/design.md", "tech/tasks.md",
-        "backend/design.md", "frontend/design.md",
-        "backend/tasks.md", "frontend/tasks.md",
-    ])
-    stages.append(("Tech 技术方案", "tech/ + backend/ + frontend/", has_tech, None))
+    # Stage 2: Tech design — 根据活跃角色动态检查
+    tech_files = ["tech/design.md", "tech/tasks.md"]
+    for role in active_roles:
+        if role in ("backend", "frontend"):
+            tech_files.extend([f"{role}/design.md", f"{role}/tasks.md"])
+    has_tech = _check_files(req_dir, tech_files)
+    role_label = "tech/"
+    dev_roles = [r for r in active_roles if r in ("backend", "frontend")]
+    if dev_roles:
+        role_label += " + " + " + ".join(f"{r}/" for r in dev_roles)
+    stages.append(("Tech 技术方案", role_label, has_tech, None))
 
     # Stage 2.5: AutoCode
     tech_tasks_file = req_dir / "tech" / "tasks.md"
@@ -63,30 +68,38 @@ def _pipeline_status(req_dir):
         autocode_is_done = autocode_done == autocode_total
         stages.append(("AutoCode", autocode_progress, autocode_is_done, autocode_progress))
 
-    # Stage 3: UI design
-    has_ui = _check_files(req_dir, ["ui/merge.html"])
-    ui_label = "ui/merge.html"
-    stages.append(("UI 设计稿", ui_label, has_ui, None))
+    # Stage 3: UI design — 仅当 ui 角色活跃时
+    if "ui" in active_roles:
+        has_ui = _check_files(req_dir, ["ui/merge.html"])
+        ui_label = "ui/merge.html"
+        stages.append(("UI 设计稿", ui_label, has_ui, None))
 
-    # Stage 4: Development
-    fe_total, fe_done = _count_tasks(req_dir / "frontend" / "tasks.md")
-    be_total, be_done = _count_tasks(req_dir / "backend" / "tasks.md")
-    dev_progress = None
-    dev_done = False
-    if fe_total > 0 or be_total > 0:
-        dev_progress = f"frontend: {fe_done}/{fe_total}, backend: {be_done}/{be_total}"
-        dev_done = (fe_done == fe_total and be_done == be_total and fe_total > 0 and be_total > 0)
+    # Stage 4: Development — 根据活跃角色动态显示
+    dev_parts = []
+    dev_total_all = 0
+    dev_done_all = 0
+    for role in active_roles:
+        if role in ("backend", "frontend"):
+            r_total, r_done = _count_tasks(req_dir / role / "tasks.md")
+            if r_total > 0:
+                dev_parts.append(f"{role}: {r_done}/{r_total}")
+                dev_total_all += r_total
+                dev_done_all += r_done
+
+    dev_progress = ", ".join(dev_parts) if dev_parts else None
+    dev_done = dev_total_all > 0 and dev_done_all == dev_total_all
     stages.append(("开发", dev_progress or "未开始", dev_done, dev_progress))
 
-    # Stage 5: QA testing
-    qa_total, qa_done = _count_tasks(req_dir / "qa" / "tasks.md")
-    has_qa_design = _check_files(req_dir, ["qa/design.md"])
-    qa_progress = None
-    qa_done_flag = False
-    if qa_total > 0:
-        qa_progress = f"qa: {qa_done}/{qa_total}"
-        qa_done_flag = qa_done == qa_total
-    stages.append(("QA 测试", qa_progress or ("已有测试方案" if has_qa_design else "未开始"), qa_done_flag, qa_progress))
+    # Stage 5: QA testing — 仅当 qa 角色活跃时
+    if "qa" in active_roles:
+        qa_total, qa_done = _count_tasks(req_dir / "qa" / "tasks.md")
+        has_qa_design = _check_files(req_dir, ["qa/design.md"])
+        qa_progress = None
+        qa_done_flag = False
+        if qa_total > 0:
+            qa_progress = f"qa: {qa_done}/{qa_total}"
+            qa_done_flag = qa_done == qa_total
+        stages.append(("QA 测试", qa_progress or ("已有测试方案" if has_qa_design else "未开始"), qa_done_flag, qa_progress))
 
     return stages
 
@@ -118,7 +131,9 @@ def cmd_pipeline(args):
 def _print_pipeline(req_dir):
     """Print pipeline status for a requirement."""
     stages = _pipeline_status(req_dir)
+    active_roles = get_active_roles(req_dir)
     print(f"需求 {req_dir.name} 流水线状态:")
+    print(f"  活跃角色: {', '.join(active_roles) if active_roles else '未规划'}")
 
     current_found = False
     for i, (name, detail, done, progress) in enumerate(stages):
