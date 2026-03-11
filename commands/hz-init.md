@@ -229,11 +229,12 @@ rm -rf "$CACHE_DIR"
 **5.3 前端定制**（web/ 存在时）
 
 - `web/index.html` 中的 `<title>` → 项目描述或名称
-- 复制 `.env.example` 为 `.env.development`（vite serve 需要此文件）：
+- 从模板复制本地环境文件（这些文件不入库，在 `.gitignore` 中）：
   ```bash
-  cp web/.env.example web/.env.development
+  cp web/.env.example web/.env.dev          # vite serve --mode dev 使用
+  cp web/.env.example web/.env.development  # vite serve 默认使用
   ```
-- 确保 `web/.env.development` 中 `VITE_SERVER_PORT` 与 config 中 `system.addr` 一致
+- 修改 `web/.env.dev` 和 `web/.env.development` 中 `VITE_SERVER_PORT` 与 config 中 `system.addr` 一致
 - 创建 `src/plugin/` 空目录（vite-auto-import-svg 插件需要扫描此目录）：
   ```bash
   mkdir -p web/src/plugin
@@ -489,36 +490,45 @@ AskUserQuestion:
 
 ### 7. 生成 config.local.yaml
 
-基于 `server/config.example.yaml` 复制为 `server/config.local.yaml`，覆盖以下字段：
+> **重要**：所有配置字段都有代码级默认值（`server/config/defaults.go`），
+> `config.local.yaml` 只需写入与默认值不同的字段和敏感信息。
+> 完整配置参考 `server/config.example.yaml`，极简配置参考 `server/config.minimal.yaml`。
 
-> 完整配置参考 `server/config.example.yaml`（所有字段带中文注释）。
-> 极简配置参考 `server/config.minimal.yaml`（只需 db-type + jwt key）。
+**SQLite 时（极简配置即可）：**
 
-**通用配置：**
-- `jwt.signing-key` → 新生成 UUID（`uuidgen`）
-- `autocode.module` → <project-name>
-- `zap.prefix` → `'[<project-name>]'`
+只需生成：
+```yaml
+system:
+  db-type: sqlite
 
-**SQLite 时：**
-- `system.db-type` → sqlite
-- **必须确保 `sqlite:` 配置段存在**（如果 config.example.yaml 中没有，需要添加）：
-  ```yaml
-  sqlite:
-    db-name: data
-    path: ""
-    max-idle-conns: 10
-    max-open-conns: 100
-    log-mode: info
-  ```
-  > 如果缺少此段，`GormSqlite()` 会因为 `Dbname == ""` 返回 nil，导致服务启动时 panic。
+jwt:
+  signing-key: <uuidgen 生成>
+```
+
+> 其余所有字段（sqlite.db-name、端口、日志等）均由 `config/defaults.go` 自动填充。
 
 **MySQL 时：**
-- `system.db-type` → mysql
-- `mysql.path` → <host>
-- `mysql.port` → "<port>"
-- `mysql.db-name` → <project-name>
-- `mysql.username` → <user>
-- `mysql.password` → <password>
+
+```yaml
+system:
+  db-type: mysql
+
+mysql:
+  path: <host>
+  port: "<port>"
+  db-name: <project-name>
+  username: <user>
+  password: <password>
+
+jwt:
+  signing-key: <uuidgen 生成>
+```
+
+**可选覆盖**（与默认值不同时才需要写）：
+- `system.addr` → 默认 9688
+- `system.api-addr` → 默认 9689
+- `autocode.module` → 默认从 go.mod 自动读取
+- `zap.prefix` → 默认 `[hab]`
 
 > config.local.yaml 在 .gitignore 中，含敏感信息不入库。
 > 同时保留 config.example.yaml 作为模板参考（已入库）。

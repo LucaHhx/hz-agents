@@ -28,7 +28,7 @@ $PM/search.sh frontend "ready in|Local:|compiled"
 $PM/list.sh
 
 # 先启动后端
-$PM/start.sh backend "go run ./cmd/server" --cwd ./server
+$PM/start.sh backend "go run ." --cwd ./server --env "HAB_CONFIG=config.local.yaml"
 sleep 3
 $PM/search.sh backend "listening on|started"
 

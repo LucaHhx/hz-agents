@@ -23,20 +23,20 @@
 ## 前置条件
 
 1. HAB server 已启动并运行
-2. `config.yaml` 中已配置 `autocode.api-key`
+2. 配置文件中已设置 `autocode.api-key`（优先读取 `config.local.yaml`，其次 `config.yaml`）
 3. 数据库已初始化 (已执行 initdb)
 
 ### 配置 API Key
 
-在 `server/config.yaml` 中:
+在 `server/config.local.yaml`（或 `config.yaml`）中添加:
 
 ```yaml
 autocode:
-  web: web/src
-  server: server
-  module: hab
   api-key: "your-random-api-key-here"  # 生成: uuidgen 或 openssl rand -hex 32
 ```
+
+> `autocode` 的其他字段（web、server、module）均有代码级默认值（见 `config/defaults.go`），
+> 可省略不写。`module` 会自动从 `go.mod` 读取。
 
 重启 server 使配置生效。
 
@@ -56,7 +56,7 @@ autocode:
 .claude/skills/hab-autocode/scripts/autocode.sh preview examples/create-module.json
 ```
 
-脚本会自动从 `server/config.yaml` 读取 API Key 和服务器地址。
+脚本会自动从 `server/config.local.yaml`（或 `config.yaml`）读取 API Key 和服务器地址。
 
 ## API 端点清单
 
