@@ -215,10 +215,23 @@ python docs.py done <req> <task-id> --role ui
 #### 3. 视觉对比审查
 使用 `process-manager scripts` 启动前后端服务，使用 `agent-browser` 进行视觉检查:
 
+**禁止直接运行 `go run`、`npm run`、`npm start` 等命令启动服务。所有服务必须通过 process-manager 启动和停止。**
+
 ```bash
-# 启动服务
-.claude/skills/process-manager/scripts/start.sh backend "go run ./cmd/server" --cwd server/
-.claude/skills/process-manager/scripts/start.sh frontend "npm run dev" --cwd frontend/
+PM=.claude/skills/process-manager/scripts
+
+# 启动前必须检查已有进程
+$PM/list.sh
+
+# 启动后端（HAB 项目必须传 HAB_CONFIG）
+$PM/start.sh backend "go run ." --cwd ./server --env "HAB_CONFIG=config.local.yaml"
+sleep 3
+$PM/search.sh backend "listening on|server run success"
+
+# 启动前端
+$PM/start.sh frontend "npm run serve" --cwd ./web
+sleep 3
+$PM/search.sh frontend "ready in|Local:|compiled"
 
 # 打开页面进行视觉检查
 agent-browser --headed open http://localhost:5173
@@ -237,10 +250,12 @@ agent-browser --headed open http://localhost:5173
 **截图策略**: 仅在发现问题时截图作为证据，正常通过的页面不需要截图。
 
 #### 4. 清理
-```
+**完成后必须清理：**
+```bash
 agent-browser close
-.claude/skills/process-manager/scripts/stop.sh --all
-.claude/skills/process-manager/scripts/clean.sh
+PM=.claude/skills/process-manager/scripts
+$PM/stop.sh --all
+$PM/clean.sh
 ```
 
 ## Design Guidelines

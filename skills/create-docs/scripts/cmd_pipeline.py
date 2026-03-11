@@ -39,10 +39,29 @@ def _pipeline_status(req_dir):
 
     # Stage 2: Tech design
     has_tech = _check_files(req_dir, [
+        "tech/design.md", "tech/tasks.md",
         "backend/design.md", "frontend/design.md",
         "backend/tasks.md", "frontend/tasks.md",
     ])
-    stages.append(("Tech 技术方案", "backend/design.md, frontend/design.md", has_tech, None))
+    stages.append(("Tech 技术方案", "tech/ + backend/ + frontend/", has_tech, None))
+
+    # Stage 2.5: AutoCode
+    tech_tasks_file = req_dir / "tech" / "tasks.md"
+    autocode_total = 0
+    autocode_done = 0
+    if tech_tasks_file.exists():
+        for line in tech_tasks_file.read_text(encoding="utf-8").splitlines():
+            if "[autocode]" in line:
+                m = TASK_ROW_RE.match(line)
+                if m:
+                    autocode_total += 1
+                    if m.group(3).strip() == "已完成":
+                        autocode_done += 1
+
+    if autocode_total > 0:
+        autocode_progress = f"autocode: {autocode_done}/{autocode_total}"
+        autocode_is_done = autocode_done == autocode_total
+        stages.append(("AutoCode", autocode_progress, autocode_is_done, autocode_progress))
 
     # Stage 3: UI design
     has_ui = _check_files(req_dir, ["ui/merge.html"])
@@ -123,13 +142,14 @@ def _print_pipeline(req_dir):
     for i, (name, detail, done, _) in enumerate(stages):
         if not done:
             suggestions = {
-                0: f"下一步: 运行 /review-pm {req_dir.name} 创建业务文档",
-                1: f"下一步: 运行 /review-tech {req_dir.name} 创建技术方案",
-                2: f"下一步: 运行 /review-ui {req_dir.name} 产出 UI 设计（如需自定义页面）",
-                3: f"下一步: 运行 /unify-dev {req_dir.name} 启动开发",
-                4: f"下一步: 运行 /review-qa {req_dir.name} 执行验收测试",
+                "PM 业务文档": f"下一步: 运行 /review-pm {req_dir.name} 创建业务文档",
+                "Tech 技术方案": f"下一步: 运行 /review-tech {req_dir.name} 创建技术方案",
+                "AutoCode": f"下一步: 运行 /cmd-autocode 完成 AutoCode 代码生成",
+                "UI 设计稿": f"下一步: 运行 /review-ui {req_dir.name} 产出 UI 设计（如需自定义页面）",
+                "开发": f"下一步: 运行 /unify-dev {req_dir.name} 启动开发",
+                "QA 测试": f"下一步: 运行 /review-qa {req_dir.name} 执行验收测试",
             }
-            print(suggestions.get(i, f"下一步: 继续 {name}"))
+            print(suggestions.get(name, f"下一步: 继续 {name}"))
             break
     else:
         print("所有阶段已完成 ✓")

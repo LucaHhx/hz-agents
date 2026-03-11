@@ -1,8 +1,12 @@
 """docs.py check - 前置检查指定阶段所需文件"""
 
+import re
 import json
 from core import find_project_root, resolve_req_dir
 
+TASK_ROW_RE = re.compile(
+    r"\|\s*(\d+)\s*\|([^|]*)\|([^|]*)\|"
+)
 
 PHASE_REQUIREMENTS = {
     "review-tech": {"required": ["plan.md", "tasks.md"]},
@@ -10,6 +14,7 @@ PHASE_REQUIREMENTS = {
     "review-all": {
         "required": [
             "plan.md", "tasks.md",
+            "tech/design.md", "tech/tasks.md",
             "backend/design.md", "frontend/design.md",
             "backend/tasks.md", "frontend/tasks.md",
             "ui/merge.html", "ui/design.md",
@@ -33,6 +38,19 @@ PHASE_REQUIREMENTS = {
     },
     "qa": {"required": ["qa/design.md"]},
 }
+
+
+def _check_autocode_done(req_dir):
+    """检查 tech/tasks.md 中所有 [autocode] 任务是否已完成。"""
+    tech_tasks = req_dir / "tech" / "tasks.md"
+    if not tech_tasks.exists():
+        return True  # 没有 tech 目录 = 没有 autocode 任务，放行
+    for line in tech_tasks.read_text(encoding="utf-8").splitlines():
+        if "[autocode]" in line:
+            m = TASK_ROW_RE.match(line)
+            if m and m.group(3).strip() not in ("已完成", "已取消"):
+                return False
+    return True
 
 
 def cmd_check(args):
@@ -69,12 +87,18 @@ def cmd_check(args):
         if not f.exists() or f.stat().st_size == 0:
             warnings.append(f"{rel} 不存在（非阻塞）")
 
+    # dev 和 dev-full 阶段额外检查 autocode 完成状态
+    if phase in ("dev", "dev-full") and not _check_autocode_done(req_dir):
+        missing.append("[autocode] 任务未完成 (tech/tasks.md)")
+
     passed = len(missing) == 0
     suggested_fix = ""
     if not passed:
         fix_map = {
             "plan.md": "/review-pm",
             "tasks.md": "/review-pm",
+            "tech/design.md": "/review-tech",
+            "tech/tasks.md": "/review-tech",
             "backend/design.md": "/review-tech",
             "frontend/design.md": "/review-tech",
             "backend/tasks.md": "/review-tech",
@@ -85,8 +109,11 @@ def cmd_check(args):
         }
         cmds = set()
         for m in missing:
-            cmd = fix_map.get(m, "/doc-review")
-            cmds.add(cmd)
+            if "[autocode]" in m:
+                cmds.add("/cmd-autocode")
+            else:
+                cmd = fix_map.get(m, "/doc-review")
+                cmds.add(cmd)
         suggested_fix = f"建议先运行: {' 或 '.join(sorted(cmds))} {args.req_name}"
 
     result = {

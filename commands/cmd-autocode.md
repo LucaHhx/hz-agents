@@ -17,11 +17,11 @@ argument-hint: [操作描述，如"创建订单模块"或"查看包列表"]
 
 ## Step 0：扫描 [autocode] 标注任务（快捷入口）
 
-如果 `docs/` 目录存在，先扫描所有需求的 `backend/tasks.md`，找出标注 `[autocode]` 的待办任务:
+如果 `docs/` 目录存在，先扫描所有需求的 `tech/tasks.md`，找出标注 `[autocode]` 的待办任务:
 
 ```bash
 # 搜索所有 [autocode] 标注的待办任务
-grep -r "\[autocode\]" docs/*/backend/tasks.md 2>/dev/null | grep "待办"
+grep -r "\[autocode\]" docs/*/tech/tasks.md 2>/dev/null | grep "待办"
 ```
 
 如果找到 [autocode] 任务:
@@ -129,11 +129,16 @@ cd server && go build ./...
 ### 9. 更新文档状态
 
 如果 `docs/` 目录存在且有对应需求:
-- 使用 `docs.py done` 标记 [autocode] 任务为已完成
+- 使用 `docs.py done` 标记 [autocode] 任务为已完成:
+  ```bash
+  python3 .claude/skills/create-docs/scripts/docs.py done <req> <task-number> --role tech
+  ```
 - 使用 `docs.py log` 在 log.md 记录生成信息:
   ```bash
   python3 .claude/skills/create-docs/scripts/docs.py log <req> 新增 "AutoCode 生成模块: <模块名>, 文件: <文件列表摘要>"
   ```
+- 在 backend/design.md 末尾追加「AutoCode 已生成模块」段落（含模块名和文件路径）
+- 在 frontend/design.md 末尾追加「AutoCode 已生成页面」段落（含模块名和文件路径）
 
 ### 10. 输出总结
 

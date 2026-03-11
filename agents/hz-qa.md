@@ -141,19 +141,25 @@ python3 .claude/skills/mysql-operator/scripts/mysql_query.py "SELECT * FROM <tab
 
 #### 5.1 使用 process-manager scripts 启动前后端服务
 
+**禁止直接运行 `go run`、`npm run`、`npm start` 等命令启动服务。所有服务必须通过 process-manager 启动和停止。**
+
 **必须按顺序启动：后端先，前端后。**
 
 ```bash
+PM=.claude/skills/process-manager/scripts
+
 # 1. 检查是否已有服务运行，避免重复
-.claude/skills/process-manager/scripts/list.sh
-# 2. 启动后端
-.claude/skills/process-manager/scripts/start.sh backend "go run ./cmd/server" --cwd server/
+$PM/list.sh
+# 2. 启动后端（HAB 项目必须传 HAB_CONFIG）
+$PM/start.sh backend "go run ." --cwd ./server --env "HAB_CONFIG=config.local.yaml"
+sleep 3
 # 3. 确认后端就绪
-.claude/skills/process-manager/scripts/search.sh backend "listening on|started"
+$PM/search.sh backend "listening on|server run success"
 # 4. 启动前端
-.claude/skills/process-manager/scripts/start.sh frontend "npm run dev" --cwd frontend/
+$PM/start.sh frontend "npm run serve" --cwd ./web
+sleep 3
 # 5. 确认前端就绪
-.claude/skills/process-manager/scripts/search.sh frontend "ready in|Local:"
+$PM/search.sh frontend "ready in|Local:|compiled"
 ```
 
 **注意:** 如果端口被占用 (`EADDRINUSE`)，先终止旧进程再重启。
@@ -206,11 +212,18 @@ agent-browser snapshot -i
 
 #### 5.4 测试完成后清理
 
+**完成后必须清理：**
+```bash
+agent-browser close
+PM=.claude/skills/process-manager/scripts
+$PM/stop.sh --all
+$PM/clean.sh
 ```
-1. agent-browser close → 关闭浏览器
-2. .claude/skills/process-manager/scripts/stop.sh --all → 停止所有服务
-3. .claude/skills/process-manager/scripts/clean.sh → 清理进程记录
-```
+
+**为什么必须遵守：**
+- 直接启动的进程不受管理，端口占用导致后续启动失败
+- 其他 Agent 无法通过 `list.sh` 感知服务状态
+- 未清理的进程会持续占用系统资源
 
 ### 6. 记录测试结果
 
@@ -268,8 +281,8 @@ python docs.py done <req> <task-id> --role qa
 - 边界测试: [异常输入和边界条件]
 
 ## 测试环境
-- 后端: go run ./cmd/server (端口 8080)
-- 前端: npm run dev (端口 5173，需配置 API 代理)
+- 后端: 通过 process-manager 启动 `go run .` --cwd ./server --env "HAB_CONFIG=config.local.yaml"
+- 前端: 通过 process-manager 启动 `npm run serve` --cwd ./web
 - 浏览器: agent-browser --headed 有头模式
 
 ## 测试数据

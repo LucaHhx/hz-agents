@@ -144,7 +144,7 @@ Task tool:
     - docs/{REQ_NAME}/frontend/tasks.md — 前端任务具体可执行性
     - 前后端 API 接口契约是否对齐（请求/响应格式一致）
     - 技术方案与 plan.md 业务需求的对应关系
-    - **AutoCode 标记检查**: 如果项目有后台管理页面（web/src/view/ 存在）且 backend/design.md 中有新数据模型需要建表，确认 backend/tasks.md 中对应的标准 CRUD 任务已加 [autocode] 前缀。缺失则补充标记。
+    - **AutoCode 标记检查**: 如果项目有后台管理页面（web/src/view/ 存在）且 backend/design.md 中有新数据模型需要建表，确认 tech/tasks.md 中对应的标准 CRUD 任务已加 [autocode] 前缀。缺失则补充标记。
 
     输出评审报告（问题清单 + 改进建议），发送给 pm 和 ui-designer。
 

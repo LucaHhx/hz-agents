@@ -9,15 +9,15 @@ hz-init (项目初始化)
   ↓
 review-pm (PM 创建业务文档)
   ↓
-review-tech (Tech Lead 创建技术方案)
+review-tech (Tech Lead 创建技术方案 + tech/ 目录)
   ↓
 review-ui (UI 设计师产出设计稿) ←── 仅自定义页面需要
   ↓
 review-all (三端文档对齐评审) ←── 可选，推荐
   ↓
-cmd-autocode (生成 CRUD 基础代码) ←── 有 [autocode] 任务时
+cmd-autocode (生成 CRUD 基础代码) ←── 有 [autocode] 任务时，从 tech/tasks.md 读取
   ↓
-unify-dev 或 dev-tech (团队开发)
+unify-dev 或 dev-tech (团队开发) ←── cmd_check 阻塞：autocode 未完成不放行
   ↓
 review-qa (QA 验收测试)
   ↓

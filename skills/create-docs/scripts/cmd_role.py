@@ -41,6 +41,21 @@ def _create_ui_role(role_dir, req_name):
     (icons_dir / ".gitkeep").touch()
 
 
+def _create_tech_role(role_dir, req_name):
+    """创建 Tech 角色的目录结构。"""
+    content = render("tech-design.md", REQ_NAME=req_name)
+    if content:
+        (role_dir / "design.md").write_text(content, encoding="utf-8")
+
+    content = render("tech-api-contracts.md", REQ_NAME=req_name)
+    if content:
+        (role_dir / "api-contracts.md").write_text(content, encoding="utf-8")
+
+    content = render("tasks.md", PLAN_NAME=f"{req_name}/tech")
+    if content:
+        (role_dir / "tasks.md").write_text(content, encoding="utf-8")
+
+
 def _create_qa_role(role_dir, req_name):
     """创建 QA 角色的扩展目录结构。"""
     # design.md ← 标准模板
@@ -93,6 +108,8 @@ def cmd_role(args):
         _create_ui_role(role_dir, req_name)
     elif role_name == "qa":
         _create_qa_role(role_dir, req_name)
+    elif role_name == "tech":
+        _create_tech_role(role_dir, req_name)
     else:
         content = render("design.md", REQ_NAME=req_name, ROLE=role_name)
         if content:

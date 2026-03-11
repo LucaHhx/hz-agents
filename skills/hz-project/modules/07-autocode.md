@@ -51,7 +51,7 @@ Tech Lead 在技术评审阶段（`/review-tech`）必须执行以下检测：
 2. **任务涉及创建数据库表** — backend/design.md 中有新数据模型定义（含表名、字段、需要 GORM AutoMigrate 建表）
 
 **标记规则：**
-- 标准 CRUD 模块（增删改查 + 分页列表） → 在 backend/tasks.md 加 `[autocode]` 前缀，AutoCode 同时生成后端代码 + 前端管理页面
+- 标准 CRUD 模块（增删改查 + 分页列表） → 在 tech/tasks.md 加 `[autocode]` 前缀，AutoCode 同时生成后端代码 + 前端管理页面
 - 复杂业务逻辑（登录、审批、第三方对接等） → 不标 `[autocode]`，开发者手写
 - 标准 CRUD + 自定义方法 → `[autocode]` 生成基础 + addFunc 添加方法
 
@@ -62,7 +62,7 @@ Tech Lead 在技术评审阶段（`/review-tech`）必须执行以下检测：
 
 | 场景 | 推荐方式 |
 |------|---------|
-| Tech Lead 评审标注 CRUD 模块 | 在 backend/tasks.md 加 `[autocode]` 前缀 |
+| Tech Lead 评审标注 CRUD 模块 | 在 tech/tasks.md 加 `[autocode]` 前缀 |
 | 开发阶段预生成（自动） | `/dev-tech` 或 `/unify-dev` 的 Step 2.5 自动执行 |
 | 手动预生成 | `/cmd-autocode` 或直接调用 hab-autocode API |
 | 独立快速原型 | `/cmd-autocode` |
@@ -70,8 +70,9 @@ Tech Lead 在技术评审阶段（`/review-tech`）必须执行以下检测：
 ## 快速开始
 
 ```bash
-# 1. 确保 server 运行中
-cd server && go run . &
+# 1. 确保 server 运行中（必须通过 process-manager）
+PM=.claude/skills/process-manager/scripts
+$PM/start.sh backend "go run ." --cwd ./server --env "HAB_CONFIG=config.local.yaml"
 
 # 2. 使用交互式向导
 /cmd-autocode

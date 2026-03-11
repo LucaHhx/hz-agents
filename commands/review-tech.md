@@ -57,10 +57,12 @@ Agent tool:
 
     为需求 {REQ_NAME} 执行技术评审:
     1. 读取 docs/{REQ_NAME}/plan.md 和 tasks.md 理解业务需求
-    2. 创建角色目录（backend, frontend, qa, ui）
-    3. 编写各角色 design.md 技术方案
-    4. 拆解技术任务到各角色 tasks.md
-    5. **AutoCode 强制规则（必须执行）**:
+    2. 创建角色目录（tech, backend, frontend, qa, ui）
+    3. 编写 tech/design.md 架构决策和模块划分
+    4. 编写 tech/api-contracts.md API 契约（前后端并行开发的接口约定）
+    5. 编写各角色 design.md 技术方案
+    6. 拆解技术任务到各角色 tasks.md
+    7. **AutoCode 强制规则（必须执行）**:
 
        **步骤 A: 检测项目是否带后台管理页面**
        依次检查以下文件/目录，任一存在即判定为「有后台管理页面」:
@@ -76,13 +78,14 @@ Agent tool:
 
        **步骤 C: 判定与标记**
        - **A + B 都满足 → 必须使用 AutoCode**:
-         a. 在 backend/tasks.md 中，所有涉及「创建数据模型/建表/CRUD」的任务必须加 [autocode] 前缀
-         b. AutoCode 会同时生成: model、api handler、router、service、**前端管理页面**（web/src/view/ 下）
-         c. 在 backend/design.md 中明确标注哪些模块由 AutoCode 生成，哪些需要手写自定义逻辑
-         d. 非标准 CRUD 的业务逻辑（如 login、审批流程、复杂查询等）不标 [autocode]，由开发者手写
+         a. 在 tech/tasks.md 中，所有涉及「创建数据模型/建表/CRUD」的任务必须加 [autocode] 前缀
+         b. 在 tech/design.md 的 AutoCode 模块段落中记录哪些模块由 AutoCode 生成
+         c. AutoCode 会同时生成: model、api handler、router、service、**前端管理页面**（web/src/view/ 下）
+         d. 在 backend/design.md 中明确标注哪些模块由 AutoCode 生成，哪些需要手写自定义逻辑
+         e. 非标准 CRUD 的业务逻辑（如 login、审批流程、复杂查询等）不标 [autocode]，由开发者手写
        - **A 或 B 任一不满足 → 跳过 AutoCode**，正常拆解任务
        - 在 log.md 中记录 AutoCode 判定结果（检测到的文件路径、哪些模块标记、哪些跳过及原因）
-    6. 在 log.md 记录技术决策
+    8. 在 log.md 记录技术决策
 
     {如果 USER_INSTRUCTIONS 非空，追加以下段落}
     ## 用户指令（优先级最高）

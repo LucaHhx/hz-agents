@@ -41,6 +41,10 @@ docs/
 │   ├── tasks.md            # 需求级任务（功能粒度）
 │   ├── log.md              # 时间线日志（决策/变更/测试）
 │   │
+│   ├── tech/              # L3: Tech Lead 全局技术中枢
+│   │   ├── design.md       # 架构决策 + 模块划分 + AutoCode 模块说明
+│   │   ├── api-contracts.md # API 契约（前后端并行开发的接口约定）
+│   │   └── tasks.md        # AutoCode 任务
 │   ├── <role-name>/        # L3: 角色目录 (如 backend, frontend, qa)
 │   │   ├── design.md       # 技术选型、架构设计、关键决策
 │   │   └── tasks.md        # 角色级技术任务
@@ -146,6 +150,23 @@ python3 $SCRIPT pipeline [req-name]
 3. Fill `design.md`: 技术选型 / 架构设计 / 关键决策
 4. Fill `tasks.md`: 技术级任务拆解
 
+### Tech Role Special Structure
+
+当 `role-name` 为 `tech` 时，`docs.py role` 会创建 Tech Lead 全局技术中枢目录:
+
+```
+tech/
+├── design.md            ← 架构决策 + 模块划分 + AutoCode 模块说明
+├── api-contracts.md     ← API 契约（前后端并行开发的接口约定）
+└── tasks.md             ← AutoCode 任务（[autocode] 标注的任务集中在这里）
+```
+
+| 文件 | 用途 |
+|------|------|
+| `design.md` | 跨角色的架构决策、模块划分、AutoCode 模块管理 |
+| `api-contracts.md` | 前后端并行开发的接口契约，任何变更需通过 Tech Lead 协调 |
+| `tasks.md` | AutoCode 相关任务，使用 `[autocode]` 前缀标注 |
+
 ### QA Role Special Structure
 
 当 `role-name` 为 `qa` 时，`docs.py role` 会创建扩展目录结构:
@@ -209,4 +230,4 @@ Use CLI commands for standard operations (task/start/done/log). Read `references
 - Log types: 决策 / 变更 / 修复 / 新增 / 测试 / 备注 / 完成
 - L2 tasks: 功能/业务级 (e.g., "用户可以注册和登录")
 - L3 tasks: 技术实现级 (e.g., "设计用户表 Schema")
-- Common role names: `backend`, `frontend`, `qa`, `ui`, `infra`, `mobile`
+- Common role names: `tech`, `backend`, `frontend`, `qa`, `ui`, `infra`, `mobile`

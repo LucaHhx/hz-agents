@@ -91,12 +91,17 @@ Agent tool:
 
     ## 你的任务
 
-    1. 读取 docs/$REQ_NAME/backend/tasks.md，扫描所有标注 [autocode] 的待办任务
+    1. 读取 docs/$REQ_NAME/tech/tasks.md，扫描所有标注 [autocode] 的待办任务
     2. 如果没有 [autocode] 任务 → 输出 {"autocode": false, "summary": "无 [autocode] 任务，跳过"} 并结束
     3. 如果有 [autocode] 任务 → 按以下流程执行:
 
     ### AutoCode 执行流程
-    a. 确保 HAB server 已启动（使用 process-manager 启动，等待端口就绪）
+    a. 启动 HAB server（必须通过 process-manager）:
+       PM=.claude/skills/process-manager/scripts
+       $PM/list.sh
+       $PM/start.sh backend "go run ." --cwd ./server --env "HAB_CONFIG=config.local.yaml"
+       sleep 3
+       $PM/search.sh backend "listening on|server run success"
     b. 调用 getPackage 查看已有包，确认目标包是否存在
     c. 如需创建新包，调用 createPackage
     d. 读取 backend/design.md 中的数据模型定义，构建 AutoCode 请求 JSON:
@@ -106,15 +111,21 @@ Agent tool:
     f. 调用 createTemp 正式生成代码
     g. 执行 `cd server && go build ./...` 编译检查
     h. 如果编译失败，分析并修复问题，循环直到编译通过
-    i. 使用 docs.py done 标记 [autocode] 任务为已完成
+    i. 使用 docs.py done 标记 [autocode] 任务为已完成:
+       python3 .claude/skills/create-docs/scripts/docs.py done <req> <task-number> --role tech
     j. 使用 docs.py log 记录 AutoCode 生成信息
+    k. 清理服务:
+       $PM/stop.sh backend
+       $PM/clean.sh
+    l. 在 backend/design.md 末尾追加「AutoCode 已生成模块」段落（含模块名和文件路径）
+    m. 在 frontend/design.md 末尾追加「AutoCode 已生成页面」段落（含模块名和文件路径）
 
-    4. 完成后停止 HAB server（如果是本步骤启动的）
-    5. 输出结果:
+    4. 输出结果:
     {
       "autocode": true,
       "generated_modules": ["模块1", "模块2", ...],
       "generated_files": ["文件路径1", "文件路径2", ...],
+      "synced_to": ["backend/design.md", "frontend/design.md"],
       "remaining_tasks": ["非 autocode 的待办任务描述", ...],
       "summary": "一句话总结"
     }
@@ -240,6 +251,7 @@ Task tool:
     1. 从 TaskList 获取你的任务，标记为 in_progress
     2. 读取 docs/{REQ_NAME}/frontend/design.md 了解技术方案
     3. 读取 docs/{REQ_NAME}/frontend/tasks.md 获取任务列表
+    3.5. 读取 docs/{REQ_NAME}/tech/api-contracts.md — API 契约，实现接口时严格遵守。如发现接口需要变更，必须通知 tech-lead 更新契约，不能自行修改。
     4. 读取 docs/{REQ_NAME}/ui/ 下的设计稿作为视觉参考（如存在）:
        - ui/merge.html — 响应式效果图（主要参考）
        - ui/Introduction.md — UI 设计说明
@@ -294,6 +306,7 @@ Task tool:
     1. 从 TaskList 获取你的任务，标记为 in_progress
     2. 读取 docs/{REQ_NAME}/backend/design.md 了解技术方案
     3. 读取 docs/{REQ_NAME}/backend/tasks.md 获取任务列表
+    3.5. 读取 docs/{REQ_NAME}/tech/api-contracts.md — API 契约，实现接口时严格遵守。如发现接口需要变更，必须通知 tech-lead 更新契约，不能自行修改。
     4. **先检查哪些任务已标记 [autocode] 已完成** — 这些已由 Tech Lead 预生成，跳过
     5. **浏览已生成的代码**，了解 autocode 产出的文件结构和内容
     6. 在已有代码基础上，按 tasks.md 中剩余的非 [autocode] 任务逐项实现

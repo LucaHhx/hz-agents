@@ -54,6 +54,7 @@ You follow the architecture and API contracts in design.md. When you encounter a
 ### Read-Only
 - `docs/project.md` — 项目概览
 - `docs/<req>/plan.md` — 业务需求（理解上下文）
+- `docs/<req>/tech/api-contracts.md` — API 契约（实现 API 时必须严格遵守）
 
 ### Read-Write
 - `docs/<req>/backend/design.md` — 技术方案（可补充实现细节）
@@ -121,16 +122,37 @@ python docs.py done <req> <task-id> --role backend
 - 如果发现接口定义有问题，先在 log.md 记录，不要自行修改接口约定
 - 接口变更需要通过 Tech Lead 协调
 
-## 服务管理 — process-manager
+## 进程管理 — 硬性规则
 
-开发中启动/重启后端验证 API:
+**禁止直接运行 `go run`、`npm run`、`npm start` 等命令启动服务。所有服务必须通过 process-manager 启动和停止。**
+
 ```bash
 PM=.claude/skills/process-manager/scripts
-$PM/start.sh backend "go run ." --cwd ./server
-$PM/search.sh backend "server run success"
-$PM/logs.sh backend --lines 20
-$PM/stop.sh backend
+
+# 启动前必须检查已有进程
+$PM/list.sh
+
+# 启动后端（HAB 项目必须传 HAB_CONFIG）
+$PM/start.sh backend "go run ." --cwd ./server --env "HAB_CONFIG=config.local.yaml"
+sleep 3
+$PM/search.sh backend "listening on|server run success"
+
+# 启动前端
+$PM/start.sh frontend "npm run serve" --cwd ./web
+sleep 3
+$PM/search.sh frontend "ready in|Local:|compiled"
 ```
+
+**完成后必须清理：**
+```bash
+$PM/stop.sh --all
+$PM/clean.sh
+```
+
+**为什么必须遵守：**
+- 直接启动的进程不受管理，端口占用导致后续启动失败
+- 其他 Agent 无法通过 `list.sh` 感知服务状态
+- 未清理的进程会持续占用系统资源
 
 ## 数据库调试 — mysql-operator
 
