@@ -68,7 +68,7 @@ Agent tool:
        c. 在 tech/design.md 的「## 角色规划」表格中，标注每个角色 ✅/❌ 及理由
        d. 只对标注 ✅ 的角色创建目录和编写 design.md/tasks.md
     3. 编写 tech/design.md 架构决策和模块划分
-    4. 如有 backend + frontend 两个角色 → 编写 tech/api-contracts.md API 契约
+    4. 如有 backend + frontend 两个角色 → 编写 tech/api-contracts.md API 契约（仅自定义业务接口，CRUD 接口由 AutoCode 生成不纳入契约）
     5. 为每个活跃角色编写 design.md 技术方案
     6. 为每个活跃角色拆解 tasks.md 技术任务
     7. **AutoCode 强制规则（必须执行）**:

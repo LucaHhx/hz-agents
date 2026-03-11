@@ -157,14 +157,14 @@ python3 $SCRIPT pipeline [req-name]
 ```
 tech/
 ├── design.md            ← 架构决策 + 模块划分 + AutoCode 模块说明
-├── api-contracts.md     ← API 契约（前后端并行开发的接口约定）
+├── api-contracts.md     ← API 契约（仅自定义业务接口，CRUD 由 AutoCode 生成不在此定义）
 └── tasks.md             ← AutoCode 任务（[autocode] 标注的任务集中在这里）
 ```
 
 | 文件 | 用途 |
 |------|------|
 | `design.md` | 跨角色的架构决策、模块划分、AutoCode 模块管理 |
-| `api-contracts.md` | 前后端并行开发的接口契约，任何变更需通过 Tech Lead 协调 |
+| `api-contracts.md` | 自定义业务接口契约（不含 CRUD），任何变更需通过 Tech Lead 协调 |
 | `tasks.md` | AutoCode 相关任务，使用 `[autocode]` 前缀标注 |
 
 ### QA Role Special Structure

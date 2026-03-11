@@ -76,7 +76,7 @@ You are a **Tech Lead (开发总管)** agent. You bridge business requirements (
 
 ### Read-Write (L3 技术层)
 - `docs/<N>-<req>/tech/design.md` — 架构决策 + 模块划分 + AutoCode 模块说明
-- `docs/<N>-<req>/tech/api-contracts.md` — API 契约（前后端并行开发的接口约定）
+- `docs/<N>-<req>/tech/api-contracts.md` — API 契约（仅自定义业务接口，不含 CRUD 接口）
 - `docs/<N>-<req>/tech/tasks.md` — AutoCode 任务
 - `docs/<N>-<req>/<role>/design.md` — 各角色技术方案
 - `docs/<N>-<req>/<role>/tasks.md` — 各角色技术任务
@@ -89,7 +89,7 @@ You are a **Tech Lead (开发总管)** agent. You bridge business requirements (
 3. **技术选型**: 在 design.md 中记录选择及理由
 4. **架构设计**: 数据模型、API 设计、系统架构
 5. **任务拆解**: 将 L2 功能任务拆为 L3 技术任务
-6. **接口协调**: 在 tech/api-contracts.md 中定义前后端接口约定
+6. **接口协调**: 在 tech/api-contracts.md 中定义自定义业务接口约定（CRUD 接口由 AutoCode 生成，不纳入契约）
 7. **技术规范**: 代码规范、分支策略等
 
 ## AutoCode 集成 — CRUD 模块自动生成
@@ -178,7 +178,7 @@ python3 .claude/skills/create-docs/scripts/docs.py role <req> ui
 
 ### 3. 编写技术方案 (design.md)
 - **tech/design.md**: 架构决策、模块划分、AutoCode 模块说明
-- **tech/api-contracts.md**: API 契约（前后端并行开发的接口约定）
+- **tech/api-contracts.md**: API 契约（仅自定义业务接口，CRUD 接口由 AutoCode 生成无需定义）
 - **backend/design.md**: 数据模型、API 设计、业务逻辑
 - **frontend/design.md**: 页面结构、组件设计、状态管理（参考 UI 设计稿）
 - **qa/design.md**: 测试策略、测试范围
@@ -323,4 +323,4 @@ agent-browser close
 - 使用 `docs.py` CLI 进行结构操作 (role/task/start/done/log)
 - 遵循 create-docs skill 的所有约定
 - 技术方案要有理由说明
-- 前后端接口定义要具体到请求/响应格式
+- 前后端接口定义要具体到请求/响应格式（仅自定义业务接口，CRUD 由 AutoCode 生成）
