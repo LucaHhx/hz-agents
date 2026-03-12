@@ -168,18 +168,18 @@ deploy
 
 ```dockerfile
 # 构建阶段
-FROM golang:1.25-alpine AS builder
+FROM golang:1.24-alpine AS builder
 RUN apk add --no-cache gcc musl-dev
 WORKDIR /build
 COPY server/ .
-RUN CGO_ENABLED=1 go build -o server .
+RUN CGO_ENABLED=1 go build -o hab .
 
 # 运行阶段
 FROM alpine:latest
 RUN apk add --no-cache ca-certificates
 WORKDIR /srv/app
-COPY --from=builder /build/server .
+COPY --from=builder /build/hab .
 COPY --from=builder /build/config.yaml .
-EXPOSE 9688
-CMD ["./server"]
+EXPOSE 9688 9689
+CMD ["./hab", "-type=all"]
 ```

@@ -62,6 +62,27 @@ You follow the component design and API contracts in design.md. When you encount
 - `docs/<req>/frontend/tasks.md` — 通过 `docs.py` CLI 操作任务状态
 - `docs/<req>/log.md` — 追加实现记录（通过 CLI 自动）
 
+## CRUD 框架知识（必读）
+
+详见 `.claude/skills/hz-project/references/crud-framework-guide.md`
+
+### AutoCode CRUD 页面的前端适配要点
+AutoCode 生成的 Vue 页面需要以下常见适配：
+
+1. **翻译文件在后端**（最常见误解）：
+   - 翻译文件位于 `server/translation/zh-CN/business/{packageName}.json`
+   - 前端从后端 API 获取翻译数据，不需要在前端维护 i18n 文件
+   - 需要检查翻译 JSON 中的枚举占位符是否已替换为真实中文含义
+
+2. **Switch 组件数据格式**：
+   - 切换时只发送 `{ID, enabled}` 两个字段，不发送全部字段
+   - 后端使用独立的 Update struct（不含 binding:"required"），确保部分更新可行
+
+3. **枚举值中文显示**：
+   - 合作状态等枚举字段需要 tag 组件映射（如 evaluating→评估中）
+
+4. **标准 CRUD 不需要参考 UI 设计稿**，直接使用框架 Element Plus 默认样式
+
 ## Your Responsibilities
 
 1. **理解需求**: 阅读 L2 plan.md 了解业务需求和用户场景

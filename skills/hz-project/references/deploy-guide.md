@@ -8,7 +8,7 @@
 # 后端
 cd server
 cp config.example.yaml config.yaml  # 首次需要
-go build -o server . && ./server
+go build -o hab . && ./hab
 
 # 管理后台
 cd web
@@ -144,7 +144,7 @@ rsync -avz --delete \
   --exclude 'node_modules' \
   --exclude '.git' \
   --exclude '.claude' \
-  --exclude 'server/server' \
+  --exclude 'server/hab' \
   --exclude 'server/logs' \
   --exclude 'docs' \
   --exclude 'deploy' \
@@ -207,7 +207,7 @@ rsync -avz --delete \
   --exclude 'node_modules' \
   --exclude '.git' \
   --exclude '.claude' \
-  --exclude 'server/server' \
+  --exclude 'server/hab' \
   --exclude 'server/logs' \
   --exclude 'docs' \
   --exclude 'deploy' \

@@ -39,6 +39,13 @@
 | references/init-checklist.md | 项目初始化后的定制化清单 |
 | references/deploy-guide.md | 部署模式详解与脚本模板 |
 | references/troubleshooting.md | 故障排查手册 |
+| references/gorm-pitfalls.md | GORM 5 条硬性规则 |
+| references/crud-framework-guide.md | CRUD 全角色指南 |
+| references/go-request-patterns.md | Go/Gin 请求结构体模式 |
+| references/known-issues.md | 已知问题库（BUG-001~010） |
+| references/doc-simplification.md | 文档精简策略 |
+| references/hab-integration-checklist.md | AutoCode 集成检查清单 |
+| references/response-and-errors.md | 响应格式、错误码、基础模型、工具函数 |
 
 ## 使用方式
 
@@ -51,3 +58,8 @@
 - 用户问"怎么创建新项目" → 读取 `modules/01-init.md` + `references/init-checklist.md`
 - 用户问"怎么部署到服务器" → 读取 `modules/09-deploy.md` + `references/deploy-guide.md`
 - 用户问"前端任务标签怎么用" → 读取 `modules/05-multi-endpoint.md`
+- GORM 问题 → `references/gorm-pitfalls.md` + `references/known-issues.md`
+- AutoCode 后续集成 → `references/hab-integration-checklist.md`
+- 请求结构设计 → `references/go-request-patterns.md`
+- 简单 CRUD 文档 → `references/doc-simplification.md` + `references/crud-framework-guide.md`
+- 响应/错误码/模型 → `references/response-and-errors.md`

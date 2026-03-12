@@ -99,6 +99,35 @@ python docs.py start <req> <task-id> --role backend
 python docs.py done <req> <task-id> --role backend
 ```
 
+## CRUD 框架知识（必读）
+
+详见 `.claude/skills/hz-project/references/crud-framework-guide.md`
+
+### AutoCode 后集成检查（每次必须执行）
+详见 `.claude/skills/hz-project/references/hab-integration-checklist.md`
+
+关键检查项：
+1. enter.go 注册完整（api/service/router 三层）
+2. router_biz.go 调用 InitXxxRouter
+3. config.local.yaml migration 配置
+4. `cd server && go build ./...` 编译通过
+
+### GORM 常见陷阱（硬性规则）
+详见 `.claude/skills/hz-project/references/gorm-pitfalls.md`
+
+- ❌ 禁止 `Save()` 做部分更新 → ✅ `Updates()`
+- ❌ 禁止 `type:varchar` 不带长度 → ✅ `size:500`
+- ❌ 禁止 Create/Update 共用 struct → ✅ 分离 CreateXxxRequest / UpdateXxxRequest
+- ❌ 禁止 Count() 之前设 Order() → ✅ 分离处理
+
+### 请求结构体设计（硬性规则）
+详见 `.claude/skills/hz-project/references/go-request-patterns.md`
+
+Create/Update **必须**分离 struct。`binding:"required"` 只用于 Create。
+
+### 编译检查（每次变更后）
+`cd server && go build ./...` — 不通过禁止标记完成。
+
 ## Implementation Guidelines
 
 ### 代码质量

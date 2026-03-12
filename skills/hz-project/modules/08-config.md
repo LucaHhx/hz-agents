@@ -61,6 +61,22 @@ npm run dev
 
 > 两个端口均从 `config.yaml` 读取，非硬编码。
 
+### 运行模式（-type 参数）
+
+通过启动参数 `-type` 控制启动哪些端口：
+
+| 参数 | 说明 |
+|------|------|
+| `-type=all` | 同时启动管理端(9688)+客户端API(9689)，Docker 默认模式 |
+| `-type=backend` | 仅启动管理端(9688) |
+| `-type=api` | 仅启动客户端API(9689) |
+
+```bash
+# 示例
+go run . -type=all          # 默认，两个端口都启动
+go run . -type=backend      # 仅管理端
+```
+
 ## 端口配置联动
 
 修改后端端口后，须同步更新前端配置：
@@ -128,7 +144,7 @@ system:
   migration: true          # 启动时自动迁移数据库
   translation-dir: ./translation  # i18n 翻译文件目录
   environment: dev         # 环境: dev | production
-  login-mode: simple       # 登录模式: simple(无验证码) | captcha(需验证码) | strict(分步强验证)
+  login-mode: simple       # 登录模式（见下方 login-mode 说明）
 
 # ===================== 数据库配置 =====================
 mysql:
@@ -184,6 +200,18 @@ zap:
   log-in-console: true     # 同时输出到控制台
   retention-day: -1        # 日志保留天数（-1=永久）
 ```
+
+### login-mode 登录模式
+
+| 值 | 说明 |
+|------|------|
+| `simple` | 仅用户名密码，无验证码 |
+| `captcha` | 需要图形验证码 |
+| `strict` | 分步强验证（密码 → 2FA） |
+
+### pprof 调试
+
+开发模式下（`environment: dev`），pprof 调试服务运行在 `:6060`，可通过 `http://localhost:6060/debug/pprof/` 访问。
 
 ### 配置示例 B — 极简配置（最小可运行）
 
@@ -263,10 +291,15 @@ const envFiles = [`.env.${NODE_ENV}`]
 // 读取对应环境的 .env 文件
 ```
 
-`npm run serve` 默认 mode = development → 加载 `.env.development`
-`npm run build` 默认 mode = production → 加载 `.env.production`
+`npm run serve` → `vite --host --mode development` → 加载 `.env.development`
+`npm run dev` → `vite --host --mode dev` → 加载 `.env.dev`
+`npm run build` → mode = production → 加载 `.env.production`
 
-如果文件不存在（如只有 `.env.example`），需要复制：
+> **注意**：`serve` 和 `dev` **不等价**，它们的 `--mode` 不同，加载的环境文件也不同。
+> 仓库默认提供 `.env.dev` 和 `.env.example`，没有 `.env.development`。
+> 日常开发推荐使用 `npm run dev`（对应已有的 `.env.dev`）。
+
+如需使用 `npm run serve`，须先创建对应的环境文件：
 ```bash
 cp .env.example .env.development
 ```

@@ -83,3 +83,61 @@ sed -i '' 's|HZ_AGENTS=.*|HZ_AGENTS="/actual/path/to/hz-agents"|' .claude/link.s
 
 确保 `frontend/tasks.md` 中每个任务都有 `[web]` 或 `[client]` 标签。
 参考 `modules/05-multi-endpoint.md` 了解标签规范。
+
+---
+
+## AutoCode / GORM 常见问题
+
+### Q10: AutoCode 后 API 返回 404
+
+**原因**：router_biz.go 中未调用 `InitXxxRouter`，或 enter.go 中未注册 Api/Service group。
+
+**排查**：
+```bash
+# 检查 router 注册
+grep -rn "InitXxx" server/initialize/router_biz.go
+# 检查 Api group 注册
+grep -rn "XxxApi" server/api/v1/enter.go
+# 检查 Service group 注册
+grep -rn "XxxService" server/service/enter.go
+```
+
+缺失则添加注册，详见 `references/hab-integration-checklist.md`。
+
+### Q11: Update API 清空未传字段
+
+**原因**：后端使用 `Save()` 做更新，Save 覆盖全部字段（未传的字段被设为零值）。
+
+**修复**：将 `db.Save(&model)` 改为 `db.Model(&model).Where("id = ?", id).Updates(updateData)`。
+
+详见 `references/gorm-pitfalls.md` 第 1 节。
+
+### Q12: 分页列表排序失效
+
+**原因**：GORM 的 `Count()` 会清除之前设置的 `Order()`。
+
+**修复**：将 Count 查询和带 Order 的数据查询分离为两条独立查询。
+
+```go
+// 正确写法
+db.Model(&Model{}).Where(conditions).Count(&total)
+db.Where(conditions).Order("created_at DESC").Offset(offset).Limit(limit).Find(&list)
+```
+
+详见 `references/gorm-pitfalls.md` 第 3 节。
+
+### Q13: Create 加 required 后 Update/Switch 也被拦截
+
+**原因**：Create 和 Update 共用 struct，`binding:"required"` 同时作用于两者。Switch toggle 只传 `{ID, enabled}`，缺少 required 字段导致 400 错误。
+
+**修复**：分离 `CreateXxxRequest` 和 `UpdateXxxRequest`，Update struct 中只有 ID 是 required。
+
+详见 `references/go-request-patterns.md`。
+
+### Q14: 建表 SQL 语法错误（varchar）
+
+**原因**：GORM tag 中 `type:varchar` 未指定长度，MySQL 要求 varchar 必须有长度。
+
+**修复**：将 `type:varchar` 改为 `type:varchar(200)` 或使用 `size:200`。
+
+详见 `references/gorm-pitfalls.md` 第 2 节。

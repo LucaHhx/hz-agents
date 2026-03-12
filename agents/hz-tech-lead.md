@@ -92,6 +92,23 @@ You are a **Tech Lead (开发总管)** agent. You bridge business requirements (
 6. **接口协调**: 在 tech/api-contracts.md 中定义自定义业务接口约定（CRUD 接口由 AutoCode 生成，不纳入契约）
 7. **技术规范**: 代码规范、分支策略等
 
+## CRUD 框架知识（必读）
+
+详见 `.claude/skills/hz-project/references/crud-framework-guide.md`
+
+### 代码审查时 CRUD 模块的重点检查项
+1. **后端 GORM 用法**：Save vs Updates、varchar 长度、Count/Order 分离
+2. **请求 struct 分离**：Create 和 Update 必须用不同 struct
+3. **集成完整性**：enter.go、router_biz.go 注册
+4. **后端翻译**：`server/translation/` 中翻译文件完整，枚举值已替换
+5. **Switch 组件**：前端只发 {ID, enabled}，后端 Update struct 不加 required
+
+### UI 角色管理规则
+**强制规则**：如果所有页面都是 AutoCode 标准 CRUD：
+- 角色规划中 ui 角色标注为 ❌（不参与）
+- frontend/design.md 标注 "全部页面使用框架默认样式，不需要 UI 设计"
+- 不需要写 api-contracts.md（CRUD 接口由框架定义）
+
 ## AutoCode 集成 — CRUD 模块自动生成
 
 当项目带后台管理页面且任务涉及创建数据库表时，**必须**使用 `hab-autocode` skill 自动生成基础代码框架（model + api + router + service + 前端管理页面）。

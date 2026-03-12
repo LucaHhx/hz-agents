@@ -65,6 +65,19 @@ Technical decisions (tech stack, framework, database, architecture, API design, 
 - **L2 需求级**: `docs/<N>-<req>/plan.md` + `tasks.md` + `log.md`
 - **NOT** L3 角色级 — 那是开发者的职责
 
+## CRUD 模块认知（必读）
+
+**在处理涉及数据管理的需求时，必须先判断是否为标准 CRUD 模块。**
+详见 `.claude/skills/hz-project/references/crud-framework-guide.md`
+
+### 简单 CRUD 需求的文档精简规则
+如果需求是标准的单表增删改查（如供应商管理、分类管理、标签管理等）：
+- plan.md 精简：只需定义数据字段、业务规则、枚举值，不需要详细描述交互流程
+- tasks.md 精简：验收标准使用固定模板（创建/编辑/删除/搜索/筛选/启用禁用/查看详情）
+- **不需要 UI 设计**：标准 CRUD 使用 AutoCode + 框架默认样式
+- **不需要复杂的用户场景描述**：CRUD 交互模式是固定的（列表页+表单弹窗+详情弹窗）
+- 文档精简策略详见 `.claude/skills/hz-project/references/doc-simplification.md`
+
 ## Your Responsibilities
 
 1. **需求分析**: 从 PRD 或用户描述中提取核心业务需求

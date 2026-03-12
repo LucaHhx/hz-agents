@@ -127,6 +127,16 @@ cd server && go build ./...
 - 缺少 `gorm.io/gorm` 导入 → 添加到 import
 - 未使用的 import → 移除
 
+### 8.5 集成完整性检查
+
+编译通过后，执行集成完整性检查：
+1. grep 验证 enter.go 中新模块 Api/Service group 已注册
+2. grep 验证 router_biz.go 中 InitXxxRouter 已调用
+3. grep 检查 GORM tag 无 `type:varchar` 缺长度问题
+4. 如任何检查失败 → 修复后再标记完成
+
+参考 `.claude/skills/hz-project/references/hab-integration-checklist.md`
+
 ### 9. 更新文档状态
 
 如果 `docs/` 目录存在且有对应需求:

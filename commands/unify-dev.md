@@ -416,6 +416,14 @@ Task tool:
     4. 读取 docs/$REQ_NAME/qa/design.md 获取测试方案
     5. 读取 docs/$REQ_NAME/qa/tasks.md 获取测试任务
 
+    ## 前置健全性检查（API 测试前必须执行）
+    在执行任何 API 测试之前，先做基础设施检查：
+    1. 编译检查：`cd server && go build ./...`
+    2. 注册检查：grep enter.go 和 router_biz.go 确认新模块已注册
+    3. GORM tag 检查：`grep -rn 'type:varchar[^(]' server/model/`
+    4. 请求 struct 检查：确认 Create/Update 是否使用分离的 struct
+    发现编译/注册问题 → 直接报告为 P0 阻塞 Bug，**不继续后续测试**。
+
     ## 测试执行（两阶段）
 
     ### 阶段 A: 后端 API 测试

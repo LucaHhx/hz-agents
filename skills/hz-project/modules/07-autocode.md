@@ -67,6 +67,30 @@ Tech Lead 在技术评审阶段（`/review-tech`）必须执行以下检测：
 | 手动预生成 | `/cmd-autocode` 或直接调用 hab-autocode API |
 | 独立快速原型 | `/cmd-autocode` |
 
+## CLI 代码生成器（codegen）
+
+除了 API-based AutoCode，框架还提供了 CLI 代码生成工具 `server/cmd/codegen/`，适合从已有数据库表直接生成代码（brownfield 场景）。
+
+```bash
+cd server/cmd/codegen
+go run . <table_name> [package] [description]
+
+# 示例：从已有的 supplier 表生成代码
+go run . supplier business "供应商管理"
+```
+
+> **注意**：必须在 `server/cmd/codegen/` 目录下运行。`main.go` 内部执行 `os.Chdir("../..")`
+> 回退到 `server/`，如果从其他目录运行会导致配置文件路径错误。
+
+**与 API-based AutoCode 的区别：**
+
+| 特性 | CLI codegen | API AutoCode |
+|------|------------|--------------|
+| 输入来源 | 直接读取数据库表结构 | 通过 API 传入字段定义 |
+| 适用场景 | 已有表的 brownfield 项目 | 新建表的 greenfield 项目 |
+| 依赖 | 仅需数据库连接 | 需要 server 运行中 |
+| 交互方式 | 命令行一次性生成 | API 调用或管理后台 UI |
+
 ## 快速开始
 
 ```bash

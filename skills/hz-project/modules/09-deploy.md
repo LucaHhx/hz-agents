@@ -15,7 +15,7 @@
 ```bash
 # 后端
 cd server
-go build -o server . && ./server
+go build -o hab . && ./hab
 
 # 前端 (web)
 cd web

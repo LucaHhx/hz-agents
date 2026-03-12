@@ -21,7 +21,7 @@
 | 1 | AutoCode module | `server/config.example.yaml` | `autocode.module` → 项目名 |
 | 2 | 日志前缀 | `server/config.example.yaml` | `zap.prefix` → `'[<project>]'` |
 | 3 | Dockerfile 工作目录 | `Dockerfile` | `/srv/hab` → `/srv/<project>` |
-| 4 | Dockerfile 二进制名 | `Dockerfile` | 按项目命名 |
+| 4 | Dockerfile 二进制名 | `Dockerfile` | 按项目命名（默认为 `hab`） |
 | 5 | 页面标题 | `web/index.html` | `<title>` 改为项目名称 |
 | 6 | 前端端口 | `web/.env.example` | 按需调整 `VITE_CLI_PORT` |
 

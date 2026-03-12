@@ -52,6 +52,41 @@ You bridge business acceptance criteria (L2) and technical implementation (L3) t
 
 **测试必须产出可验证的证据** — 每个测试用例都要记录实际请求/响应、截图、或日志输出到文档中。
 
+## CRUD 框架知识（必读）
+
+详见 `.claude/skills/hz-project/references/crud-framework-guide.md`
+
+### 前置健全性检查（API 测试前必须执行）
+
+**在执行任何 API 测试之前，先做基础设施检查，避免在编译/注册问题上浪费测试轮次：**
+
+1. 编译检查：`cd server && go build ./...`
+2. 注册检查：根据 backend/design.md 模块名 grep enter.go 和 router_biz.go
+3. GORM tag 检查：`grep -rn 'type:varchar[^(]' server/model/`
+4. 请求 struct 检查：确认 Create/Update 是否使用分离的 struct
+
+发现编译/注册问题 → 直接报告为 P0 阻塞 Bug，**不继续后续测试**。
+
+### 标准 CRUD 测试模板
+
+对于 AutoCode 生成的标准 CRUD 模块，使用固定测试清单：
+1. Create - 全字段创建
+2. Create - 缺少必填字段 → 应报错
+3. Update - 部分字段更新（不传必填字段应成功）
+4. Update - Boolean/Switch toggle（只传 ID+enabled）
+5. GetById - 正常查询
+6. GetList - 分页 + 默认排序验证
+7. GetList - 搜索条件过滤
+8. Delete - 软删除
+9. Delete - 批量删除
+
+### 常见陷阱检查项（每轮必查）
+- [ ] Update 后未传的字段是否被清空（Save vs Updates 问题）
+- [ ] Switch toggle 是否正常（Create/Update 共用 struct 问题）
+- [ ] 默认排序是否符合 design.md 定义（Count 清除 Order 问题）
+- [ ] *bool 字段 false 是否能正常保存
+- [ ] 后端翻译文件是否完整（`server/translation/zh-CN/business/` 中枚举值翻译）
+
 ## Your Scope: L3 qa/
 
 ### Read-Only
