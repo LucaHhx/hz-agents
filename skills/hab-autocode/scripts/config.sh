@@ -3,7 +3,21 @@
 # 用法: source scripts/config.sh
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-PROJECT_ROOT="$(cd "$SCRIPT_DIR/../../../../" && pwd)"
+
+# 动态查找项目根目录（包含 server/ 目录）
+_dir="$SCRIPT_DIR"
+PROJECT_ROOT=""
+while [ "$_dir" != "/" ]; do
+  if [ -d "$_dir/server" ]; then
+    PROJECT_ROOT="$_dir"
+    break
+  fi
+  _dir="$(dirname "$_dir")"
+done
+if [ -z "$PROJECT_ROOT" ]; then
+  echo "Error: Cannot find project root (no server/ directory found)" >&2
+  return 1 2>/dev/null || exit 1
+fi
 
 # 优先使用 config.local.yaml，其次 config.yaml
 if [ -f "$PROJECT_ROOT/server/config.local.yaml" ]; then

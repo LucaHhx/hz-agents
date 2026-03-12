@@ -9,9 +9,10 @@ argument-hint: [操作描述，如"创建订单模块"或"查看包列表"]
 > 对标注 `[autocode]` 的 CRUD 模块使用本命令生成基础代码。
 > 也可独立使用进行快速原型开发。
 
-本命令分为两个阶段：
+本命令分为三个阶段：
 1. **探索阶段**：使用 `brainstorming` skill 结合 `hab-autocode` 的查询 API，与用户沟通并完善需求
 2. **执行阶段**：使用 `hab-autocode` skill 的生成 API 执行代码生成，并完成编译检查
+3. **完善阶段**：根据业务场景补充翻译、列配置、权限等，因地制宜定制模块
 
 ---
 
@@ -146,12 +147,61 @@ cd server && go build ./...
 - 生成的文件清单（后端 + 前端）
 - 自动完成的操作（建表、API 注册、菜单创建等）
 - 如果修复了编译问题，说明修复内容
+- **生成后完善状态**:
+  ```
+  生成后完善状态:
+    - 翻译: [已完成/待处理] enum 值、en-US 同步
+    - 列配置: [已完成/待处理] FormMust、列宽、Fixed、IsAddSearch
+    - 权限(authority=1): [已完成/待处理] 按钮/列权限确认
+    - 业务逻辑: [待处理 - 需人工审查]
+  ```
 - **后续建议**:
   ```
   后续建议:
     1. /unify-dev <REQ_NAME>       — 启动全团队开发（含 QA）
     2. /dev-tech <REQ_NAME>        — Tech Lead 带队开发（无 QA）
   ```
+
+---
+
+## 阶段三：业务完善（因地制宜）
+
+> autocode 完成基站搭建，此阶段根据具体业务场景进行定制化完善。
+> 详细指南参考 `hab-autocode` skill 的「生成后完善指南」章节。
+
+### Step 11: 完善翻译文件
+
+1. 读取自动生成的翻译文件：`server/translation/zh-CN/business/{packageName}.json`
+2. 替换 enum 占位符为真实业务含义（如 `"1": "Status-1"` → `"1": "待处理"`）
+3. 添加业务特定 messages（如确认操作提示）
+4. 同步更新 `server/translation/en-US/business/{packageName}.json`
+
+### Step 12: 配置表列属性
+
+通过 API `PUT /sysTableColumns/updateSysTableColumns` 或数据库批量更新 SysTableColumns：
+
+1. **必填标记**: 对业务关键字段设 `formMust: true`
+2. **列宽调整**: 根据实际数据长度调整 `with` 值（短字段缩窄，长文本扩宽）
+3. **固定列**: 关键标识列设 `fixed: "left"`，列多时操作列设 `fixed: "right"`
+4. **搜索配置**: 常用查询字段设 `isAddSearch: true`
+5. **表单配置**: 调整 `formWith`、`formDisabled`、`formHidden`、`formOrder`
+6. **排序优化**: 调整 `sort` 值让重要列靠前
+
+### Step 13: 确认 authority=1 权限完整
+
+1. 检查 authority=1 的 9 个标准按钮权限是否已正确创建
+2. 如需自定义按钮（如 copy），在 `SysBaseMenuBtn` 中添加
+3. 确认列权限配置完整
+4. **注意：AI 绝不修改其他角色的权限，其他角色由管理员通过管理界面手动分配**
+
+### Step 14: 业务逻辑审查
+
+检查是否需要补充：
+- 自定义表单校验规则（前端）
+- 条件显示/隐藏逻辑
+- 计算字段或联动字段
+- 状态流转逻辑（后端 service）
+- 特殊业务约束（如唯一性检查、关联删除）
 
 ---
 
