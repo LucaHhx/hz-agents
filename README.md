@@ -324,6 +324,7 @@ HZ-Agents 提供两种使用方式，覆盖不同的开发场景：
 
 | 维度 | 团队模式 | 命令拆分模式 |
 |------|---------|------------|
+| 起点 | `/hz-init` → `/unify-doc-review` | `/hz-init` → `/review-pm` |
 | 典型场景 | 新功能端到端交付 | 修一个组件、补一份文档 |
 | 控制粒度 | 自动编排 | 手动逐步 |
 | 参与 Agent | 2–5 个自动协调 | 每次 1 个 |
@@ -335,6 +336,12 @@ HZ-Agents 提供两种使用方式，覆盖不同的开发场景：
 ## 团队模式
 
 多 Agent 自动协作，按阶段分组：
+
+### 初始化
+
+| 命令 | 说明 | 参与角色 |
+|------|------|---------|
+| `/hz-init [项目名]` | 交互式创建项目（模板拉取、环境检查、数据库初始化） | — |
 
 ### 文档阶段
 
@@ -371,6 +378,12 @@ HZ-Agents 提供两种使用方式，覆盖不同的开发场景：
 
 逐个调用单角色命令，可按任意顺序组合：
 
+### 初始化
+
+```
+/hz-init [项目名]       # 交互式创建项目（模板拉取、环境检查、数据库初始化）
+```
+
 ### 文档评审
 
 ```
@@ -379,7 +392,7 @@ HZ-Agents 提供两种使用方式，覆盖不同的开发场景：
 /review-ui [需求名]     # UI 设计师产出/更新设计稿
 ```
 
-推荐顺序：`/review-pm` → `/review-tech` → `/review-ui`
+推荐顺序：`/hz-init` → `/review-pm` → `/review-tech` → `/review-ui`
 
 ### 开发
 
@@ -399,6 +412,12 @@ HZ-Agents 提供两种使用方式，覆盖不同的开发场景：
 ### 自定义工作流示例
 
 ```bash
+# 从零开始的完整拆分流程
+/hz-init my-project
+/review-pm 1-payment → /review-tech 1-payment → /review-ui 1-payment
+  → /dev-frontend 1-payment + /dev-backend 1-payment
+  → /review-qa 1-payment
+
 # 只补后端 + 跑测试
 /dev-backend 1-user-system
 /review-qa 1-user-system
@@ -406,11 +425,6 @@ HZ-Agents 提供两种使用方式，覆盖不同的开发场景：
 # 只更新设计稿 + 重新做前端
 /review-ui 2-order-module
 /dev-frontend 2-order-module
-
-# 完整拆分流程
-/review-pm 3-payment → /review-tech 3-payment → /review-ui 3-payment
-  → /dev-frontend 3-payment + /dev-backend 3-payment
-  → /review-qa 3-payment
 ```
 
 ---
@@ -418,7 +432,7 @@ HZ-Agents 提供两种使用方式，覆盖不同的开发场景：
 ## 工作流程图
 
 ```
-需求输入
+/hz-init（项目初始化）
   │
   ├─ 团队模式 ─────────────────────────────────────────────
   │  /unify-doc-review → /review-all（可选）→ /unify-dev 或 /dev-tech
