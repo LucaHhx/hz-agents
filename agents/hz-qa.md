@@ -50,12 +50,13 @@ You are a **QA (测试)** agent. You ensure product quality by designing test st
 ## CRUD 测试规范
 
 ### 前置健全性检查（API 测试前必须执行）
-1. 编译检查：`cd server && go build ./...`
-2. 注册检查：grep enter.go 和 router_biz.go
-3. GORM tag 检查：`grep -rn 'type:varchar[^(]' server/model/`
-4. 请求 struct 检查：确认 Create/Update 是否分离
 
-发现编译/注册问题 → 直接报告为 P0 阻塞 Bug，**不继续后续测试**。
+**必须读取** hab-autocode skill 的 `references/crud-review-standard.md`，按「QA 前置检查（时机 D）」执行检查。
+
+输出审阅结果表格到 qa/test-report.md 的「前置检查」段落。
+
+- ❌ FAIL → 直接报告为 P0 阻塞 Bug，**不继续后续测试**，通知 tech-lead
+- 全部 ✅/⚠️ → 继续 API 测试
 
 ### 标准 CRUD 测试模板
 1. Create - 全字段创建

@@ -71,36 +71,21 @@ python docs.py start <req> <task-id> --role backend
 
 ### 3.5 CRUD 模块自验（标记完成前必须执行）
 
-#### 结构体检查
-- [ ] Create/Update 使用分离的 struct（`CreateXxxRequest` / `UpdateXxxRequest`）
-- [ ] CreateXxxRequest 的必填字段有 `binding:"required"`
-- [ ] UpdateXxxRequest 只有 ID 是 `binding:"required"`，其余字段无 required
-- [ ] 布尔字段使用 `*bool` 指针类型（Update struct 中必须）
-- [ ] Update 方法使用 `Updates()` 而非 `Save()`
+**必须读取审阅规范**: 先加载 `hab-autocode` skill，读取 `references/crud-review-standard.md`。
 
-#### 业务校验检查
-- [ ] 唯一性字段在 Service 层 Create **和** Update 中都有查重
-- [ ] 唯一性校验在 Update 时**跳过零值**
-- [ ] 数据库唯一索引报错有友好提示
+**按「开发完成审阅（时机 B）」执行所有检查项**，输出审阅结果表格。
 
-#### 翻译文件检查
-- [ ] `server/translation/zh-CN/business/<module>.json` 中 columns/enums/messages 完整
-- [ ] enums 段的占位符已替换为中文
-- [ ] 后端 menu.json 中有菜单翻译条目
+- ❌ FAIL 项必须修复后重新审阅
+- 审阅结果表格追加到 log.md
+- 0 FAIL 后再执行冒烟测试
 
-#### sys_table_columns 配置检查
-- [ ] 所有字段的 `type` 值在 DiyForm 支持列表内（**禁止裸 `int`** → 改用 `int32`）
-- [ ] 必填字段 `formMust = true`
-- [ ] 不需要在表单中显示的字段 `formHidden = true`
-- [ ] 枚举字段 type 为 `enum`，且 `enum` 数组包含所有枚举值
-
-#### 冒烟测试（启动服务 curl 验证）
+#### 冒烟测试（审阅通过后执行）
+使用 process-manager 启动服务，curl 测试：
 - [ ] 创建接口正常返回
 - [ ] 创建缺少必填字段返回 1001 错误
 - [ ] Switch 切换后保存正常（布尔字段 false 能正确保存）
 - [ ] 列表默认排序符合 design.md 定义
-
-**任何一项不通过 → 修复后再标记完成。**
+- [ ] Update 部分字段不会清空其他字段
 
 ### 4. 完成任务
 ```bash

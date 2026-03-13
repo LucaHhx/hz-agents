@@ -218,3 +218,12 @@ func (s *OrderService) DeleteOrder(id uint) error {
 [ ] 后端：删除前状态检查逻辑
 [ ] 业务逻辑：需人工审查是否有更多场景
 ```
+
+## 6. 结构化审阅
+
+完善完成后，按 `crud-review-standard.md` 中「AutoCode 后审阅（时机 A）」执行检查。
+重点关注：
+- COL-1: 虚拟列对齐（HAB_MODEL 无 created_by/updated_by/deleted_by）
+- STR-5: GORM tag 无裸 varchar
+- REG-1~4: 注册完整性
+- BUILD-1: 编译通过

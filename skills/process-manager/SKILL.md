@@ -12,7 +12,9 @@ description: >
       '重启服务', 'restart', '停止服务', 'stop service'),
   (3) 查看/搜索进程日志 (triggers: 'check logs', '查看日志', 'debug service', '看看日志'),
   (4) 编排前后端启动顺序 (triggers: 'start all services', '启动所有服务', 'orchestrate services',
-      '同时启动前后端', '启动前后端')
+      '同时启动前后端', '启动前后端'),
+  (5) 端口占用处理 (triggers: 'port in use', '端口占用', 'kill port', '释放端口',
+      'address already in use')
 ---
 
 # 进程管理工具
@@ -31,12 +33,13 @@ PM=.claude/skills/process-manager/scripts
 
 | 脚本 | 用途 | 用法 |
 |------|------|------|
-| `start.sh` | 启动后台进程 | `$PM/start.sh <name> "<cmd>" [--cwd <dir>] [--env "K=V"]` |
-| `stop.sh` | 终止进程 | `$PM/stop.sh <name>` 或 `$PM/stop.sh --all` |
+| `start.sh` | 启动后台进程 | `$PM/start.sh <name> "<cmd>" [--cwd <dir>] [--env "K=V"] [--port <port>]` |
+| `stop.sh` | 终止进程（杀进程树+释放端口） | `$PM/stop.sh <name>` 或 `$PM/stop.sh --all` |
 | `list.sh` | 列出所有进程 | `$PM/list.sh` |
 | `logs.sh` | 查看日志 | `$PM/logs.sh <name> [--lines N] [--head] [--follow]` |
 | `search.sh` | 搜索日志 | `$PM/search.sh <name> "<pattern>"` |
 | `restart.sh` | 重启进程 | `$PM/restart.sh <name>` |
+| `kill-port.sh` | 强制释放端口 | `$PM/kill-port.sh <port> [port2 ...]` |
 | `clean.sh` | 清理记录 | `$PM/clean.sh` 或 `$PM/clean.sh --all` |
 
 ## HAB 项目启动（最常用）
@@ -49,18 +52,20 @@ PM=.claude/skills/process-manager/scripts
 # 1. 检查已有进程
 $PM/list.sh
 
-# 2. 启动后端（需要 HAB_CONFIG 指向 config.local.yaml）
-$PM/start.sh backend "go run ." --cwd ./server --env "HAB_CONFIG=config.local.yaml"
+# 2. 启动后端（带端口追踪，自动解决端口冲突）
+$PM/start.sh backend "go run ." --cwd ./server --env "HAB_CONFIG=config.local.yaml" --port 8888
 sleep 3
 $PM/search.sh backend "listening on|server run success"
 
-# 3. 启动前端
-$PM/start.sh frontend "npm run serve" --cwd ./web
+# 3. 启动前端（带端口追踪）
+$PM/start.sh frontend "npm run serve" --cwd ./web --port 8080
 sleep 3
 $PM/search.sh frontend "ready in|Local:|compiled"
 ```
 
 > **关键**：后端必须通过 `--env "HAB_CONFIG=config.local.yaml"` 传入配置文件路径，否则会使用默认的 `config.yaml`（可能不存在或缺少数据库密码等敏感配置）。
+
+> **推荐**：始终使用 `--port` 参数。这样 stop/restart 时会自动释放端口，彻底解决端口占用问题。
 
 ## 核心工作流
 
@@ -69,14 +74,14 @@ $PM/search.sh frontend "ready in|Local:|compiled"
 ```bash
 PM=.claude/skills/process-manager/scripts
 $PM/list.sh
-$PM/start.sh backend "go run ." --cwd ./server
+$PM/start.sh backend "go run ." --cwd ./server --port 8888
 $PM/logs.sh backend --lines 20
 ```
 
 ### 带环境变量启动
 
 ```bash
-$PM/start.sh backend "go run ." --cwd ./server --env "HAB_CONFIG=config.local.yaml GIN_MODE=release"
+$PM/start.sh backend "go run ." --cwd ./server --env "HAB_CONFIG=config.local.yaml GIN_MODE=release" --port 8888
 ```
 
 ### 日志诊断
@@ -91,18 +96,26 @@ $PM/search.sh backend "error|Error|panic|fatal"  # 搜索错误
 ### 生命周期管理
 
 ```bash
-$PM/list.sh              # 查看状态
-$PM/restart.sh backend   # 重启
-$PM/stop.sh frontend     # 停止单个
+$PM/list.sh              # 查看状态（含端口信息）
+$PM/restart.sh backend   # 重启（自动杀进程树+释放端口）
+$PM/stop.sh frontend     # 停止单个（自动杀进程树+释放端口）
 $PM/stop.sh --all        # 停止所有
 $PM/clean.sh             # 清理已停止的记录
+```
+
+### 端口管理
+
+```bash
+$PM/kill-port.sh 8888              # 释放单个端口
+$PM/kill-port.sh 8888 8080 3000    # 批量释放多个端口
 ```
 
 ## 常见问题
 
 | 问题 | 处理 |
 |------|------|
-| 端口占用 | `lsof -i :<port>` 找到进程 → `stop.sh` → `start.sh` |
+| 端口占用 | `kill-port.sh <port>` 直接释放，或启动时加 `--port` 自动处理 |
+| stop 后端口仍占用 | 新版 stop.sh 会自动杀进程树+释放端口，如仍有问题用 `kill-port.sh` |
 | 进程立即退出 | `logs.sh <name> --head` 查看启动日志 |
 | 服务无响应 | `search.sh <name> "error\|panic"` |
 

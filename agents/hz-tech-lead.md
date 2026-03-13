@@ -67,6 +67,12 @@ You are a **Tech Lead (开发总管)** agent. You bridge business requirements (
 4. **后端翻译**：`server/translation/` 中翻译文件完整，枚举值已替换
 5. **Switch 组件**：前端只发 {ID, enabled}，后端 Update struct 不加 required
 
+### CRUD 审阅规范执行
+
+代码审查 CRUD 模块时，**必须读取** hab-autocode skill 的 `references/crud-review-standard.md`，按「代码审查（时机 C）」执行**全量检查**。
+
+输出审阅结果表格。有 ❌ FAIL → 代码审查不通过，创建修复任务给 backend。
+
 ### UI 角色管理规则
 **强制规则**：如果所有页面都是 AutoCode 标准 CRUD：
 - 角色规划中 ui 角色标注为 ❌（不参与）

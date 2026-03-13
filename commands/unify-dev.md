@@ -12,15 +12,19 @@ argument-hint: [需求名称]
 ```
 1. Tech Lead 文档检查 ── 不通过 → 暂停，提示用户先完善文档
                           ↓ 通过
-2. Tech Lead AutoCode 预生成 ── 扫描 [autocode] 任务 → 生成 CRUD 基础代码 + 编译检查
-                          ↓ 完成（或无 [autocode] 任务则跳过）
-3. Frontend + Backend 并行开发（Backend 在 autocode 基础上补充自定义逻辑）
+2. 创建开发团队（动态角色 + 扫描是否有 [autocode] 任务）
                           ↓
-4. Tech Lead 代码审查 + UI 视觉审查 ── 不通过 → 回到步骤 3 修复
+3. [条件] 有 [autocode] 任务 → Tech Lead AutoCode 预生成（生成 CRUD 基础代码 + 编译检查）
+   ⚠️ 阻塞: 前后端开发等待 AutoCode 完成
+   无 [autocode] 任务 → 跳过，直接进入步骤 4
+                          ↓
+4. Frontend + Backend 并行开发（Backend 在 autocode 基础上补充自定义逻辑）
+                          ↓
+5. Tech Lead 代码审查 + UI 视觉审查 ── 不通过 → 回到步骤 4 修复
                           ↓ 通过
-5. QA 测试（API 测试 + 浏览器有头模拟测试）
+6. QA 测试（API 测试 + 浏览器有头模拟测试）
                           ↓
-6. 汇总报告
+7. 汇总报告
 ```
 
 ## Usage
@@ -136,70 +140,12 @@ Task tool:
 - If `pass: false` → 输出问题列表，建议运行 `/unify-doc-review $REQ_NAME` 完善文档，**停止执行，不创建团队**
 - If `pass: true` → 继续下一步
 
-### 2.5. Tech Lead AutoCode 预生成（文档检查通过后、创建团队前）
-
-**此步骤在创建开发团队之前执行**，由 Tech Lead 独立完成 CRUD 代码生成，为后续开发奠定基础。
-
-使用 Agent 工具启动 Tech Lead agent（非团队模式，独立执行）:
-
-```
-Agent tool:
-  subagent_type: "hz-tech-lead"
-  prompt: |
-    你是开发团队的 Tech Lead，负责需求 $REQ_NAME 的 AutoCode 预生成。
-
-    先读取 create-docs skill 的 SKILL.md (.claude/skills/create-docs/SKILL.md) 了解文档规范。
-    再读取 hab-autocode skill 的 SKILL.md (.claude/skills/hab-autocode/SKILL.md) 了解 AutoCode API 用法。
-
-    ## 你的任务
-
-    1. 读取 docs/$REQ_NAME/tech/tasks.md，扫描所有标注 [autocode] 的待办任务
-    2. 如果没有 [autocode] 任务 → 输出 {"autocode": false, "summary": "无 [autocode] 任务，跳过"} 并结束
-    3. 如果有 [autocode] 任务 → 按以下流程执行:
-
-    ### AutoCode 执行流程
-    a. 启动 HAB server（必须通过 process-manager）:
-       PM=.claude/skills/process-manager/scripts
-       $PM/list.sh
-       $PM/start.sh backend "go run ." --cwd ./server --env "HAB_CONFIG=config.local.yaml"
-       sleep 3
-       $PM/search.sh backend "listening on|server run success"
-    b. 调用 getPackage 查看已有包，确认目标包是否存在
-    c. 如需创建新包，调用 createPackage
-    d. 读取 backend/design.md 中的数据模型定义，构建 AutoCode 请求 JSON:
-       - structName、tableName、packageName、description、fields
-       - 设置 gvaModel: true, autoMigrate: true, autoCreateApiToSql: true, autoCreateMenuToSql: true
-    e. 调用 preview 预览生成文件列表
-    f. 调用 createTemp 正式生成代码
-    g. 执行 `cd server && go build ./...` 编译检查
-    h. 如果编译失败，分析并修复问题，循环直到编译通过
-    i. 使用 docs.py done 标记 [autocode] 任务为已完成:
-       python3 .claude/skills/create-docs/scripts/docs.py done <req> <task-number> --role tech
-    j. 使用 docs.py log 记录 AutoCode 生成信息
-    k. 清理服务:
-       $PM/stop.sh backend
-       $PM/clean.sh
-    l. 在 backend/design.md 末尾追加「AutoCode 已生成模块」段落（含模块名和文件路径）
-    m. 在 frontend/design.md 末尾追加「AutoCode 已生成页面」段落（含模块名和文件路径）
-
-    4. 输出结果:
-    {
-      "autocode": true,
-      "generated_modules": ["模块1", "模块2", ...],
-      "generated_files": ["文件路径1", "文件路径2", ...],
-      "synced_to": ["backend/design.md", "frontend/design.md"],
-      "remaining_tasks": ["非 autocode 的待办任务描述", ...],
-      "summary": "一句话总结"
-    }
-```
-
-**处理 AutoCode 结果:**
-- `autocode: false` → 无 [autocode] 任务，直接进入创建团队
-- `autocode: true` → 记录生成信息，进入创建团队。Backend agent 将基于生成的代码补充自定义逻辑
-
 ### 3. 创建团队与任务（动态角色）
 
 根据 Step 2 检查结果中的 `active_roles` 动态创建团队和任务。
+
+**首先扫描是否存在 [autocode] 任务:**
+读取 `docs/$REQ_NAME/tech/tasks.md`，检查是否有标注 `[autocode]` 的待办任务，记为 `HAS_AUTOCODE`。
 
 ```
 TeamCreate: team_name: "dev-$REQ_NAME"
@@ -207,13 +153,17 @@ TeamCreate: team_name: "dev-$REQ_NAME"
 
 **根据活跃角色创建任务:**
 
-- **frontend ✅** → 任务: Frontend 开发 (owner: frontend)
+- **仅当 HAS_AUTOCODE=true** → 任务: AutoCode 预生成 (owner: tech-lead)
+  - Tech Lead 执行 [autocode] 任务的 CRUD 代码生成
+  - ⚠️ **此任务完成前，前后端开发任务不得启动**
+
+- **frontend ✅** → 任务: Frontend 开发 (owner: frontend, **blockedBy: AutoCode 预生成（如有）**)
   - 读取 frontend/design.md 和 frontend/tasks.md
   - 参考 ui/ 设计稿实现视觉效果
   - 按任务列表逐项实现前端代码
   - 完成后通知 tech-lead
 
-- **backend ✅** → 任务: Backend 开发 (owner: backend)
+- **backend ✅** → 任务: Backend 开发 (owner: backend, **blockedBy: AutoCode 预生成（如有）**)
   - 读取 backend/design.md 和 backend/tasks.md
   - [autocode] 标注的任务已由 Tech Lead 预生成完成，**不要重复创建**
   - 在 autocode 生成的基础代码上补充自定义业务逻辑
@@ -230,9 +180,93 @@ TeamCreate: team_name: "dev-$REQ_NAME"
   - 浏览器有头模式模拟用户操作测试
   - 记录测试结果
 
+### 3.5. Tech Lead AutoCode 预生成（仅当 HAS_AUTOCODE=true 时执行 — 阻塞步骤）
+
+**跳过条件:** 如果 Step 3 扫描发现没有 [autocode] 任务（HAS_AUTOCODE=false），直接跳到 Step 4 启动开发。
+
+**此步骤在创建团队之后、启动前后端开发之前执行**。AutoCode 完成前，前后端 agent 不得启动。
+
+使用 Agent 工具启动 Tech Lead agent（团队内执行，阻塞后续步骤）:
+
+```
+Agent tool:
+  subagent_type: "hz-tech-lead"
+  team_name: "dev-$REQ_NAME"
+  prompt: |
+    你是开发团队的 Tech Lead，负责需求 $REQ_NAME 的 AutoCode 预生成。
+
+    先读取 create-docs skill 的 SKILL.md (.claude/skills/create-docs/SKILL.md) 了解文档规范。
+    再读取 hab-autocode skill 的 SKILL.md (.claude/skills/hab-autocode/SKILL.md) 了解 AutoCode API 用法。
+
+    ## 你的任务
+
+    1. 从 TaskList 获取 AutoCode 预生成任务，标记为 in_progress
+    2. 读取 docs/$REQ_NAME/tech/tasks.md，扫描所有标注 [autocode] 的待办任务
+    3. 如果没有 [autocode] 任务 → 标记任务为 completed，输出 {"autocode": false, "summary": "无 [autocode] 任务，跳过"} 并结束
+    4. 如果有 [autocode] 任务 → 按以下流程执行:
+
+    ### AutoCode 执行流程
+    a. 启动 HAB server（必须通过 process-manager）:
+       PM=.claude/skills/process-manager/scripts
+       $PM/list.sh
+       $PM/start.sh backend "go run ." --cwd ./server --env "HAB_CONFIG=config.local.yaml"
+       sleep 3
+       $PM/search.sh backend "listening on|server run success"
+    b. 调用 getPackage 查看已有包，确认目标包是否存在
+    c. 如需创建新包，调用 createPackage
+    d. 读取 backend/design.md 中的数据模型定义，构建 AutoCode 请求 JSON:
+       - structName、tableName、packageName、description、fields
+       - 设置 gvaModel: true, autoMigrate: true, autoCreateApiToSql: true, autoCreateMenuToSql: true
+    e. 调用 preview 预览生成文件列表
+    f. 调用 createTemp 正式生成代码
+    g. 执行 `cd server && go build ./...` 编译检查
+    g2. 读取 hab-autocode skill 的 references/crud-review-standard.md
+    g3. 按「AutoCode 后审阅（时机 A）」执行检查，输出审阅结果表格
+    g4. ❌ FAIL 项直接修复（如虚拟列问题、Save→Updates 等）
+    g5. 修复后重新审阅直到 0 FAIL
+    g6. 审阅结果记录到 log.md
+    h. 如果编译失败，分析并修复问题，循环直到编译通过
+    i. 使用 docs.py done 标记 [autocode] 任务为已完成:
+       python3 .claude/skills/create-docs/scripts/docs.py done <req> <task-number> --role tech
+    j. 使用 docs.py log 记录 AutoCode 生成信息
+    k. 清理服务:
+       $PM/stop.sh backend
+       $PM/clean.sh
+    l. 在 backend/design.md 末尾追加「AutoCode 已生成模块」段落（含模块名和文件路径）
+    m. 在 frontend/design.md 末尾追加「AutoCode 已生成页面」段落（含模块名和文件路径）
+
+    5. 标记 AutoCode 预生成任务为 completed
+    6. 输出结果:
+    {
+      "autocode": true,
+      "generated_modules": ["模块1", "模块2", ...],
+      "generated_files": ["文件路径1", "文件路径2", ...],
+      "synced_to": ["backend/design.md", "frontend/design.md"],
+      "remaining_tasks": ["非 autocode 的待办任务描述", ...],
+      "summary": "一句话总结"
+    }
+```
+
+**⚠️ 阻塞逻辑:**
+- **必须等待此 Agent 返回结果后，才能继续启动前后端开发 agent**
+- `autocode: true` → 记录生成信息，标记 AutoCode 任务为 completed，进入步骤 4。Backend agent 将基于生成的代码补充自定义逻辑
+
+### 4.5 开发完成审阅门禁（Backend 完成后、代码审查前）
+
+Backend agent 完成所有任务后，**调度层验证审阅结果**：
+
+1. 检查 log.md 中是否有 Backend 的审阅结果表格
+2. 确认审阅结果中 0 个 ❌ FAIL 项
+3. 确认冒烟测试 4 项全部通过
+
+- 审阅完整且 0 FAIL → 进入 Tech Lead 代码审查
+- 审阅缺失或有 FAIL → 通知 Backend 补充审阅/修复后重新提交
+
+这是**硬门禁**，与编译检查同级。
+
 ### 4. 启动团队成员（按活跃角色动态启动）
 
-根据活跃角色列表，只启动对应的 agent。Tech Lead 总是启动。
+根据活跃角色列表，只启动对应的 agent。Tech Lead 总是启动。**前后端 agent 必须在 AutoCode 预生成完成后才能启动。**
 
 **Frontend agent（仅当 frontend ✅ 时启动）:**
 ```
@@ -321,21 +355,14 @@ Task tool:
     9. 发送消息给 tech-lead 报告完成状态
 
     ## 强制自验（标记完成前）
-    已知 Bug 模式扫描清单（必须逐项检查代码）:
-    - [ ] BUG-001: model 已在 gorm.go 的 bizModel() 中注册
-    - [ ] BUG-002: GORM tag 无裸 varchar（用 size:200 替代）
-    - [ ] BUG-003/004: enter.go Api/Service group + router_biz.go InitXxxRouter 注册完整
-    - [ ] BUG-005: sys_table_columns 虚拟列配置正确
-    - [ ] BUG-006: Update 使用 Updates() 不用 Save()
-    - [ ] BUG-007/010: Create/Update 使用分离 struct，Update 只有 ID 是 required
-    - [ ] BUG-008: Count() 和 Order() 查询分离
-    - [ ] BUG-009: 布尔字段使用 *bool 指针类型
-    - [ ] BUG-011: sys_table_columns type 无裸 int（用 int32 替代）
-    在标记任务完成前，必须按 hz-backend agent 定义中的"CRUD 模块自验"清单逐项检查。
-    特别注意: Create/Update struct 分离、Switch toggle 兼容、翻译文件完整、唯一性校验跳过零值。
-    **至少 curl 测试 3 个关键场景**: 正常创建、缺少必填字段、Switch toggle。
-    检查 sys_table_columns 配置: type 值必须在 DiyForm 支持列表内（⚠️ 禁止裸 int → 用 int32），
-    formMust/formHidden/enum 等正确。详见 diyform-diytable-guide.md。
+    必须读取 hab-autocode skill 的 references/crud-review-standard.md，
+    按「开发完成审阅（时机 B）」执行所有检查项，输出审阅结果表格到 log.md。
+    ❌ FAIL 项必须修复。0 FAIL 后再执行冒烟 curl 测试（至少 5 个场景）：
+    - 正常创建
+    - 缺少必填字段
+    - Switch toggle
+    - 部分字段 Update 不清空其他字段
+    - 列表默认排序
 
     需求目录: docs/$REQ_NAME/
 ```
@@ -364,8 +391,9 @@ Task tool:
     将此指令传达给相关开发者，确保按用户要求调整开发优先级或方式。
 
     ## 说明
-    AutoCode 预生成已在创建团队前由 Step 2.5 独立完成。[autocode] 标注的任务已生成并编译通过。
-    你的职责聚焦于代码审查和团队协调。
+    如果有 [autocode] 任务，AutoCode 预生成已在 Step 3.5 由你完成。[autocode] 标注的任务已生成并编译通过。
+    如果没有 [autocode] 任务，Step 3.5 已跳过。
+    你的职责现在聚焦于代码审查和团队协调。
 
     你的工作流程:
 
@@ -381,17 +409,10 @@ Task tool:
        - 如有 backend + frontend → 前后端 API 接口是否对齐
        - 代码质量: 错误处理、类型安全、安全性
        - 是否有明显遗漏或偏离设计的实现
-    6.5. **已知问题扫描**（必须逐项检查代码）:
-         - [ ] BUG-001: model 已在 gorm.go 的 bizModel() 中注册
-         - [ ] BUG-002: GORM tag 无裸 varchar（用 size:200 替代）
-         - [ ] BUG-003/004: enter.go Api/Service group + router_biz.go InitXxxRouter 注册完整
-         - [ ] BUG-005: sys_table_columns 虚拟列配置正确
-         - [ ] BUG-006: Update 使用 Updates() 不用 Save()
-         - [ ] BUG-007/010: Create/Update 使用分离 struct，Update 只有 ID 是 required
-         - [ ] BUG-008: Count() 和 Order() 查询分离
-         - [ ] BUG-009: 布尔字段使用 *bool 指针类型
-         - [ ] BUG-011: sys_table_columns type 无裸 int（用 int32 替代）
-         发现问题直接标记为代码审查不通过。
+    6.5. **CRUD 审阅规范执行**:
+         读取 hab-autocode skill 的 references/crud-review-standard.md，
+         按「代码审查（时机 C）」执行全量检查，输出审阅结果表格。
+         ❌ FAIL → 代码审查不通过。
     6. 如有 ui 角色 → 等待 ui-designer 的视觉审查结果
     7. 综合审查结果处理:
        - **不通过**: 合并代码问题和视觉问题，创建修复任务（TaskCreate），详细描述需要修复的问题，指定 owner 为对应开发者。发送消息通知开发者修复。等待修复完成后重新审查。
@@ -468,12 +489,9 @@ Task tool:
     5. 读取 docs/$REQ_NAME/qa/tasks.md 获取测试任务
 
     ## 前置健全性检查（API 测试前必须执行）
-    在执行任何 API 测试之前，先做基础设施检查：
-    1. 编译检查：`cd server && go build ./...`
-    2. 注册检查：grep enter.go 和 router_biz.go 确认新模块已注册
-    3. GORM tag 检查：`grep -rn 'type:varchar[^(]' server/model/`
-    4. 请求 struct 检查：确认 Create/Update 是否使用分离的 struct
-    发现编译/注册问题 → 直接报告为 P0 阻塞 Bug，**不继续后续测试**。
+    读取 hab-autocode skill 的 references/crud-review-standard.md，
+    按「QA 前置检查（时机 D）」执行检查，输出审阅结果表格到 test-report.md。
+    ❌ FAIL → 报告 P0 阻塞 Bug，不继续后续测试。
 
     ## 测试执行（两阶段）
 
@@ -511,7 +529,7 @@ Task tool:
     需求目录: docs/$REQ_NAME/
 ```
 
-### 5. 监控团队进度（按活跃角色）
+### 5. 监控团队进度（按活跃角色，含 AutoCode 阻塞等待）
 
 等待团队成员消息（仅监控实际启动的角色）:
 - 活跃的开发角色（frontend/backend）完成 → Tech Lead 开始代码审查
@@ -590,7 +608,7 @@ python3 .claude/skills/create-docs/scripts/docs.py pipeline $REQ_NAME
 ## Important Notes
 
 - **文档检查是硬门槛** — 不通过直接停止，不创建团队，不开始开发
-- **AutoCode 预生成在创建团队前完成** — Tech Lead 独立执行，生成 CRUD 基础代码（model/api/router/service/前端页面），Backend 开发者在此基础上补充自定义逻辑，**不得重复创建已生成的文件**
+- **AutoCode 预生成是条件性阻塞步骤** — 仅当 tech/tasks.md 中存在 [autocode] 任务时才执行。在创建团队后、启动开发前由 Tech Lead 执行，生成 CRUD 基础代码（model/api/router/service/前端页面），**完成前前后端 agent 不得启动**。无 [autocode] 任务则跳过，直接启动开发。Backend 开发者在 autocode 基础上补充自定义逻辑，**不得重复创建已生成的文件**
 - **代码审查 + UI 视觉审查是质量关卡** — 不通过必须修复后重新审查，不能跳过直接进 QA
 - **Frontend 和 Backend 并行开发**，互不阻塞
 - **Tech Lead 代码审查与 UI 视觉审查并行**，综合结果后决定是否通过

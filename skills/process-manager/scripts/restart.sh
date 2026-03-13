@@ -20,10 +20,15 @@ fi
 
 command=$(pm_cmd "$name")
 cwd=$(pm_cwd "$name")
+port=$(pm_port "$name")
 
 # 先停止
 "$SCRIPT_DIR/stop.sh" "$name" 2>/dev/null || true
 sleep 1
 
-# 再启动
-"$SCRIPT_DIR/start.sh" "$name" "$command" --cwd "$cwd"
+# 再启动（保留端口参数）
+if [ -n "$port" ]; then
+  "$SCRIPT_DIR/start.sh" "$name" "$command" --cwd "$cwd" --port "$port"
+else
+  "$SCRIPT_DIR/start.sh" "$name" "$command" --cwd "$cwd"
+fi

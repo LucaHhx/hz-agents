@@ -454,43 +454,15 @@ AskUserQuestion:
 
 > **重要**：所有配置字段都有代码级默认值（`server/config/defaults.go`），
 > `config.local.yaml` 只需写入与默认值不同的字段和敏感信息。
-> 完整配置参考 `server/config.example.yaml`，极简配置参考 `server/config.minimal.yaml`。
+> 配置模板参考 `server/config.minimal.yaml`，完整配置参考 `server/config.example.yaml`。
 
-**SQLite 时（极简配置即可）：**
+**基于 `server/config.minimal.yaml` 生成 `server/config.local.yaml`：**
 
-只需生成：
-```yaml
-system:
-  db-type: sqlite
-
-jwt:
-  signing-key: <uuidgen 生成>
-```
-
-> 其余所有字段（sqlite.db-name、端口、日志等）均由 `config/defaults.go` 自动填充。
-
-**MySQL 时：**
-
-```yaml
-system:
-  db-type: mysql
-
-mysql:
-  path: <host>
-  port: "<port>"
-  db-name: <project-name>
-  username: <user>
-  password: <password>
-
-jwt:
-  signing-key: <uuidgen 生成>
-```
-
-**可选覆盖**（与默认值不同时才需要写）：
-- `system.addr` → 默认 9688
-- `system.api-addr` → 默认 9689
-- `autocode.module` → 默认从 go.mod 自动读取
-- `zap.prefix` → 默认 `[hab]`
+1. 读取 `server/config.minimal.yaml` 作为基础模板
+2. 根据用户选择的数据库类型修改：
+   - **SQLite**：模板默认即为 SQLite，取消注释 `jwt.signing-key` 并填入 `uuidgen` 生成的值（如需覆盖默认自动生成）
+   - **MySQL**：将 `system.db-type` 改为 `mysql`，取消注释 MySQL 配置段并填入步骤 3 收集的连接信息（host、port、db-name、username、password）
+3. 写入 `server/config.local.yaml`
 
 > config.local.yaml 在 .gitignore 中，含敏感信息不入库。
 > 同时保留 config.example.yaml 作为模板参考（已入库）。
