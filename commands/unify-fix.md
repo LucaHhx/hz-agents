@@ -210,8 +210,22 @@ Task tool:
 已记录到 docs/fixes/<N>-<slug>.md
 
 ### 后续建议
-- 运行 `/review-qa` 进行回归测试验证修复
+- ⚠️ [P0/P1] 运行 `/review-qa $REQ_NAME` 验证修复（P0 强烈建议，P1 推荐）
+- 如发现新问题，运行 `/unify-fix <新问题描述>` 继续修复
+- 查看流水线状态: `python3 .claude/skills/create-docs/scripts/docs.py pipeline`
 ```
+
+### 3.5. 验证引导
+
+如果 `docs/` 目录存在，运行 pipeline 状态检查:
+```bash
+python3 .claude/skills/create-docs/scripts/docs.py pipeline
+```
+
+根据修复严重级别输出对应级别的验证引导:
+- **P0**: "⚠️ P0 修复必须验证。请在提交后立即运行 `/review-qa $REQ_NAME` 执行回归验证"
+- **P1**: "建议运行 `/review-qa $REQ_NAME` 验证修复效果"
+- **P2**: "可运行 `/review-qa $REQ_NAME` 确认修复"
 
 ### 4. Git 提交
 
@@ -247,4 +261,4 @@ Task tool:
 - **最小开销原则** — 简单问题直接修，复杂问题才组建团队
 - **QA 按需参与** — P0 强制，涉及数据变更时加入，其他情况不需要
 - 修复要针对根因，不要只修表象
-- 如果问题复杂度超出修复范围（需要架构变更），建议改用 `/dev-team`
+- 如果问题复杂度超出修复范围（需要架构变更），建议改用 `/dev-tech`

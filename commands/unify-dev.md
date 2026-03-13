@@ -62,6 +62,20 @@ argument-hint: [需求名称]
 
 将确定的需求名称记为 `REQ_NAME`。
 
+### 1.5. 流水线与环境预检
+
+**a. Pipeline 状态检查**:
+运行 `python3 .claude/skills/create-docs/scripts/docs.py pipeline $REQ_NAME`
+
+- PM 文档阶段未完成 → **阻断**，提示: "请先运行 `/unify-doc-review $REQ_NAME`"
+- Tech 方案阶段未完成 → **阻断**，提示: "请先运行 `/unify-doc-review $REQ_NAME`"
+- 其他未完成 → 警告但不阻断
+
+**b. 编译预检**:
+运行 `cd server && go build ./...`
+- 失败 → **阻断**，提示: "代码编译失败，请先修复编译错误"
+- 成功 → 继续
+
 ### 2. Tech Lead 文档检查（硬门槛 — 动态角色）
 
 **首先读取角色规划**: 读取 `docs/$REQ_NAME/tech/design.md` 中的「## 角色规划」表格，确定活跃角色列表。如果没有角色规划表，降级扫描已存在的角色子目录。
@@ -119,7 +133,7 @@ Task tool:
 ```
 
 **处理检查结果:**
-- If `pass: false` → 输出问题列表，建议运行 `/doc-review $REQ_NAME` 完善文档，**停止执行，不创建团队**
+- If `pass: false` → 输出问题列表，建议运行 `/unify-doc-review $REQ_NAME` 完善文档，**停止执行，不创建团队**
 - If `pass: true` → 继续下一步
 
 ### 2.5. Tech Lead AutoCode 预生成（文档检查通过后、创建团队前）
@@ -508,7 +522,12 @@ Task tool:
 
 ### 6. 汇总开发报告
 
-所有任务完成后，输出报告:
+所有任务完成后，先运行 pipeline 状态检查:
+```bash
+python3 .claude/skills/create-docs/scripts/docs.py pipeline $REQ_NAME
+```
+
+然后输出报告:
 
 ```
 ## 开发报告: $REQ_NAME
@@ -586,7 +605,7 @@ Task tool:
 
 If 文档检查不通过:
 - 输出具体缺失/问题列表
-- 提示: `建议先运行 /doc-review $REQ_NAME 完善文档`
+- 提示: `建议先运行 /unify-doc-review $REQ_NAME 完善文档`
 - **停止执行**
 
 If 代码审查不通过:

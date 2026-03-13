@@ -576,12 +576,14 @@ fi
 **第二屏（后续指引）：**
 
 ```
-后续流水线（按需使用）：
+后续流水线:
+  → /unify-doc-review — 文档协作评审（PM + Tech + UI 三方评审与对齐）（推荐下一步）
+  → /unify-dev        — 全团队协作开发
+  → /unify-fix        — 智能 Bug 修复
+
+单独执行（按需）:
   /review-tech    — Tech Lead 创建技术方案
-  /review-ui      — UI 设计师产出设计稿（自定义页面）
-  /review-all     — 三端文档对齐评审（推荐）
-  /cmd-autocode   — 生成 CRUD 模块代码
-  /unify-dev      — 全团队协作开发
+  /review-ui      — UI 设计师产出设计稿
   /review-qa      — QA 验收测试
 
 查看流水线状态：

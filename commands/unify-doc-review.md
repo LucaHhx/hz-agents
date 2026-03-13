@@ -15,8 +15,10 @@ argument-hint: [需求名称]
 
 If 提供了 `$ARGUMENTS` → 只检查该需求目录是否存在。
 
-If `docs/` 不存在或为空 → 进入 **Phase 2: 用户驱动的文档初始化**。
-If `docs/` 已存在且有需求目录 → 跳到 **Phase 3: 团队评审**。
+判断进入哪个阶段:
+1. If `docs/` 不存在或为空 → 进入 **Phase 2: 完整初始化**（PM + Tech Lead 顺序协作）
+2. If `docs/` 存在，有需求目录，但 `docs/$REQ/tech/design.md` 不存在 → 进入 **Phase 2.5: Tech Lead 初始化**（PM 文档已就绪，仅需 Tech Lead 创建技术方案）
+3. If `docs/` 存在，且 `docs/$REQ/tech/design.md` 已存在 → 跳到 **Phase 3: 团队评审**
 
 ### 2. 用户驱动的文档初始化 (docs/ 不存在时)
 
@@ -91,6 +93,14 @@ Task tool:
 
 等待 Tech Lead 完成后，继续进入 Phase 3。
 
+### 2.5. Tech Lead 补充初始化（PM 文档已存在、tech/design.md 缺失时）
+
+docs/ 已有 PM 业务文档（plan.md, tasks.md），但缺少 Tech Lead 技术方案。
+直接启动 Step 2.2 的 Tech Lead 初始化流程（与用户 brainstorming 确定技术选型），
+跳过 Step 2.1（PM 初始化已完成）。
+
+完成后进入 Phase 3: 团队评审。
+
 ### 3. 团队评审
 
 #### 3.1 创建团队并分配任务
@@ -125,10 +135,15 @@ TeamCreate: team_name: "doc-review"
 - **交付自检**: 10 项检查清单全部通过才可标记完成（见 hz-ui agent 定义）
 - 完成后发送结果给 tech-lead 和 pm
 
-**任务 4 — 交叉评审与对齐** (pm + tech-lead + ui-designer 协作):
-- 确认需求、技术方案、UI 设计三方对齐
-- **Tech Lead 验证 UI 资源完整性**: 检查 Resources/ 非空、assets-manifest.md 存在且自检通过、merge.html 无外部 URL 引用本地资源。不完整则退回 UI 设计师补充
-- 解决不一致问题
+**任务 4 — 三端交叉对齐** (pm + tech-lead + ui-designer 协作):
+- 汇总各端独立评审发现的问题
+- 检查一致性（根据活跃角色动态调整）：
+  - **业务 ↔ 技术**: 每个业务场景是否有对应技术实现路径
+  - **业务 ↔ UI** (如有 ui): 设计稿是否覆盖所有用户场景
+  - **技术 ↔ UI** (如有 ui): 前端技术方案与设计系统是否对齐（组件命名、样式变量、资源引用），Resources/ 资源是否满足前端实现需求
+- **发现分歧或不一致 → 使用 brainstorming skill 与用户讨论，以用户决策为准修改文档**
+- Tech Lead 验证 UI 资源完整性: Resources/ 非空、assets-manifest.md 自检通过、merge.html 无外部 URL。不完整则退回 UI 设计师补充
+- 按决策结果修改对应文档，在 log.md 记录用户决策
 
 #### 3.2 启动团队成员
 
@@ -153,6 +168,17 @@ Task tool:
     - log.md 变更记录
 
     发现问题直接修复。完成后将结果发送给 tech-lead 和 ui-designer。
+
+    ## 阶段二：三端对齐
+    等待收到 tech-lead 和 ui-designer 的评审报告后：
+    1. 汇总三端问题，识别不一致之处
+    2. 重点关注：
+       - 业务场景是否每个都有技术实现路径和 UI 设计覆盖
+       - 验收标准是否与技术任务和设计页面匹配
+    3. 发现分歧时：使用 brainstorming skill 与用户讨论，清晰呈现各端差异，请用户决策
+    4. 按用户决策修改 plan.md 和 tasks.md
+    5. 完成后将最终对齐结果发送给 tech-lead 和 ui-designer
+
     [如有需求参数: 只评审需求: $ARGUMENTS]
 ```
 
@@ -178,6 +204,18 @@ Task tool:
     - **AutoCode 标记检查**: 如果项目有后台管理页面（web/src/view/ 存在）且 backend/design.md 中有新数据模型需要建表，确认 tech/tasks.md 中对应的标准 CRUD 任务已加 [autocode] 前缀。缺失则补充标记。
 
     发现问题直接修复。完成后将结果发送给 pm 和 ui-designer。
+
+    ## 阶段二：三端对齐
+    等待收到 pm 和 ui-designer 的评审报告后：
+    1. 汇总技术视角的不一致问题
+    2. 重点关注：
+       - 前端技术方案是否与 UI 设计系统对齐（组件命名、样式变量、资源引用）
+       - UI Resources/ 中提供的资源是否满足前端实现需求
+       - 后端接口设计是否满足所有业务场景
+    3. 发现分歧时：使用 brainstorming skill 与用户讨论，提出技术方案选项，请用户决策
+    4. 按用户决策修改 backend/design.md、frontend/design.md 和对应 tasks.md
+    5. 完成后将最终对齐结果发送给 pm 和 ui-designer
+
     [如有需求参数: 只评审需求: $ARGUMENTS]
 ```
 
@@ -226,17 +264,32 @@ Task tool:
     5. 使用 docs.py CLI 更新 ui/tasks.md 任务状态
     6. 完成后将设计成果发送给 tech-lead 和 pm
 
+    ## 阶段二：三端对齐
+    等待收到 pm 和 tech-lead 的评审报告后：
+    1. 汇总设计视角的不一致问题
+    2. 重点关注：
+       - 设计稿是否覆盖所有业务用户场景（对照 plan.md）
+       - 设计系统是否与前端 design.md 的组件方案一致
+       - Resources/ 资源是否满足前端实现需求
+    3. 发现分歧时：使用 brainstorming skill 与用户讨论，展示设计方案选项，请用户决策
+    4. 按用户决策更新 merge.html、design.md、Resources/ 等设计文档
+    5. 完成后将最终对齐结果发送给 tech-lead 和 pm
+
     [如有需求参数: 只处理需求: $ARGUMENTS]
 ```
 
 ### 4. 等待完成并汇总
 
-等待三个 agent 完成后，汇总评审报告:
+等待三个 agent 完成两个阶段（独立评审 + 三端对齐）后，汇总评审报告:
 - 文档结构状态
 - PM 评审结果
 - Tech Lead 评审结果
 - UI 设计产出状态
-- 交叉评审对齐情况
+- 三端对齐结果:
+  - 业务 ↔ 技术: [对齐状态，解决的分歧]
+  - 业务 ↔ UI: [对齐状态]（如有 ui 角色）
+  - 技术 ↔ UI: [对齐状态]（如有 ui 角色）
+- 用户决策记录: [brainstorming 中用户的关键决策]
 - 改进建议
 
 ### 5. 清理团队
@@ -255,14 +308,18 @@ Task tool:
 
 ### 7. 后续建议
 
+运行 pipeline 状态检查:
+```bash
+python3 .claude/skills/create-docs/scripts/docs.py pipeline $REQ_NAME
+```
+
 汇总报告末尾增加后续建议:
 
 ```
 后续建议:
-  1. /review-all $REQ_NAME        — 三端文档对齐评审（推荐）
-  2. /cmd-autocode                — 生成 CRUD 模块代码（如有 [autocode] 任务）
-  3. /unify-dev $REQ_NAME         — 直接进入全团队开发
-  4. /dev-tech $REQ_NAME          — Tech Lead 带队精简开发
+  1. /cmd-autocode                — 生成 CRUD 模块代码（如有 [autocode] 任务）
+  2. /unify-dev $REQ_NAME         — 直接进入全团队开发（推荐下一步）
+  3. /dev-tech $REQ_NAME          — Tech Lead 带队精简开发
 ```
 
 ## Important Notes
