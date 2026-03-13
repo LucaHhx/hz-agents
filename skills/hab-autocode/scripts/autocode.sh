@@ -9,7 +9,6 @@
 #   delete-package <id>         删除包
 #   preview <json_file>         预览代码
 #   create <json_file>          创建代码
-#   add-func <json>             添加方法
 #   get-db                      获取数据库列表
 #   get-tables [dbName]         获取表列表
 #   get-columns <tableName>     获取表字段

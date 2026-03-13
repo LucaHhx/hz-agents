@@ -15,8 +15,7 @@ instructions below. First determine which scenario applies:
 Trigger keywords: "更新", "update", "upgrade", "pull latest", "同步最新",
 or user provides a URL like:
   - https://github.com/LucaHhx/hz-agents
-  - https://github.com/LucaHhx/hz-agents/tree/hz-project
-  - https://github.com/LucaHhx/hz-agents/blob/hz-project/README.md
+  - https://github.com/LucaHhx/hz-agents/tree/main
 
 ### How to update:
 
@@ -65,9 +64,9 @@ Follow these steps EXACTLY:
 ## Step 1: Parse the URL and clone hz-agents
 
 IMPORTANT: The user may provide a URL that includes a branch path, such as:
-  - https://github.com/LucaHhx/hz-agents/tree/hz-project     → branch = "hz-project"
   - https://github.com/LucaHhx/hz-agents/tree/main            → branch = "main"
-  - https://github.com/LucaHhx/hz-agents/blob/hz-project/README.md → branch = "hz-project"
+  - https://github.com/LucaHhx/hz-agents/tree/main            → branch = "main"
+  - https://github.com/LucaHhx/hz-agents/blob/main/README.md       → branch = "main"
   - https://github.com/LucaHhx/hz-agents                      → branch = default (main)
 
 You MUST extract the branch name from the URL if `/tree/<branch>` or `/blob/<branch>/` is present.
@@ -567,8 +566,7 @@ docs/
 
 | 分类 | Skill | 说明 |
 |------|-------|------|
-| **项目管理** | `hz-project` | 项目全生命周期管理知识库（10 个模块） |
-| | `create-docs` | 三层文档管理系统，含 `docs.py` CLI |
+| **项目管理** | `create-docs` | 三层文档管理系统，含 `docs.py` CLI |
 | | `brainstorming` | 需求探索与设计验证 |
 | **代码生成** | `hab-autocode` | AutoCode API 操作指南（CRUD 模块生成） |
 | | `subagent-driven-development` | 子 Agent 驱动开发 + 代码审查 |

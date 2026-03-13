@@ -93,6 +93,45 @@ python docs.py start <req> <task-id> --role backend
 - 遵循项目代码规范
 - 确保 API 接口与前端约定一致
 
+### 3.5 CRUD 模块自验（标记完成前必须执行）
+
+对 AutoCode 生成或 CRUD 相关的任务，标记完成前**必须**逐项通过：
+
+#### 结构体检查
+- [ ] Create/Update 使用分离的 struct（`CreateXxxRequest` / `UpdateXxxRequest`）
+- [ ] CreateXxxRequest 的必填字段有 `binding:"required"`
+- [ ] UpdateXxxRequest 只有 ID 是 `binding:"required"`，其余字段无 required
+- [ ] 布尔字段使用 `*bool` 指针类型（Update struct 中必须）
+- [ ] Update 方法使用 `Updates()` 而非 `Save()`
+
+#### 业务校验检查
+- [ ] 唯一性字段（name/code 等）在 Service 层 Create **和** Update 中都有查重
+- [ ] 唯一性校验在 Update 时**跳过零值**（避免 Switch toggle 只传 {ID, enabled} 时触发）
+- [ ] 数据库唯一索引报错有友好提示（不暴露原始 SQL 错误）
+
+#### 翻译文件检查
+- [ ] `server/translation/zh-CN/business/<module>.json` 中 columns/enums/messages 完整
+- [ ] enums 段的占位符已替换为中文（如 enabled: 启用/禁用）
+- [ ] 后端 menu.json（zh-CN 和 en-US）中有菜单翻译条目
+
+#### sys_table_columns 配置检查（控制前端 DiyForm/DiyTable 渲染）
+- [ ] 所有字段的 `type` 值在 DiyForm 支持列表内：
+      `string`, `bool/boolean`, `int32`, `int64`, `number`, `amount`, `float`, `float64`,
+      `date`, `datetime`, `uintDate`, `enum/protoEnum`, `textarea`, `table`, `object`
+      **⚠️ 禁止裸 `int`**（DiyForm 不识别，会渲染为 textarea）→ 改用 `int32`
+- [ ] 必填字段 `formMust = true`（前端表单红色星号）
+- [ ] 不需要在表单中显示的字段 `formHidden = true`（如系统字段）
+- [ ] 枚举字段 type 为 `enum`，且 `enum` 数组包含所有枚举值
+- [ ] 列宽 `with` 根据数据内容合理设置
+
+#### 冒烟测试（启动服务 curl 验证）
+- [ ] 创建接口正常返回
+- [ ] 创建缺少必填字段返回 1001 错误
+- [ ] 编辑弹窗中 Switch 切换后保存正常（布尔字段 false 能正确保存）
+- [ ] 列表默认排序符合 design.md 定义
+
+**任何一项不通过 → 修复后再标记完成。**
+
 ### 4. 完成任务
 ```bash
 # 标记任务完成
@@ -101,10 +140,14 @@ python docs.py done <req> <task-id> --role backend
 
 ## CRUD 框架知识（必读）
 
-详见 `.claude/skills/hz-project/references/crud-framework-guide.md`
+详见 `.claude/skills/hab-temp/references/crud-workflow.md`
+
+### DiyForm / DiyTable 配置驱动机制（必读）
+详见 `.claude/skills/hab-temp/references/diy-components.md`
+
+Backend 负责维护 sys_table_columns 配置和翻译文件，这些直接控制前端渲染。
 
 ### AutoCode 后集成检查（每次必须执行）
-详见 `.claude/skills/hz-project/references/hab-integration-checklist.md`
 
 关键检查项：
 1. enter.go 注册完整（api/service/router 三层）
@@ -112,8 +155,17 @@ python docs.py done <req> <task-id> --role backend
 3. config.local.yaml migration 配置
 4. `cd server && go build ./...` 编译通过
 
+```bash
+# AutoCode 集成快速检查（替换 Xxx/xxx 为实际模块名）
+MODULE=Xxx; PKG=business
+echo "=== enter.go Api group ===" && grep -rn "${MODULE}" server/api/v1/${PKG}/enter.go
+echo "=== enter.go Service group ===" && grep -rn "${MODULE}" server/service/${PKG}/enter.go
+echo "=== router_biz.go ===" && grep -rn "Init${MODULE}" server/initialize/router_biz.go
+echo "=== GORM varchar check ===" && grep -rn 'type:varchar[^(]' server/model/
+echo "=== Compile ===" && cd server && go build ./...
+```
+
 ### GORM 常见陷阱（硬性规则）
-详见 `.claude/skills/hz-project/references/gorm-pitfalls.md`
 
 - ❌ 禁止 `Save()` 做部分更新 → ✅ `Updates()`
 - ❌ 禁止 `type:varchar` 不带长度 → ✅ `size:500`
@@ -121,7 +173,6 @@ python docs.py done <req> <task-id> --role backend
 - ❌ 禁止 Count() 之前设 Order() → ✅ 分离处理
 
 ### 请求结构体设计（硬性规则）
-详见 `.claude/skills/hz-project/references/go-request-patterns.md`
 
 Create/Update **必须**分离 struct。`binding:"required"` 只用于 Create。
 

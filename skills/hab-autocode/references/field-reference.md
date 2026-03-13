@@ -43,23 +43,21 @@
 | primaryKey | bool | 否 | 是否主键 (gvaModel=false 时需要) |
 | fieldIndexType | string | 否 | 索引类型 |
 
-## AutoFunc 字段
+### fieldType → DiyForm 组件映射
 
-| 字段 | 类型 | 必填 | 说明 |
-|------|------|------|------|
-| package | string | 是 | 包名 |
-| structName | string | 是 | 结构体名 |
-| packageName | string | 是 | 文件名 |
-| humpPackageName | string | 是 | 驼峰文件名 |
-| abbreviation | string | 是 | 简称 |
-| funcName | string | 是 | 方法名 (首字母大写) |
-| router | string | 是 | 路由路径 (小驼峰) |
-| method | string | 是 | HTTP 方法: GET, POST, PUT, DELETE |
-| description | string | 否 | 描述 |
-| funcDesc | string | 否 | 方法介绍 |
-| isAuth | bool | 否 | 是否需要鉴权路由 |
-| isPreview | bool | 否 | true 时只预览不注入 |
-| isAi | bool | 否 | AI 模式 (可自定义代码) |
-| apiFunc | string | 否 | 自定义 API handler 代码 (isAi=true 时) |
-| serverFunc | string | 否 | 自定义 service 代码 (isAi=true 时) |
-| jsFunc | string | 否 | 自定义前端 JS 代码 (isAi=true 时) |
+AutoCode 的 `fieldType` 会写入 `sys_table_columns.type`，DiyForm 根据此值决定渲染组件：
+
+| fieldType | sys_table_columns.type | DiyForm 组件 | DiyTable 渲染 | 备注 |
+|-----------|----------------------|-------------|--------------|------|
+| string | string | el-input | 文本 | |
+| int | ⚠️ int → **需改为 int32** | ❌ textarea | 文本 | **DiyForm 不识别裸 int** |
+| int64 | int64 | el-input-number | 文本 | |
+| float64 | float64 | el-input-number (precision:4) | 格式化数字 | |
+| bool | bool/boolean | el-switch | "是/否" | |
+| time.Time | datetime | el-date-picker | 日期时间 | |
+| enum | enum | el-select | el-tag（翻译） | 需翻译文件 enums 段 |
+| richtext | richtext | RichEdit | 文本 | |
+| picture | picture | SelectImage | el-image | |
+| file | file | SelectFile | 文本 | |
+| json | json | textarea | 文本 | |
+| array | array | ArrayCtrl | 文本 | |

@@ -64,25 +64,36 @@ You follow the component design and API contracts in design.md. When you encount
 
 ## CRUD 框架知识（必读）
 
-详见 `.claude/skills/hz-project/references/crud-framework-guide.md`
+详见 `.claude/skills/hab-temp/references/crud-workflow.md`
+
+### DiyForm / DiyTable 工作机制（必读）
+详见 `.claude/skills/hab-temp/references/diy-components.md`
+
+了解 DiyForm 的自定义扩展点（slot、formatItem、visibleColumnsFunc 等），
+以及 sys_table_columns 如何控制所有渲染行为。
 
 ### AutoCode CRUD 页面的前端适配要点
-AutoCode 生成的 Vue 页面需要以下常见适配：
+AutoCode 生成的 CRUD 页面由后端配置驱动，前端适配工作量很小：
 
-1. **翻译文件在后端**（最常见误解）：
-   - 翻译文件位于 `server/translation/zh-CN/business/{packageName}.json`
-   - 前端从后端 API 获取翻译数据，不需要在前端维护 i18n 文件
-   - 需要检查翻译 JSON 中的枚举占位符是否已替换为真实中文含义
+1. **所有渲染由 sys_table_columns 后端配置控制**：
+   - DiyForm/DiyTable 根据 `sys_table_columns` 配置动态渲染表格列和表单控件
+   - 字段类型、宽度、排序、必填标记、显示/隐藏等**全部在后端配置**
+   - 前端不维护字段类型映射，不维护翻译文件
+   - 如果字段渲染异常（如数字显示为文本框），是后端 `sys_table_columns.type` 配置问题
 
-2. **Switch 组件数据格式**：
-   - 切换时只发送 `{ID, enabled}` 两个字段，不发送全部字段
-   - 后端使用独立的 Update struct（不含 binding:"required"），确保部分更新可行
+2. **翻译完全由后端提供**：
+   - 翻译文件位于 `server/translation/{lang}/business/{packageName}.json`
+   - 前端启动时调用 `/api/translation/messages` 获取全量翻译到 pinia store
+   - 前端只调用 `$t()` 消费，**翻译缺失/枚举占位符未替换 → 反馈给 Backend**
 
-3. **枚举值中文显示**：
-   - 合作状态等枚举字段需要 tag 组件映射（如 evaluating→评估中）
+3. **自定义字段编辑**（超出标准 DiyForm 渲染时）：
+   - 使用 `slot:column-{jsonName}` 替换指定字段的编辑器
+   - 使用 `slot:additional` 追加额外表单项
+   - 使用 `formatItem` prop 在提交前转换数据
+   - 使用 `visibleColumnsFunc` 动态控制字段可见性
+   - 详见 `.claude/skills/hab-temp/references/diy-components.md`
 
-4. **标准 CRUD 不需要参考 UI 设计稿**，直接使用框架 Element Plus 默认样式
-
+4. **标准 CRUD 不需要参考 UI 设计稿**，直接使用框架 DiyForm/DiyTable 默认样式
 ## Your Responsibilities
 
 1. **理解需求**: 阅读 L2 plan.md 了解业务需求和用户场景
@@ -120,6 +131,14 @@ python docs.py start <req> <task-id> --role frontend
 - 对接后端 API（按 design.md 中约定的接口格式）
 - 复用 UI 设计稿中的 Tailwind class 和 `ui/Resources/` 中的资源
 - **优先使用本地资源**: 图标用 `ui/Resources/icons/*.svg`，样式变量用 `ui/Resources/tokens.css`，Tailwind 配置用 `ui/Resources/tailwind.config.js`。禁止用外部 URL 替代本地已有的资源
+
+### 3.5 CRUD 页面自验（标记完成前必须执行）
+
+- [ ] 页面路由注册正确，能正常访问
+- [ ] 列表页加载正常，表格数据显示正确
+- [ ] 新增/编辑弹窗能正常打开、填写、提交
+- [ ] 如有自定义 slot（column-{jsonName}、additional），验证交互和数据绑定正确
+- [ ] 如发现渲染异常（字段类型不对、翻译显示 key、菜单显示 key），**反馈给 Backend 检查 sys_table_columns 或翻译文件**
 
 ### 4. 完成任务
 ```bash
@@ -225,7 +244,6 @@ agent-browser close
 
 - `web/` 项目遵循 Vue 3 生态（Element Plus 组件、Pinia 状态、Vue Router）
 - `client/` 项目遵循 React 生态（Tailwind 样式、Zustand 状态、React Router）
-- 详细多端规范参考 `hz-project` skill 的 `modules/05-multi-endpoint.md`
 
 ## What You Do NOT Do
 

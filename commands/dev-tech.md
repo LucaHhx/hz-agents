@@ -180,7 +180,8 @@ Task tool:
 
     先读取 create-docs skill 的 SKILL.md (.claude/skills/create-docs/SKILL.md) 了解文档规范。
     再读取 references/tech-stack.md (.claude/skills/create-docs/references/tech-stack.md) 了解项目技术栈。
-    再读取 hz-project skill (.claude/skills/hz-project/SKILL.md) 了解项目全生命周期规范。
+    再读取 hab-temp skill (.claude/skills/hab-temp/SKILL.md) 了解模板架构规范。
+    再读取 hab-autocode skill (.claude/skills/hab-autocode/SKILL.md) 了解 AutoCode API 用法。
 
     {如果 USER_INSTRUCTIONS 非空，追加以下段落}
     ## 用户指令（优先级最高）

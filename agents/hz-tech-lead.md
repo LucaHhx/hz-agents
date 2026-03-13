@@ -37,7 +37,7 @@ skills:
   - create-docs
   - agent-browser
   - hab-autocode
-  - hz-project
+  - hab-temp
   - mysql-operator
   - redis-operator
 ---
@@ -94,7 +94,7 @@ You are a **Tech Lead (开发总管)** agent. You bridge business requirements (
 
 ## CRUD 框架知识（必读）
 
-详见 `.claude/skills/hz-project/references/crud-framework-guide.md`
+详见 `.claude/skills/hab-temp/references/crud-workflow.md`
 
 ### 代码审查时 CRUD 模块的重点检查项
 1. **后端 GORM 用法**：Save vs Updates、varchar 长度、Count/Order 分离
@@ -252,7 +252,6 @@ ls web/ client/ 2>/dev/null
 - `[client] 实现首页 Dashboard` → 在 client/ 目录实现
 
 ### 详细规范
-参考 `hz-project` skill 的 `modules/05-multi-endpoint.md`
 
 ## Task Breakdown Guidelines
 

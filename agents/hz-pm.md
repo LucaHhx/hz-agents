@@ -68,7 +68,7 @@ Technical decisions (tech stack, framework, database, architecture, API design, 
 ## CRUD 模块认知（必读）
 
 **在处理涉及数据管理的需求时，必须先判断是否为标准 CRUD 模块。**
-详见 `.claude/skills/hz-project/references/crud-framework-guide.md`
+详见 `.claude/skills/hab-temp/references/crud-workflow.md`
 
 ### 简单 CRUD 需求的文档精简规则
 如果需求是标准的单表增删改查（如供应商管理、分类管理、标签管理等）：
@@ -76,7 +76,40 @@ Technical decisions (tech stack, framework, database, architecture, API design, 
 - tasks.md 精简：验收标准使用固定模板（创建/编辑/删除/搜索/筛选/启用禁用/查看详情）
 - **不需要 UI 设计**：标准 CRUD 使用 AutoCode + 框架默认样式
 - **不需要复杂的用户场景描述**：CRUD 交互模式是固定的（列表页+表单弹窗+详情弹窗）
-- 文档精简策略详见 `.claude/skills/hz-project/references/doc-simplification.md`
+
+#### 简单 CRUD plan.md 模板
+```markdown
+# 需求计划 — [模块名]管理
+
+## 目标
+提供[模块名]的基础数据管理功能。
+
+## 数据字段
+
+| 字段 | 类型 | 必填 | 说明 |
+|------|------|------|------|
+| name | string(200) | 是 | 名称 |
+
+## 业务规则
+- [规则1]
+
+## 枚举值定义
+
+| 字段 | 值 | 含义 |
+|------|-----|------|
+| status | 1 | 启用 |
+| status | 0 | 禁用 |
+
+## 验收标准（固定模板）
+- [ ] 创建记录：全字段填写，保存成功
+- [ ] 编辑记录：部分字段修改，保存不影响其他字段
+- [ ] 删除记录：软删除，列表不再显示
+- [ ] 批量删除：选择多条记录批量删除
+- [ ] 分页列表：默认按创建时间倒序
+- [ ] 搜索筛选：按关键字段搜索
+- [ ] 启用/禁用：Switch 切换不影响其他字段
+- [ ] 查看详情：展示所有字段信息
+```
 
 ## Your Responsibilities
 

@@ -1,494 +1,167 @@
 ---
 name: hab-autocode
-description: "HAB AutoCode Skill — AI 自动化代码生成操作指南。通过 API 调用 HAB AutoCode 系统生成 CRUD 模块代码。触发条件：创建新的业务模块（如'创建一个订单管理模块'）、基于数据库表生成代码、查看/回滚已生成的代码、为已有模块添加新方法、autocode、代码生成、CRUD。"
+description: "HAB AutoCode Skill — AI 自动化代码生成操作指南。通过 API 调用 HAB AutoCode 系统生成 CRUD 模块代码。触发条件：创建新的业务模块（如'创建一个订单管理模块'）、基于数据库表生成代码、查看/回滚已生成的代码、autocode、代码生成、CRUD。"
 ---
 
 # HAB AutoCode Skill
 
-> AI 自动化代码生成操作指南 -- 通过 API 调用 HAB AutoCode 系统生成 CRUD 模块代码
+通过 API 调用 HAB AutoCode 系统，生成完整 CRUD 模块代码（model/api/router/service/前端页面）。
 
-## 概述
+## 资源清单
 
-本 Skill 封装了 HAB 系统的 AutoCode API，支持:
-- 创建业务包 (package)
-- 生成完整 CRUD 模块代码 (model/api/router/service/前端)
-- 预览代码再确认生成
-- 查询数据库表结构
-- 为已有模块添加方法
-- 查看生成历史和回滚操作
+### scripts/ — 可执行脚本
 
-### 触发条件
+| 脚本 | 用途 |
+|------|------|
+| `scripts/autocode.sh` | AutoCode API 封装，所有操作通过此脚本调用 |
+| `scripts/config.sh` | 从 config.yaml 读取 API Key 和服务器地址，导出环境变量 |
 
-当用户需要:
-- 创建新的业务模块 (如"创建一个订单管理模块")
-- 基于数据库表生成代码
-- 查看/回滚已生成的代码
-- 为已有模块添加新方法
+### references/ — 按需加载的参考文档
+
+| 文件 | 内容 | 何时读取 |
+|------|------|---------|
+| `references/api-reference.md` | 完整 API 端点、curl 示例、请求/响应格式、错误处理 | 需要手动调用 API 或调试时 |
+| `references/field-reference.md` | AutoCode/AutoCodeField 完整字段定义 + fieldType→DiyForm 组件映射 | 构建请求体时查阅字段类型和选项 |
+| `references/post-generation-guide.md` | 生成后业务完善指南：SysTableColumns 配置、翻译文件、按钮/列权限 | 代码生成完成后进行业务定制化 |
+| `references/post-generation-checklist.md` | 以"订单模块"为实例的完整完善流程示例 | 首次执行生成后完善时参考 |
+
+### examples/ — 请求体模板
+
+| 文件 | 用途 |
+|------|------|
+| `examples/create-module.json` | 完整字段的模块创建请求示例 |
+| `examples/create-module-simple.json` | 最简模块创建请求示例 |
+| `examples/create-package.json` | 包创建请求示例 |
+| `examples/rollback.json` | 回滚请求示例 |
 
 ## 前置条件
 
 1. HAB server 已启动并运行
-2. 配置文件中已设置 `autocode.api-key`（优先读取 `config.local.yaml`，其次 `config.yaml`）
-3. 数据库已初始化 (已执行 initdb)
-
-### 配置 API Key
-
-在 `server/config.local.yaml`（或 `config.yaml`）中添加:
+2. `server/config.local.yaml`（或 `config.yaml`）中已设置 `autocode.api-key`
+3. 数据库已初始化
 
 ```yaml
+# server/config.local.yaml
 autocode:
-  api-key: "your-random-api-key-here"  # 生成: uuidgen 或 openssl rand -hex 32
+  api-key: "your-random-api-key-here"  # uuidgen 或 openssl rand -hex 32
 ```
 
-> `autocode` 的其他字段（web、server、module）均有代码级默认值（见 `config/defaults.go`），
-> 可省略不写。`module` 会自动从 `go.mod` 读取。
+> `autocode` 的其他字段（web、server、module）均有代码级默认值，可省略。`module` 会自动从 `go.mod` 读取。
 
-重启 server 使配置生效。
+## 辅助脚本用法
 
-## 辅助脚本
-
-项目提供了辅助脚本简化 API 调用:
-
-- `scripts/config.sh` -- 从 config.yaml 读取配置，导出环境变量
-- `scripts/autocode.sh` -- 封装所有 API 的 curl 调用
-
-### 使用方式
+优先使用辅助脚本，自动读取配置。脚本位于本 skill 的 `scripts/autocode.sh`，使用前需定位实际路径:
 
 ```bash
-# 直接使用脚本
-.claude/skills/hab-autocode/scripts/autocode.sh packages
-.claude/skills/hab-autocode/scripts/autocode.sh get-db
-.claude/skills/hab-autocode/scripts/autocode.sh preview examples/create-module.json
+# 定位 autocode.sh（根据项目实际 skills 安装位置）
+AC=$(find . -path "*/hab-autocode/scripts/autocode.sh" -maxdepth 5 2>/dev/null | head -1)
+
+$AC packages                          # 查询已有包
+$AC create-package '{"packageName":"order","label":"订单管理","desc":"订单相关","template":"package"}'
+$AC get-db                            # 数据库列表
+$AC get-tables hab                    # 表列表
+$AC get-columns sys_users             # 表字段
+$AC preview examples/create-module.json   # 预览代码
+$AC create examples/create-module.json    # 生成代码
+$AC history                           # 生成历史
+$AC rollback 1                        # 回滚（删除所有）
+$AC rollback 1 keep-table             # 回滚但保留数据库表
 ```
 
-脚本会自动从 `server/config.local.yaml`（或 `config.yaml`）读取 API Key 和服务器地址。
+> 需要完整 curl 命令或调试 → 读取 `references/api-reference.md`
 
-## API 端点清单
+## 核心工作流
 
-所有请求需携带 `x-api-key` 请求头。基础 URL 默认为 `http://localhost:9688`（具体端口和前缀以 config.yaml 为准）。
+### 流程一: 创建包 → 生成模块
 
-### 通用 curl 格式
-
-```bash
-# POST 请求
-curl -s -X POST "http://localhost:9688/autoCode/<endpoint>" \
-  -H "Content-Type: application/json" \
-  -H "x-api-key: <your-api-key>" \
-  -d '<json-body>'
-
-# GET 请求
-curl -s -X GET "http://localhost:9688/autoCode/<endpoint>?param=value" \
-  -H "x-api-key: <your-api-key>"
+```
+1. 查询已有包: $AC packages
+2. 创建新包（如不存在）: $AC create-package '<json>'
+3. 构建请求 JSON（参考 examples/ 和 references/field-reference.md）
+4. 预览: $AC preview <json_file>
+5. 确认生成: $AC create <json_file>
+6. 编译检查: cd server && go build ./...
+7. 业务完善: 读取 references/post-generation-guide.md
 ```
 
-### 成功响应格式
+### 请求体关键字段
 
-所有 API 返回统一格式:
-```json
-{
-  "code": 0,
-  "data": { ... },
-  "msg": "Success"
-}
-```
-
-`code` 为 0 表示成功，非 0 表示失败，`msg` 包含错误信息。
-
----
-
-## 操作流程
-
-### 流程一: 创建包
-
-包是模块的容器，创建模块前必须先确保包已存在。
-
-**步骤 1: 查询已有包**
-
-```bash
-curl -s -X POST "http://localhost:9688/autoCode/getPackage" \
-  -H "Content-Type: application/json" \
-  -H "x-api-key: $API_KEY" \
-  -d '{}'
-```
-
-响应:
-```json
-{
-  "code": 0,
-  "data": {
-    "pkgs": [
-      {
-        "ID": 1,
-        "packageName": "system",
-        "template": "package",
-        "label": "system包",
-        "desc": "系统自动读取system包",
-        "module": "hab"
-      }
-    ]
-  },
-  "msg": "Success"
-}
-```
-
-**步骤 2: 创建新包 (如果不存在)**
-
-```bash
-curl -s -X POST "http://localhost:9688/autoCode/createPackage" \
-  -H "Content-Type: application/json" \
-  -H "x-api-key: $API_KEY" \
-  -d '{
-    "packageName": "order",
-    "label": "订单管理",
-    "desc": "订单相关业务模块",
-    "template": "package"
-  }'
-```
-
-参数说明:
-| 参数 | 类型 | 必填 | 说明 |
-|------|------|------|------|
-| packageName | string | 是 | 包名 (小写英文，不含 / \ ..) |
-| label | string | 否 | 展示名 |
-| desc | string | 否 | 描述 |
-| template | string | 是 | 模板类型: "package"（标准业务包）、"plugin"（插件包）或 "storage"（存储服务包，用于文件上传/存储相关模块） |
-
-创建包会自动生成 `api/v1/<pkg>/enter.go`、`router/<pkg>/enter.go`、`service/<pkg>/enter.go` 等目录结构。
-
-**获取可用模板类型:**
-
-```bash
-curl -s -X GET "http://localhost:9688/autoCode/getTemplates" \
-  -H "x-api-key: $API_KEY"
-```
-
-**删除包:**
-
-```bash
-curl -s -X POST "http://localhost:9688/autoCode/delPackage" \
-  -H "Content-Type: application/json" \
-  -H "x-api-key: $API_KEY" \
-  -d '{"id": 1}'
-```
-
----
-
-### 流程二: 创建模块 (代码生成)
-
-**步骤 1: 构建请求体**
-
-完整字段示例 (参见 `examples/create-module.json`):
+构建模块请求时的必填和推荐字段:
 
 ```json
 {
-  "package": "order",
-  "tableName": "orders",
-  "structName": "Order",
-  "packageName": "order",
-  "abbreviation": "order",
-  "humpPackageName": "order",
-  "description": "订单管理",
-  "businessDB": "",
-  "gvaModel": true,
-  "autoMigrate": true,
-  "autoCreateApiToSql": true,
-  "autoCreateMenuToSql": true,
-  "autoCreateBtnAuth": true,
-  "onlyTemplate": false,
-  "generateServer": true,
-  "generateWeb": true,
-  "fields": [
-    {
-      "fieldName": "OrderNo",
-      "fieldDesc": "订单号",
-      "fieldType": "string",
-      "fieldJson": "orderNo",
-      "dataType": "varchar",
-      "dataTypeLong": "64",
-      "comment": "订单编号",
-      "columnName": "order_no",
-      "fieldSearchType": "=",
-      "form": true,
-      "table": true,
-      "desc": true,
-      "require": true
-    }
-  ]
+  "package": "order",           // 包名（需已存在）
+  "tableName": "orders",        // 数据库表名
+  "structName": "Order",        // Go 结构体名（首字母大写）
+  "packageName": "order",       // 文件名（小写）
+  "abbreviation": "order",      // 简称（路由前缀）
+  "humpPackageName": "order",   // 驼峰文件名
+  "description": "订单管理",     // 中文描述
+  "gvaModel": true,             // 使用默认 Model（ID, CreatedAt 等）
+  "autoMigrate": true,          // 自动迁移建表
+  "autoCreateApiToSql": true,   // 自动注册 API 路由
+  "autoCreateMenuToSql": true,  // 自动创建菜单
+  "autoCreateBtnAuth": true,    // 自动创建按钮权限
+  "generateServer": true,       // 生成后端代码
+  "generateWeb": true,          // 生成前端代码
+  "fields": [...]               // 字段定义（见下方）
 }
 ```
 
-**步骤 2: 预览代码 (推荐)**
+### 字段定义要点
 
-```bash
-curl -s -X POST "http://localhost:9688/autoCode/preview" \
-  -H "Content-Type: application/json" \
-  -H "x-api-key: $API_KEY" \
-  -d @examples/create-module.json
-```
-
-响应包含所有将要生成的文件内容:
 ```json
 {
-  "code": 0,
-  "data": {
-    "autoCode": {
-      "server/api/v1/order/order.go": "...",
-      "server/model/order/order.go": "...",
-      "server/router/order/order.go": "...",
-      "server/service/order/order.go": "...",
-      "web/src/api/order/order.js": "...",
-      "web/src/view/order/order/order.vue": "..."
-    }
-  },
-  "msg": "预览成功"
+  "fieldName": "OrderNo",       // Go 字段名（大驼峰）
+  "fieldDesc": "订单号",         // 中文描述
+  "fieldType": "string",        // Go 类型（见映射表）
+  "fieldJson": "orderNo",       // JSON 名（小驼峰）
+  "dataType": "varchar",        // 数据库类型
+  "dataTypeLong": "64",         // 长度
+  "columnName": "order_no",     // 数据库列名（下划线）
+  "fieldSearchType": "=",       // 搜索条件（可选）
+  "form": true, "table": true, "desc": true,
+  "require": true               // 必填
 }
 ```
 
-**步骤 3: 确认生成**
+**fieldType 常用映射**（完整映射见 `references/field-reference.md`）:
+
+| fieldType | DiyForm 组件 | 注意 |
+|-----------|-------------|------|
+| string | el-input | |
+| int | **⚠️ 需改为 int32** | DiyForm 不识别裸 int，会渲染为 textarea |
+| float64 | el-input-number | |
+| bool | el-switch | |
+| time.Time | el-date-picker | |
+| enum | el-select | 需翻译文件 enums 段 |
+
+### 流程二: 回滚
 
 ```bash
-curl -s -X POST "http://localhost:9688/autoCode/createTemp" \
-  -H "Content-Type: application/json" \
-  -H "x-api-key: $API_KEY" \
-  -d @examples/create-module.json
+$AC history              # 查看生成历史（flag: 0=未回滚, 1=已回滚）
+$AC rollback <id>        # 完整回滚（代码+API+菜单+表）
+$AC rollback <id> keep-table  # 回滚但保留数据库表
 ```
-
-生成操作会:
-- 创建所有代码文件
-- 通过 AST 注入注册代码到 enter.go、router_biz.go 等
-- 自动迁移数据库建表 (autoMigrate=true)
-- 注册 API 路由 (autoCreateApiToSql=true)
-- 创建菜单 (autoCreateMenuToSql=true)
-
-**步骤 4: 验证**
-
-检查生成的文件是否存在:
-```bash
-ls server/api/v1/order/ server/model/order/ server/router/order/ server/service/order/
-```
-
----
 
 ### 流程三: 查询数据库结构
 
-用于基于已有表生成代码，或了解当前数据库状态。
+用于基于已有表生成代码: `$AC get-db` → `$AC get-tables <db>` → `$AC get-columns <table>`
 
-**获取数据库列表:**
+## 生成后完善（必读）
 
-```bash
-curl -s -X GET "http://localhost:9688/autoCode/getDB" \
-  -H "x-api-key: $API_KEY"
-```
+代码生成后需进行业务定制化，详见 **[references/post-generation-guide.md](references/post-generation-guide.md)**:
 
-响应:
-```json
-{
-  "code": 0,
-  "data": {
-    "dbs": ["hab"],
-    "dbList": [
-      {"aliasName": "...", "dbName": "...", "disable": false, "dbtype": "mysql"}
-    ]
-  },
-  "msg": "Success"
-}
-```
+1. **SysTableColumns 配置** — type 值检查（⚠️ 裸 int 改 int32）、列宽、必填标记、搜索配置
+2. **翻译文件** — enum 占位符替换为真实业务含义，en-US 同步
+3. **按钮/列权限** — 确认 authority=1 的 9 个标准按钮权限完整
+4. **业务逻辑** — 自定义校验、状态流转、关联操作等
 
-**获取表列表:**
-
-```bash
-curl -s -X GET "http://localhost:9688/autoCode/getTables?dbName=hab" \
-  -H "x-api-key: $API_KEY"
-```
-
-响应:
-```json
-{
-  "code": 0,
-  "data": {
-    "tables": [
-      {"tableName": "sys_users"}
-    ]
-  },
-  "msg": "Success"
-}
-```
-
-**获取表列信息:**
-
-```bash
-curl -s -X GET "http://localhost:9688/autoCode/getColumn?tableName=sys_users&dbName=hab" \
-  -H "x-api-key: $API_KEY"
-```
-
-响应:
-```json
-{
-  "code": 0,
-  "data": {
-    "columns": [
-      {
-        "columnName": "id",
-        "dataType": "bigint",
-        "dataTypeLong": "20",
-        "columnComment": "主键ID",
-        "fieldName": "Id",
-        "fieldType": "int64",
-        "fieldJson": "id"
-      }
-    ]
-  },
-  "msg": "Success"
-}
-```
-
----
-
-### 流程四: 添加方法
-
-为已有模块添加新的 API 方法。
-
-```bash
-curl -s -X POST "http://localhost:9688/autoCode/addFunc" \
-  -H "Content-Type: application/json" \
-  -H "x-api-key: $API_KEY" \
-  -d '{
-    "package": "order",
-    "structName": "Order",
-    "packageName": "order",
-    "humpPackageName": "order",
-    "abbreviation": "order",
-    "funcName": "ExportOrder",
-    "router": "exportOrder",
-    "method": "GET",
-    "description": "导出订单",
-    "funcDesc": "导出订单数据",
-    "isAuth": true,
-    "isPreview": false,
-    "isAi": false
-  }'
-```
-
-预览模式: 设置 `"isPreview": true`，返回预览代码而不写入文件。
-
-AI 模式: 设置 `"isAi": true`，可通过 `apiFunc`、`serverFunc`、`jsFunc` 字段自定义生成的代码内容。
-
----
-
-### 流程五: 回滚
-
-**步骤 1: 查询生成历史**
-
-```bash
-curl -s -X POST "http://localhost:9688/autoCode/getSysHistory" \
-  -H "Content-Type: application/json" \
-  -H "x-api-key: $API_KEY" \
-  -d '{"page": 1, "pageSize": 10}'
-```
-
-响应:
-```json
-{
-  "code": 0,
-  "data": {
-    "list": [
-      {
-        "ID": 1,
-        "table": "orders",
-        "package": "order",
-        "structName": "Order",
-        "description": "订单管理",
-        "flag": 0
-      }
-    ],
-    "total": 1,
-    "page": 1,
-    "pageSize": 10
-  },
-  "msg": "Success"
-}
-```
-
-`flag`: 0 = 未回滚, 1 = 已回滚
-
-**步骤 2: 查看详情 (可选)**
-
-```bash
-curl -s -X POST "http://localhost:9688/autoCode/getMeta" \
-  -H "Content-Type: application/json" \
-  -H "x-api-key: $API_KEY" \
-  -d '{"id": 1}'
-```
-
-**步骤 3: 执行回滚**
-
-```bash
-curl -s -X POST "http://localhost:9688/autoCode/rollback" \
-  -H "Content-Type: application/json" \
-  -H "x-api-key: $API_KEY" \
-  -d '{
-    "id": 1,
-    "deleteApi": true,
-    "deleteMenu": true,
-    "deleteTable": true
-  }'
-```
-
-回滚操作包括:
-- 移除生成的文件 (移动到 `rm_file/` 目录，非永久删除)
-- 撤回 AST 注入的代码 (enter.go, router_biz.go 等)
-- 删除自动创建的 API 记录 (`deleteApi: true`)
-- 删除自动创建的菜单 (`deleteMenu: true`)
-- 删除数据库表 (`deleteTable: true`)
-- 将历史记录标记为 `flag = 1`
-
-如果只想回滚代码但保留数据库表，设置 `"deleteTable": false`。
-
-**步骤 4: 删除历史记录 (可选)**
-
-```bash
-curl -s -X POST "http://localhost:9688/autoCode/delSysHistory" \
-  -H "Content-Type: application/json" \
-  -H "x-api-key: $API_KEY" \
-  -d '{"id": 1}'
-```
-
----
-
-## 字段参考
-
-构建请求体时查阅完整字段定义：**[references/field-reference.md](references/field-reference.md)**
-
-包含 AutoCode 结构体字段、AutoCodeField 字段、AutoFunc 字段的完整说明。
-
----
-
-## 错误处理与常见问题
-
-| 错误场景 | 错误信息 | 解决方案 |
-|----------|----------|----------|
-| 包名重复 | "存在相同PackageName" | 先 getPackage 查询，不重复创建 |
-| 包名是 Go 关键字 | "\<name\>为go的关键字!" | 改用其他名称 |
-| 结构体重复 | "已经创建过此数据结构,请勿重复创建!" | 先查历史，必要时先 rollback 再重新创建 |
-| 包结构异常 | "package结构异常,缺少..." | 检查对应 enter.go 文件是否存在 |
-| 包名含非法字符 | "包名不合法" | 不要在包名中使用 / \ .. |
-| API Key 无效 | 401 "invalid api key" | 检查 config.yaml 中的 api-key 配置 |
-| 未认证 | 401 "未登录或非法访问" | 确认请求头中携带了 x-api-key |
-
----
-
-## 生成后完善指南
-
-代码生成后的业务定制化完善流程：**[references/post-generation-guide.md](references/post-generation-guide.md)**
-
-包含 SysTableColumns 配置、翻译文件完善、按钮/列权限配置、业务完善检查清单。
-
----
+> 首次操作可参考实例 → `references/post-generation-checklist.md`
 
 ## 安全注意事项
 
-1. **API Key 安全**: API Key 存储在 `config.yaml` 中，该文件已在 `.gitignore` 中，不会提交到版本控制。建议使用 `uuidgen` 或 `openssl rand -hex 32` 生成高强度密钥。
-2. **访问范围**: API Key 仅对 AutoCode 相关路由生效，不能用于访问用户管理、权限管理等其他接口。
-3. **审计追溯**: API Key 请求的操作日志中 Username 为 "api-key"，可与人工操作区分。所有生成操作都有历史记录，支持回滚。
-4. **文件权限**: 建议设置 `config.yaml` 文件权限为 600 (`chmod 600 server/config.yaml`)。
-5. **生产环境**: 生产环境必须使用 HTTPS 传输 API Key。
+- API Key 存储在 `config.local.yaml`（.gitignore 中），建议 `chmod 600`
+- API Key 仅对 AutoCode 路由生效，不能访问用户/权限管理等其他接口
+- 操作日志中 Username 为 "api-key"，与人工操作可区分
+- 所有生成操作有历史记录，支持回滚

@@ -69,5 +69,6 @@ phase 取值: review-tech / review-ui / review-all / dev / dev-full / qa
 
 Tech Lead 额外读取:
 ```
-再读取 hz-project skill (.claude/skills/hz-project/SKILL.md) 了解项目全生命周期规范。
+再读取 hab-temp skill (.claude/skills/hab-temp/SKILL.md) 了解模板架构规范。
+再读取 hab-autocode skill (.claude/skills/hab-autocode/SKILL.md) 了解 AutoCode API 用法。
 ```

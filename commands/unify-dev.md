@@ -76,7 +76,8 @@ Task tool:
 
     先读取 create-docs skill 的 SKILL.md (.claude/skills/create-docs/SKILL.md) 了解文档规范。
     再读取 references/tech-stack.md (.claude/skills/create-docs/references/tech-stack.md) 了解项目技术栈。
-    再读取 hz-project skill (.claude/skills/hz-project/SKILL.md) 了解项目全生命周期规范。
+    再读取 hab-temp skill (.claude/skills/hab-temp/SKILL.md) 了解模板架构规范。
+    再读取 hab-autocode skill (.claude/skills/hab-autocode/SKILL.md) 了解 AutoCode API 用法。
 
     ## 动态角色检查
     先读取 docs/$REQ_NAME/tech/design.md 中的「## 角色规划」表格，确定哪些角色参与本需求。
@@ -254,6 +255,13 @@ Task tool:
     7. 全部完成后标记团队任务为 completed
     8. 发送消息给 tech-lead 报告完成状态
 
+    ## 强制自验（标记完成前）
+    标准 CRUD 页面由 sys_table_columns 后端配置驱动，前端自验重点：
+    1. 页面路由正常，列表数据加载正常
+    2. 新增/编辑弹窗打开关闭正常，表单提交正常
+    3. 如有自定义 slot 或 formatItem，验证交互和数据转换正确
+    4. 如发现渲染异常（字段类型不对、翻译缺失），通知 backend 修正 sys_table_columns 或翻译文件
+
     需求目录: docs/$REQ_NAME/
 ```
 
@@ -298,6 +306,23 @@ Task tool:
     8. 全部完成后标记团队任务为 completed
     9. 发送消息给 tech-lead 报告完成状态
 
+    ## 强制自验（标记完成前）
+    已知 Bug 模式扫描清单（必须逐项检查代码）:
+    - [ ] BUG-001: model 已在 gorm.go 的 bizModel() 中注册
+    - [ ] BUG-002: GORM tag 无裸 varchar（用 size:200 替代）
+    - [ ] BUG-003/004: enter.go Api/Service group + router_biz.go InitXxxRouter 注册完整
+    - [ ] BUG-005: sys_table_columns 虚拟列配置正确
+    - [ ] BUG-006: Update 使用 Updates() 不用 Save()
+    - [ ] BUG-007/010: Create/Update 使用分离 struct，Update 只有 ID 是 required
+    - [ ] BUG-008: Count() 和 Order() 查询分离
+    - [ ] BUG-009: 布尔字段使用 *bool 指针类型
+    - [ ] BUG-011: sys_table_columns type 无裸 int（用 int32 替代）
+    在标记任务完成前，必须按 hz-backend agent 定义中的"CRUD 模块自验"清单逐项检查。
+    特别注意: Create/Update struct 分离、Switch toggle 兼容、翻译文件完整、唯一性校验跳过零值。
+    **至少 curl 测试 3 个关键场景**: 正常创建、缺少必填字段、Switch toggle。
+    检查 sys_table_columns 配置: type 值必须在 DiyForm 支持列表内（⚠️ 禁止裸 int → 用 int32），
+    formMust/formHidden/enum 等正确。详见 diyform-diytable-guide.md。
+
     需求目录: docs/$REQ_NAME/
 ```
 
@@ -312,7 +337,8 @@ Task tool:
 
     先读取 create-docs skill 的 SKILL.md (.claude/skills/create-docs/SKILL.md) 了解文档规范。
     再读取 references/tech-stack.md (.claude/skills/create-docs/references/tech-stack.md) 了解项目技术栈。
-    再读取 hz-project skill (.claude/skills/hz-project/SKILL.md) 了解项目全生命周期规范。
+    再读取 hab-temp skill (.claude/skills/hab-temp/SKILL.md) 了解模板架构规范。
+    再读取 hab-autocode skill (.claude/skills/hab-autocode/SKILL.md) 了解 AutoCode API 用法。
 
     ## 活跃角色
     本需求的活跃角色为: {active_roles 列表}
@@ -341,6 +367,17 @@ Task tool:
        - 如有 backend + frontend → 前后端 API 接口是否对齐
        - 代码质量: 错误处理、类型安全、安全性
        - 是否有明显遗漏或偏离设计的实现
+    6.5. **已知问题扫描**（必须逐项检查代码）:
+         - [ ] BUG-001: model 已在 gorm.go 的 bizModel() 中注册
+         - [ ] BUG-002: GORM tag 无裸 varchar（用 size:200 替代）
+         - [ ] BUG-003/004: enter.go Api/Service group + router_biz.go InitXxxRouter 注册完整
+         - [ ] BUG-005: sys_table_columns 虚拟列配置正确
+         - [ ] BUG-006: Update 使用 Updates() 不用 Save()
+         - [ ] BUG-007/010: Create/Update 使用分离 struct，Update 只有 ID 是 required
+         - [ ] BUG-008: Count() 和 Order() 查询分离
+         - [ ] BUG-009: 布尔字段使用 *bool 指针类型
+         - [ ] BUG-011: sys_table_columns type 无裸 int（用 int32 替代）
+         发现问题直接标记为代码审查不通过。
     6. 如有 ui 角色 → 等待 ui-designer 的视觉审查结果
     7. 综合审查结果处理:
        - **不通过**: 合并代码问题和视觉问题，创建修复任务（TaskCreate），详细描述需要修复的问题，指定 owner 为对应开发者。发送消息通知开发者修复。等待修复完成后重新审查。

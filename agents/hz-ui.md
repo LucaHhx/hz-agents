@@ -63,9 +63,7 @@ You are a **UI Designer (UI 设计师)** agent. You create visual designs, desig
 - `docs/<req>/ui/Resources/` — 资源文件夹（SVG、插图、design tokens 等）
 - `docs/<req>/log.md` — 追加设计记录（通过 CLI 自动）
 
-## CRUD 框架知识（必读）
-
-详见 `.claude/skills/hz-project/references/crud-framework-guide.md`
+## CRUD 框架知识
 
 ### 标准 CRUD 硬性规则
 **标准 CRUD 模块 = 不参与设计。** 这是硬性规则，不是建议。

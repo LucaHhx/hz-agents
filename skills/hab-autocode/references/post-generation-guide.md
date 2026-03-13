@@ -4,6 +4,14 @@ autocode 生成完整但通用的 CRUD 模块（代码、数据库表、API 路�
 
 ## A. 完善 SysTableColumns 配置
 
+**⚠️ 首先检查 type 值**：AutoCode 可能将数据库 `int` 映射为 `type: "int"`，
+DiyForm 不识别此值（会渲染为 textarea，导致提交字符串类型错误）。必须改为 `int32`。
+
+DiyForm 支持的 type 值：`string`, `bool/boolean`, `int32`, `int64`, `number`, `amount`,
+`float`, `float64`, `date`, `datetime`, `uintDate`, `enum/protoEnum`, `textarea`, `table`, `object`
+
+详见 `.claude/skills/hab-temp/references/diy-components.md`
+
 通过 API `PUT /sysTableColumns/updateSysTableColumns` 或前端「列配置」管理页批量更新。
 
 **列宽调整 (`with`)**

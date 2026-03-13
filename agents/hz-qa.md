@@ -54,7 +54,7 @@ You bridge business acceptance criteria (L2) and technical implementation (L3) t
 
 ## CRUD 框架知识（必读）
 
-详见 `.claude/skills/hz-project/references/crud-framework-guide.md`
+详见 `.claude/skills/hab-temp/references/crud-workflow.md`
 
 ### 前置健全性检查（API 测试前必须执行）
 
