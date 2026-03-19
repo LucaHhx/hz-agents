@@ -5,7 +5,14 @@ argument-hint: [需求名称或ID] [用户指令] | [新建需求：描述]
 
 # PM 文档评审 / 新建需求
 
-启动 PM agent 评审指定需求的 L1+L2 业务文档，或新建一个需求。支持附带用户指令（需求修改、补充说明等）。
+你在本命令中直接扮演 **PM（产品经理）** 角色，与用户面对面沟通。评审指定需求的 L1+L2 业务文档，或新建一个需求。支持附带用户指令（需求修改、补充说明等）。
+
+## 前置准备
+
+先读取以下文件了解规范:
+1. `.claude/skills/create-docs/SKILL.md` — 文档规范和 CLI 用法
+2. `.claude/skills/create-docs/references/update-guide.md` — 更新规则
+3. `.claude/agents/hz-pm.md` — PM 角色职责（你要遵守的职责边界）
 
 ## Implementation Steps
 
@@ -26,7 +33,7 @@ argument-hint: [需求名称或ID] [用户指令] | [新建需求：描述]
    - 选项: 确认 / 修改名称
 4. 运行 `python3 .claude/skills/create-docs/scripts/docs.py req {REQ_SHORT_NAME}` 创建目录
 5. 将创建的完整目录名记为 `REQ_NAME`（含编号前缀，如 `8-user-points`）
-6. 跳到 **步骤 3-B (新建 Agent)**
+6. 跳到 **步骤 3-B (新建流程)**
 
 #### 模式 B: 评审已有需求
 
@@ -55,73 +62,54 @@ argument-hint: [需求名称或ID] [用户指令] | [新建需求：描述]
 
 无前置条件。
 
-### 3. 启动 Agent
+### 3. 执行任务
+
+**你就是 PM，直接执行以下工作，不要启动任何 agent。**
 
 #### 3-A. 评审模式
 
-使用 Agent tool 启动 hz-pm agent:
+直接评审需求 {REQ_NAME} 的 L1 + L2 业务文档:
 
-```
-Agent tool:
-  subagent_type: "hz-pm"
-  prompt: |
-    先读取 create-docs skill 的 SKILL.md (.claude/skills/create-docs/SKILL.md) 了解文档规范。
-    再读取 references/update-guide.md (.claude/skills/create-docs/references/update-guide.md) 了解更新规则。
+1. 评审以下文档:
+   - docs/project.md — 项目概览业务信息完整性
+   - docs/{REQ_NAME}/plan.md — 目标、用户场景、验收标准
+   - docs/{REQ_NAME}/tasks.md — 功能任务清晰度和完整性
+   - docs/{REQ_NAME}/log.md — 变更记录
+2. 发现问题直接修复
 
-    评审需求 {REQ_NAME} 的 L1 + L2 业务文档:
-    - docs/project.md — 项目概览业务信息完整性
-    - docs/{REQ_NAME}/plan.md — 目标、用户场景、验收标准
-    - docs/{REQ_NAME}/tasks.md — 功能任务清晰度和完整性
-    - docs/{REQ_NAME}/log.md — 变更记录
+如果 USER_INSTRUCTIONS 非空:
+- **用户指令优先级最高**，根据用户指令重点调整相关文档
 
-    {如果 USER_INSTRUCTIONS 非空，追加以下段落}
-    ## 用户指令（优先级最高）
-    {USER_INSTRUCTIONS}
-    请根据以上用户指令重点调整相关文档。
+**链接浏览**: 如果用户指令中包含 URL 链接，使用 agent-browser 浏览这些链接，提取关键信息融入需求文档。
 
-    ## 链接浏览
-    如果用户指令中包含 URL 链接，使用 agent-browser 浏览这些链接，提取关键信息融入需求文档。
+**需求探索**: 如果评审中发现需求不够清晰或有歧义，使用 brainstorming skill 分析问题，再通过 AskUserQuestion 向用户提出具体问题（提供选项或允许自由输入），逐步澄清后再修改文档。
 
-    ## 需求探索
-    如果评审中发现需求不够清晰或有歧义，使用 brainstorming skill 与用户逐步澄清后再修改文档。
-
-    发现问题直接修复。完成后输出评审摘要。
-```
+完成后输出评审摘要。
 
 #### 3-B. 新建模式
 
-使用 Agent tool 启动 hz-pm agent:
+直接为新需求 {REQ_NAME} 编写完整的 L1 + L2 业务文档:
 
-```
-Agent tool:
-  subagent_type: "hz-pm"
-  prompt: |
-    先读取 create-docs skill 的 SKILL.md (.claude/skills/create-docs/SKILL.md) 了解文档规范。
-    再读取 references/update-guide.md (.claude/skills/create-docs/references/update-guide.md) 了解更新规则。
+**链接浏览**: 如果需求描述中包含 URL 链接（PRD、竞品、参考文档等），先使用 agent-browser 浏览这些链接，提取关键信息作为需求输入。
 
-    为新需求 {REQ_NAME} 编写完整的 L1 + L2 业务文档。
+**需求探索**: 使用 brainstorming skill 探索需求细节，结合 AskUserQuestion 与用户确认：
+- 用 brainstorming 分析和发散，提出 2-3 种方案
+- 用 AskUserQuestion 让用户选择或输入想法（每次只问一个问题）
+- 先确认业务目标 → 再确认用户场景 → 最后确认验收标准
+- 整理为方案摘要后，用 AskUserQuestion 最终确认: "确认 / 需要调整"
 
-    需求描述: {用户提供的原始描述}
+任务:
+1. 更新 docs/project.md — 确保项目概览包含此需求
+2. 更新 docs/tasks.md — 在需求列表中添加此需求条目
+3. 编写 docs/{REQ_NAME}/plan.md — 目标、范围、用户场景、验收标准
+4. 编写 docs/{REQ_NAME}/tasks.md — 功能级任务拆解
+5. 初始化 docs/{REQ_NAME}/log.md — 添加创建记录
 
-    ## 链接浏览
-    如果需求描述中包含 URL 链接（PRD、竞品、参考文档等），先使用 agent-browser 浏览这些链接，提取关键信息作为需求输入。
-
-    ## 需求探索
-    使用 brainstorming skill 与用户协作探索需求细节：逐个提问澄清业务目标、用户场景、验收标准，提出 2-3 种方案，获得确认后再写入文档。
-
-    任务:
-    1. 更新 docs/project.md — 确保项目概览包含此需求
-    2. 更新 docs/tasks.md — 在需求列表中添加此需求条目
-    3. 编写 docs/{REQ_NAME}/plan.md — 目标、范围、用户场景、验收标准
-    4. 编写 docs/{REQ_NAME}/tasks.md — 功能级任务拆解
-    5. 初始化 docs/{REQ_NAME}/log.md — 添加创建记录
-
-    完成后输出需求摘要。
-```
+完成后输出需求摘要。
 
 ### 4. 完成报告
 
-输出 Agent 的评审摘要。
+输出评审/新建摘要。
 
 ### 5. Git 提交
 
@@ -131,3 +119,11 @@ Agent tool:
 3. 用户批准后提交:
    - commit message: `docs({REQ_NAME}): review-pm 完善业务文档`
 4. **绝不自动提交**，必须等待用户明确批准
+
+## Important Notes
+
+- **你就是 PM**: 不要启动 hz-pm agent，你直接扮演 PM 角色与用户沟通
+- **用户参与是核心**: 用 brainstorming 探索和分析，用 AskUserQuestion 让用户做决策（提供选项或允许自由输入），每次只问一个问题
+- **PM 职责边界**: 只定义做什么(WHAT)，不涉及怎么做(HOW)。技术选型、架构、API 设计留给 Tech Lead
+- **鼓励直接修复** 而非仅列出问题
+- **DO NOT** 修改代码文件，仅涉及 docs/

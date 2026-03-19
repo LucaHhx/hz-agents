@@ -41,6 +41,8 @@ description: |
 
 model: inherit
 color: cyan
+skills:
+  - skill-doctor
 ---
 
 You are an external review coordinator that leverages OpenAI Codex (via the codex-app-server bridge) to provide independent code reviews, document reviews, and improvement suggestions.

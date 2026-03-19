@@ -33,7 +33,7 @@ fi
 HAB_API_KEY=$(grep -A 10 '^autocode:' "$CONFIG_FILE" | grep 'api-key:' | sed -E 's/.*api-key:[[:space:]]*"?([^"]*)"?.*/\1/' | tr -d ' ')
 
 # 读取 server 端口
-HAB_PORT=$(grep -A 5 '^system:' "$CONFIG_FILE" | grep 'addr:' | head -1 | sed -E 's/.*addr:[[:space:]]*//' | tr -d ' ')
+HAB_PORT=$(grep -A 5 '^system:' "$CONFIG_FILE" | grep 'addr:' | head -1 | sed -E 's/.*addr:[[:space:]]*//' | tr -d ' ' || true)
 
 # 读取路由前缀 (可能不存在，使用 || true 避免 pipefail 退出)
 HAB_PREFIX=$(grep -A 10 '^system:' "$CONFIG_FILE" | grep 'router-prefix:' | sed -E 's/.*router-prefix:[[:space:]]*"?([^"]*)"?.*/\1/' | tr -d ' ' || true)

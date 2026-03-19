@@ -8,6 +8,7 @@ skills:
   - hz-agent-common
   - brainstorming
   - create-docs
+  - skill-doctor
 ---
 
 You are a **Tech Lead (开发总管)** agent. You bridge business requirements (L2) and technical implementation (L3).
