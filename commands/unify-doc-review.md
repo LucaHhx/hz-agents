@@ -88,7 +88,7 @@ If 提供了 `$ARGUMENTS` → 只检查该需求目录是否存在。
 
 **关键: 用 brainstorming 探索方案，用 AskUserQuestion 提出选项让用户选择。每次只问一个问题，避免信息过载。**
 
-Tech Lead 工作完成后，切换回 PM 角色，继续进入 Phase 3。
+Tech Lead 工作完成后，继续进入 Phase 3。
 
 ### 2.5. Tech Lead 补充初始化（PM 文档已存在、tech/design.md 缺失时）
 
@@ -97,34 +97,40 @@ docs/ 已有 PM 业务文档（plan.md, tasks.md），但缺少 Tech Lead 技术
 **直接切换为 Tech Lead 角色**，按 Step 2.2 的流程与用户协作确定技术选型（brainstorming + AskUserQuestion），
 跳过 Step 2.1（PM 初始化已完成）。
 
-完成后切换回 PM 角色，进入 Phase 3: 团队评审。
+完成后进入 Phase 3: 团队评审。
 
 ### 3. 团队评审
 
-切换前准备（每次切换都必须重新读取，不可跳过）:
-1. 读取 `.claude/agents/hz-pm.md` — 重新加载 PM 角色职责定义
+**向用户提示**: `我现在切换为 **评审主导者**，启动评审团队并行工作：`
 
-**向用户提示**: `我现在切换回 **产品经理(PM)**，主导团队评审：`
+你不再扮演任何具体角色，而是作为**评审主导者**，同时启动 PM、Tech Lead、UI 设计师作为后台 agent 并行评审。
 
-你切换回 PM 角色执行评审，同时启动 Tech Lead 和 UI 设计师作为后台 agent。
+#### 3.1 启动评审团队（全部后台 Agent 并行）
 
-#### 3.1 你（PM）的评审工作
+同时启动以下 agent:
 
-**直接执行，不启动 agent:**
+**PM agent:**
+```
+Agent tool:
+  subagent_type: "hz-pm"
+  name: "pm-reviewer"
+  run_in_background: true
+  prompt: |
+    你是文档评审团队的产品经理。
 
-1. 评审 docs/ 下的 L1 + L2 业务文档:
-   - project.md 业务信息完整性
-   - 各需求 plan.md: 目标、场景、验收标准
-   - 各需求 tasks.md: 功能任务清晰度
-   - log.md 变更记录
-2. 发现问题直接修复
-3. 将评审结果记录下来，等待 Tech Lead 和 UI 设计师完成后进入对齐阶段
+    先读取 create-docs skill 的 SKILL.md (.claude/skills/create-docs/SKILL.md) 了解文档规范。
+    再读取 references/update-guide.md 了解更新规则。
 
-[如有需求参数: 只评审需求: $ARGUMENTS]
+    评审 docs/ 下的 L1 + L2 业务文档:
+    - project.md 业务信息完整性
+    - 各需求 plan.md: 目标、场景、验收标准
+    - 各需求 tasks.md: 功能任务清晰度
+    - log.md 变更记录
 
-#### 3.2 同时启动 Tech Lead 和 UI 设计师（后台 Agent）
+    发现问题直接修复。完成后输出评审摘要。
 
-在你执行 PM 评审的同时，并行启动以下 agent:
+    [如有需求参数: 只评审需求: $ARGUMENTS]
+```
 
 **Tech Lead agent:**
 ```
@@ -199,11 +205,11 @@ Agent tool:
     [如有需求参数: 只处理需求: $ARGUMENTS]
 ```
 
-#### 3.3 三端交叉对齐
+#### 3.2 三端交叉对齐
 
-等待 Tech Lead 和 UI 设计师完成后，你（PM）主导对齐:
+等待所有 agent 完成后，你作为评审主导者执行对齐:
 
-1. **汇总三端评审结果**: 收集你的 PM 评审 + Tech Lead 报告 + UI 设计师报告
+1. **汇总三端评审结果**: 收集 PM 评审报告 + Tech Lead 评审报告 + UI 设计师报告
 2. **检查一致性**（根据活跃角色动态调整）：
    - **业务 ↔ 技术**: 每个业务场景是否有对应技术实现路径
    - **业务 ↔ UI** (如有 ui): 设计稿是否覆盖所有用户场景
@@ -212,11 +218,24 @@ Agent tool:
 4. 验证 UI 资源完整性（如有 ui 角色）: Resources/ 非空、assets-manifest.md 自检通过、merge.html 无外部 URL
 5. 按决策结果修改对应文档，在 log.md 记录用户决策
 
+#### 3.3 用户确认与团队关闭
+
+在对齐完成后，**必须与用户沟通确认**，不可直接关闭评审团队:
+
+1. **汇报完整方案**: 向用户呈现三端对齐后的完整方案摘要（业务需求、技术方案、UI 设计），让用户全面了解当前状态
+2. **询问是否有补充**: 使用 AskUserQuestion 询问用户是否有需要补充或修改的内容
+   - 如果用户有补充 → 通过 SendMessage 将补充内容发送给对应的 agent 处理，然后重新对齐
+   - 如果用户无补充 → 继续下一步
+3. **确认关闭评审团队**: 使用 AskUserQuestion 确认是否关闭评审团队
+   - 用户确认后，评审团队结束工作，进入 Phase 4
+
+**绝不自动关闭评审团队**，必须等待用户明确确认。
+
 ### 4. 汇总评审报告
 
 汇总评审报告:
 - 文档结构状态
-- PM 评审结果（你自己的）
+- PM 评审结果
 - Tech Lead 评审结果
 - UI 设计产出状态
 - 三端对齐结果:
@@ -259,11 +278,12 @@ python3 .claude/skills/create-docs/scripts/docs.py pipeline $REQ_NAME
   2. **明确告知用户角色切换**，格式: `我现在切换为 **[角色名]**，和您沟通[具体事项]：`
   - 进入 Step 2.1: 读取 `hz-pm.md` → `我现在扮演 **产品经理(PM)**，和您沟通业务需求：`
   - 进入 Step 2.2: 读取 `hz-tech-lead.md` → `我现在切换为 **Tech Lead(开发总管)**，和您沟通技术选型：`
-  - 回到 Phase 3: 读取 `hz-pm.md` → `我现在切换回 **产品经理(PM)**，主导团队评审：`
-- **Phase 2 (初始化) 是顺序执行的**: 你先扮演 PM 与用户确定业务需求 → 再切换为 Tech Lead 与用户确定技术方案 → 最后切换回 PM 进入团队评审
-- **Phase 3 (评审) 是并行执行的**: 你做 PM 评审的同时，Tech Lead 和 UI 设计师在后台并行工作
+  - 进入 Phase 3: 不扮演具体角色 → `我现在切换为 **评审主导者**，启动评审团队并行工作：`
+- **Phase 2 (初始化) 是顺序执行的**: 你先扮演 PM 与用户确定业务需求 → 再切换为 Tech Lead 与用户确定技术方案 → 最后进入评审
+- **Phase 3 (评审) 是全并行的**: PM、Tech Lead、UI 设计师全部作为后台 agent 并行工作，你作为评审主导者协调和对齐
 - **用户参与是核心**: 用 brainstorming 探索和分析，用 AskUserQuestion 让用户做决策（提供选项或允许自由输入），每次只问一个问题，避免信息过载
-- **三端对齐由你主导**: 收集各端结果后，用 brainstorming 分析分歧，用 AskUserQuestion 向用户展示可选方案让用户做决策
+- **三端对齐由评审主导者执行**: 收集各端结果后，用 brainstorming 分析分歧，用 AskUserQuestion 向用户展示可选方案让用户做决策
+- **评审团队关闭须用户确认**: 对齐完成后必须向用户汇报完整方案、询问是否有补充、确认关闭团队后才进入下一步
 - **鼓励直接修复** 而非仅列出问题
 - **DO NOT** 修改代码文件，仅涉及 docs/
 - **DO NOT** 创建新需求，仅评审已有文档（Phase 3 阶段）
