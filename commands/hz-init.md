@@ -549,8 +549,8 @@ fi
 
 ```
 后续流水线:
-  → /unify-doc-review — 文档协作评审（PM + Tech + UI 三方评审与对齐）（推荐下一步）
-  → /unify-dev        — 全团队协作开发
+  → /team-docs — 文档协作评审（PM + Tech + UI 三方评审与对齐）（推荐下一步）
+  → /team-dev        — 全团队协作开发
   → /unify-fix        — 智能 Bug 修复
 
 单独执行（按需）:

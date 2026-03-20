@@ -150,7 +150,7 @@ settings. Create or merge into `.claude/settings.local.json`:
 
 Explanation of each field:
 - `CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS`: "1" — Enables the experimental agent teams
-  feature. REQUIRED for `/unify-dev`, `/unify-doc-review`, `/unify-fix` commands that
+  feature. REQUIRED for `/team-dev`, `/team-docs`, `/unify-fix` commands that
   orchestrate multiple agents in parallel.
 - `defaultMode`: "bypassPermissions" — Allows agents to execute tools without manual
   approval on every action. Needed because agents run autonomously and cannot wait for
@@ -264,17 +264,17 @@ Show the quick start:
   /hz-init                          # 从 hz-admin-base 模板创建项目
 
 已有项目？从这里开始：
-  /unify-doc-review                 # 初始化文档 + 团队评审
-  /unify-dev <需求名>                # 全团队协作开发
+  /team-docs                 # 初始化文档 + 团队评审
+  /team-dev <需求名>                # 全团队协作开发
 ```
 
 Show the full command reference:
 
 ```
 统一调度（多 Agent 协作）:
-  /unify-doc-review [需求名]         # PM + Tech Lead + UI 文档协作评审
+  /team-docs [需求名]         # PM + Tech Lead + UI 文档协作评审
   /review-all [需求名]               # PM + Tech Lead + UI 三端对齐
-  /unify-dev [需求名]                # 全团队开发（开发 + 视觉审查 + QA）
+  /team-dev [需求名]                # 全团队开发（开发 + 视觉审查 + QA）
   /unify-fix <问题描述>              # 自动诊断修复 Bug
 
 团队调度:
@@ -323,11 +323,11 @@ HZ-Agents 提供两种使用方式，覆盖不同的开发场景：
 
 | 维度 | 团队模式 | 命令拆分模式 |
 |------|---------|------------|
-| 起点 | `/hz-init` → `/unify-doc-review` | `/hz-init` → `/review-pm` |
+| 起点 | `/hz-init` → `/team-docs` | `/hz-init` → `/review-pm` |
 | 典型场景 | 新功能端到端交付 | 修一个组件、补一份文档 |
 | 控制粒度 | 自动编排 | 手动逐步 |
 | 参与 Agent | 2–5 个自动协调 | 每次 1 个 |
-| 示例 | `/unify-dev 1-login` | `/dev-backend 1-login` |
+| 示例 | `/team-dev 1-login` | `/dev-backend 1-login` |
 | 适合 | 首次使用、完整交付 | 熟练用户、调试定位 |
 
 ---
@@ -346,19 +346,19 @@ HZ-Agents 提供两种使用方式，覆盖不同的开发场景：
 
 | 命令 | 说明 | 参与角色 |
 |------|------|---------|
-| `/unify-doc-review [需求名]` | PM + Tech Lead + UI 协作完善文档和设计 | PM、TL、UI |
+| `/team-docs [需求名]` | PM + Tech Lead + UI 协作完善文档和设计 | PM、TL、UI |
 | `/review-all [需求名]` | 三端文档对齐评审（需已有文档） | PM、TL、UI |
 
 ### 开发阶段
 
 | 命令 | 说明 | 参与角色 |
 |------|------|---------|
-| `/unify-dev [需求名]` | 全团队开发：编码 + 视觉审查 + QA | TL、FE、BE、UI、QA |
+| `/team-dev [需求名]` | 全团队开发：编码 + 视觉审查 + QA | TL、FE、BE、UI、QA |
 | `/dev-tech [需求名] [指令]` | 轻量团队开发：编码 + 代码审查 | TL、FE、BE |
 
-**`/unify-dev` vs `/dev-tech` 对比：**
+**`/team-dev` vs `/dev-tech` 对比：**
 
-| | `/unify-dev`（完整） | `/dev-tech`（轻量） |
+| | `/team-dev`（完整） | `/dev-tech`（轻量） |
 |---|---|---|
 | 参与角色 | TL + FE + BE + UI + QA | TL + FE + BE |
 | UI 视觉审查 | 有 | 无 |
@@ -434,7 +434,7 @@ HZ-Agents 提供两种使用方式，覆盖不同的开发场景：
 /hz-init（项目初始化）
   │
   ├─ 团队模式 ─────────────────────────────────────────────
-  │  /unify-doc-review → /review-all（可选）→ /unify-dev 或 /dev-tech
+  │  /team-docs → /review-all（可选）→ /team-dev 或 /dev-tech
   │                                              ↓
   │                                         /unify-fix（按需）
   │

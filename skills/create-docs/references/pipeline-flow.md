@@ -17,7 +17,7 @@ review-all (三端文档对齐评审) ←── 可选，推荐
   ↓
 cmd-autocode (生成 CRUD 基础代码) ←── 有 [autocode] 任务时，从 tech/tasks.md 读取
   ↓
-unify-dev 或 dev-tech (团队开发) ←── cmd_check 阻塞：autocode 未完成不放行
+team-dev 或 dev-tech (团队开发) ←── cmd_check 阻塞：autocode 未完成不放行
   ↓
 review-qa (QA 验收测试)
   ↓
@@ -33,10 +33,10 @@ review-qa (回归测试) ←── 修复后重新验证
 下一步建议:
   1. /review-pm                    — PM 完善业务文档
   2. /review-tech                  — Tech Lead 做技术方案
-  3. /unify-doc-review             — 从零开始的完整文档评审
+  3. /team-docs             — 从零开始的完整文档评审
 ```
 
-### review-pm / unify-doc-review 完成后
+### review-pm / team-docs 完成后
 ```
 下一步建议:
   1. /review-tech {REQ_NAME}       — Tech Lead 创建技术方案
@@ -49,32 +49,32 @@ review-qa (回归测试) ←── 修复后重新验证
   1. /review-ui {REQ_NAME}         — UI 设计师产出设计稿（自定义页面）
   2. /cmd-autocode                 — 生成 CRUD 模块代码（如有 [autocode] 任务）
   3. /review-all {REQ_NAME}        — 三端文档对齐评审
-  4. /unify-dev {REQ_NAME}         — 直接进入开发（如文档已充分）
+  4. /team-dev {REQ_NAME}         — 直接进入开发（如文档已充分）
 ```
 
 ### review-ui 完成后
 ```
 下一步建议:
   1. /review-all {REQ_NAME}        — 三端文档对齐评审
-  2. /unify-dev {REQ_NAME}         — 直接进入开发
+  2. /team-dev {REQ_NAME}         — 直接进入开发
 ```
 
 ### review-all 完成后
 ```
 下一步建议:
   1. /cmd-autocode                 — 生成 CRUD 模块代码（如有 [autocode] 任务）
-  2. /unify-dev {REQ_NAME}         — 启动全团队开发
+  2. /team-dev {REQ_NAME}         — 启动全团队开发
   3. /dev-tech {REQ_NAME}          — Tech Lead 带队精简开发
 ```
 
 ### cmd-autocode 完成后
 ```
 下一步建议:
-  1. /unify-dev {REQ_NAME}         — 启动全团队开发（含 QA）
+  1. /team-dev {REQ_NAME}         — 启动全团队开发（含 QA）
   2. /dev-tech {REQ_NAME}          — Tech Lead 带队开发（无 QA）
 ```
 
-### unify-dev / dev-tech 完成后
+### team-dev / dev-tech 完成后
 ```
 下一步建议:
   1. /review-qa {REQ_NAME}         — QA 验收测试

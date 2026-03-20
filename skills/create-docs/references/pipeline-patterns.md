@@ -1,6 +1,6 @@
 # 流水线共享模式
 
-> 本文件定义 5 个流水线命令（hz-init, unify-doc-review, cmd-autocode, unify-dev, unify-fix）的共享模式。
+> 本文件定义 5 个流水线命令（hz-init, team-docs, cmd-autocode, team-dev, unify-fix）的共享模式。
 > 命令文件可引用此处定义，避免重复。
 
 ## 1. 参数解析模式

@@ -31,14 +31,14 @@ argument-hint: [需求名称]
 
 ```bash
 # 开发指定需求
-/unify-dev 1-login-sync
+/team-dev 1-login-sync
 
 # 带指令开发
-/unify-dev 7 先实现后端API部分
-/unify-dev 7 跳过UI审查
+/team-dev 7 先实现后端API部分
+/team-dev 7 跳过UI审查
 
 # 不指定需求（自动扫描待开发需求）
-/unify-dev
+/team-dev
 ```
 
 ## Implementation Steps
@@ -50,9 +50,9 @@ argument-hint: [需求名称]
 **拆分规则**: 取第一个 token（空格分隔）作为需求标识，剩余部分作为 `USER_INSTRUCTIONS`。
 
 示例:
-- `/unify-dev 7 先实现后端API` → 需求标识=`7`, USER_INSTRUCTIONS=`先实现后端API`
-- `/unify-dev 7` → 需求标识=`7`, USER_INSTRUCTIONS=空
-- `/unify-dev` → 需求标识=空, USER_INSTRUCTIONS=空
+- `/team-dev 7 先实现后端API` → 需求标识=`7`, USER_INSTRUCTIONS=`先实现后端API`
+- `/team-dev 7` → 需求标识=`7`, USER_INSTRUCTIONS=空
+- `/team-dev` → 需求标识=空, USER_INSTRUCTIONS=空
 
 **需求匹配**（用需求标识部分）：
 
@@ -71,8 +71,8 @@ argument-hint: [需求名称]
 **a. Pipeline 状态检查**:
 运行 `python3 .claude/skills/create-docs/scripts/docs.py pipeline $REQ_NAME`
 
-- PM 文档阶段未完成 → **阻断**，提示: "请先运行 `/unify-doc-review $REQ_NAME`"
-- Tech 方案阶段未完成 → **阻断**，提示: "请先运行 `/unify-doc-review $REQ_NAME`"
+- PM 文档阶段未完成 → **阻断**，提示: "请先运行 `/team-docs $REQ_NAME`"
+- Tech 方案阶段未完成 → **阻断**，提示: "请先运行 `/team-docs $REQ_NAME`"
 - 其他未完成 → 警告但不阻断
 
 **b. 编译预检**:
@@ -87,7 +87,7 @@ argument-hint: [需求名称]
 使用 Task 工具启动 Tech Lead agent（非团队模式，独立检查）:
 
 ```
-Task tool:
+Agent tool:
   subagent_type: "hz-tech-lead"
   prompt: |
     你是开发团队的 Tech Lead，负责检查需求 $REQ_NAME 的技术文档是否完善，可以进入开发阶段。
@@ -137,7 +137,7 @@ Task tool:
 ```
 
 **处理检查结果:**
-- If `pass: false` → 输出问题列表，建议运行 `/unify-doc-review $REQ_NAME` 完善文档，**停止执行，不创建团队**
+- If `pass: false` → 输出问题列表，建议运行 `/team-docs $REQ_NAME` 完善文档，**停止执行，不创建团队**
 - If `pass: true` → 继续下一步
 
 ### 3. 创建团队与任务（动态角色）
@@ -268,9 +268,27 @@ Backend agent 完成所有任务后，**调度层验证审阅结果**：
 
 根据活跃角色列表，只启动对应的 agent。Tech Lead 总是启动。**前后端 agent 必须在 AutoCode 预生成完成后才能启动。**
 
-**Frontend agent（仅当 frontend ✅ 时启动）:**
+> 所有 teammate 共享以下团队沟通规则（写入每个 teammate 的 prompt 中）:
+
 ```
-Task tool:
+## 团队沟通规则
+你是 dev-$REQ_NAME 开发团队的成员。团队成员之间可以通过 SendMessage 直接沟通。
+- 读取 ~/.claude/teams/dev-$REQ_NAME/config.json 了解团队成员列表
+- 遇到问题或需要协调时，**直接 SendMessage 给对应角色**
+- 收到其他成员的消息后及时回复
+- 完成任务后通过 TaskUpdate 标记任务完成，并 SendMessage 通知相关角色
+
+## 沟通路由
+- 技术方案/架构问题 → SendMessage 给 `tech-lead`
+- API 契约变更 → 必须通知 `tech-lead` 审批，不能自行修改
+- 前端视觉问题 → SendMessage 给 `ui-designer`（如有）
+- 前后端联调问题 → Frontend ↔ Backend 直接沟通，重要变更抄送 `tech-lead`
+- Bug 或阻塞 → SendMessage 给 `tech-lead` 协调
+```
+
+**Frontend teammate（仅当 frontend ✅ 时启动）:**
+```
+Agent tool:
   subagent_type: "hz-frontend"
   team_name: "dev-$REQ_NAME"
   name: "frontend"
@@ -278,6 +296,9 @@ Task tool:
     你是开发团队的前端工程师，负责实现需求 $REQ_NAME 的前端功能。
 
     先读取 create-docs skill 的 SKILL.md (.claude/skills/create-docs/SKILL.md) 了解文档规范和 CLI 用法。
+
+    ## 团队沟通规则
+    [插入上述团队沟通规则]
 
     {如果 USER_INSTRUCTIONS 非空，追加以下段落}
     ## 用户指令（优先级最高）
@@ -315,7 +336,7 @@ Task tool:
 
 **Backend agent（仅当 backend ✅ 时启动）:**
 ```
-Task tool:
+Agent tool:
   subagent_type: "hz-backend"
   team_name: "dev-$REQ_NAME"
   name: "backend"
@@ -323,6 +344,9 @@ Task tool:
     你是开发团队的后端工程师，负责实现需求 $REQ_NAME 的后端功能。
 
     先读取 create-docs skill 的 SKILL.md (.claude/skills/create-docs/SKILL.md) 了解文档规范和 CLI 用法。
+
+    ## 团队沟通规则
+    [插入上述团队沟通规则]
 
     {如果 USER_INSTRUCTIONS 非空，追加以下段落}
     ## 用户指令（优先级最高）
@@ -369,7 +393,7 @@ Task tool:
 
 **Tech Lead agent（总是启动）:**
 ```
-Task tool:
+Agent tool:
   subagent_type: "hz-tech-lead"
   team_name: "dev-$REQ_NAME"
   name: "tech-lead"
@@ -380,6 +404,9 @@ Task tool:
     再读取 references/tech-stack.md (.claude/skills/create-docs/references/tech-stack.md) 了解项目技术栈。
     再读取 hab-temp skill (.claude/skills/hab-temp/SKILL.md) 了解模板架构规范。
     再读取 hab-autocode skill (.claude/skills/hab-autocode/SKILL.md) 了解 AutoCode API 用法。
+
+    ## 团队沟通规则
+    [插入上述团队沟通规则]
 
     ## 活跃角色
     本需求的活跃角色为: {active_roles 列表}
@@ -427,12 +454,15 @@ Task tool:
 
 **UI Designer agent（仅当 ui ✅ 时启动）:**
 ```
-Task tool:
+Agent tool:
   subagent_type: "hz-ui"
   team_name: "dev-$REQ_NAME"
   name: "ui-designer"
   prompt: |
     你是开发团队的 UI 设计师，负责需求 $REQ_NAME 的视觉还原度审查。
+
+    ## 团队沟通规则
+    [插入上述团队沟通规则]
 
     你的工作流程:
 
@@ -468,7 +498,7 @@ Task tool:
 
 **QA agent（仅当 qa ✅ 时启动）:**
 ```
-Task tool:
+Agent tool:
   subagent_type: "hz-qa"
   team_name: "dev-$REQ_NAME"
   name: "qa"
@@ -476,6 +506,9 @@ Task tool:
     你是开发团队的 QA 工程师，负责验收需求 $REQ_NAME 的实现质量。
 
     先读取 create-docs skill 的 SKILL.md (.claude/skills/create-docs/SKILL.md) 了解文档规范和 CLI 用法。
+
+    ## 团队沟通规则
+    [插入上述团队沟通规则]
 
     {如果 USER_INSTRUCTIONS 非空，追加以下段落}
     ## 用户指令（优先级最高）
@@ -598,32 +631,46 @@ python3 .claude/skills/create-docs/scripts/docs.py pipeline $REQ_NAME
 2. 使用 AskUserQuestion 询问用户是否提交 git:
    - 选项: 提交 / 不提交 / 修改后再提交
 3. 用户批准后提交:
-   - commit message: `feat($REQ_NAME): unify-dev 完成全团队协作开发`
+   - commit message: `feat($REQ_NAME): team-dev 完成全团队协作开发`
 4. **绝不自动提交**，必须等待用户明确批准
 
-### 8. 清理团队
+### 8. 用户确认与团队关闭
 
-发送 shutdown_request 给所有成员 → 等待确认 → TeamDelete
+在汇总报告和 Git 提交完成后，**必须与用户沟通确认**，不可直接关闭团队:
+
+1. **汇报开发成果**: 向用户呈现完整的开发报告摘要（实现状态、代码审查结果、QA 测试结果），让用户全面了解当前状态
+2. **询问是否有补充**: 使用 AskUserQuestion 询问用户是否有需要补充或修改的内容
+   - 如果用户有补充 → 通过 SendMessage 将补充内容发送给对应的 teammate 处理，等待完成后重新汇报
+   - 如果用户无补充 → 继续下一步
+3. **确认关闭开发团队**: 使用 AskUserQuestion 确认是否关闭开发团队
+   - 用户确认后:
+     1. 向所有 teammate 发送 shutdown 消息: `SendMessage({to: "name", message: {type: "shutdown_request"}})`
+     2. 等待所有 teammate 关闭后，调用 `TeamDelete` 清理团队资源
+
+**绝不自动关闭开发团队**，必须等待用户明确确认。
 
 ## Important Notes
 
+- **使用 Agent Teams（TeamCreate）创建团队** — 成员之间通过 SendMessage 直接沟通，不是独立 agent
+- **团队沟通规则写入每个 teammate 的 prompt** — 确保成员知道如何找到其他成员并直接沟通
 - **文档检查是硬门槛** — 不通过直接停止，不创建团队，不开始开发
-- **AutoCode 预生成是条件性阻塞步骤** — 仅当 tech/tasks.md 中存在 [autocode] 任务时才执行。在创建团队后、启动开发前由 Tech Lead 执行，生成 CRUD 基础代码（model/api/router/service/前端页面），**完成前前后端 agent 不得启动**。无 [autocode] 任务则跳过，直接启动开发。Backend 开发者在 autocode 基础上补充自定义逻辑，**不得重复创建已生成的文件**
+- **AutoCode 预生成是条件性阻塞步骤** — 仅当 tech/tasks.md 中存在 [autocode] 任务时才执行。在创建团队后、启动开发前由 Tech Lead 执行，生成 CRUD 基础代码（model/api/router/service/前端页面），**完成前前后端 teammate 不得启动**。无 [autocode] 任务则跳过，直接启动开发。Backend 开发者在 autocode 基础上补充自定义逻辑，**不得重复创建已生成的文件**
 - **代码审查 + UI 视觉审查是质量关卡** — 不通过必须修复后重新审查，不能跳过直接进 QA
-- **Frontend 和 Backend 并行开发**，互不阻塞
+- **Frontend 和 Backend 并行开发**，可直接 SendMessage 联调
 - **Tech Lead 代码审查与 UI 视觉审查并行**，综合结果后决定是否通过
 - **QA 测试两阶段** — 先 API 测试确保接口正确，再浏览器测试验证用户体验
 - **DO NOT** 跳过文档检查直接开发
 - **DO NOT** 跳过代码审查直接进 QA
 - **DO NOT** 在没有 design.md 的情况下开始编码
-- 每个 agent 使用 docs.py CLI 更新自己角色的 tasks.md 状态
+- 每个 teammate 使用 docs.py CLI 更新自己角色的 tasks.md 状态
 - 所有变更记录到 docs/$REQ_NAME/log.md
+- **团队关闭须用户确认** — 汇报成果 → 询问补充 → 确认关闭 → shutdown 所有成员 → TeamDelete
 
 ## Error Handling
 
 If 文档检查不通过:
 - 输出具体缺失/问题列表
-- 提示: `建议先运行 /unify-doc-review $REQ_NAME 完善文档`
+- 提示: `建议先运行 /team-docs $REQ_NAME 完善文档`
 - **停止执行**
 
 If 代码审查不通过:
