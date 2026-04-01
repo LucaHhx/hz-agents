@@ -18,16 +18,29 @@ except ImportError:
 
 
 def find_project_root():
-    """Find the project root by looking for server/ directory."""
-    # Start from script location, go up to find project root
-    current = os.path.dirname(os.path.abspath(__file__))
-    for _ in range(10):
-        if os.path.isdir(os.path.join(current, 'server')):
-            return current
-        parent = os.path.dirname(current)
-        if parent == current:
-            break
-        current = parent
+    """Find the project root by looking for server/ directory.
+
+    Search order:
+    1. PROJECT_ROOT environment variable (if set)
+    2. Current working directory, then walk up
+    3. Script location, then walk up (original behavior)
+    """
+    # 1. Env var override
+    env_root = os.environ.get('PROJECT_ROOT')
+    if env_root and os.path.isdir(os.path.join(env_root, 'server')):
+        return env_root
+
+    # 2. Search from cwd upwards (handles `cd /project && python3 script.py`)
+    for start in [os.getcwd(), os.path.dirname(os.path.abspath(__file__))]:
+        current = start
+        for _ in range(10):
+            if os.path.isdir(os.path.join(current, 'server')):
+                return current
+            parent = os.path.dirname(current)
+            if parent == current:
+                break
+            current = parent
+
     return None
 
 
