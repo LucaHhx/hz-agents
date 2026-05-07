@@ -37,15 +37,37 @@ description: "HAB AutoCode Skill — AI 自动化代码生成操作指南。通�
 ## 前置条件
 
 1. HAB server 已启动并运行
-2. `server/config.local.yaml`（或 `config.yaml`）中已设置 `autocode.api-key`
+2. `server/config.local.yaml`（或 `config.yaml`）已配置 API Key
 3. 数据库已初始化
+
+### API Key 配置（两种形态，`scripts/config.sh` 两者都兼容）
+
+**新版（推荐，pp-game 等现行项目）—— 顶级 `api-key` 段**
+
+项目把 AutoCode 路由并入统一的 `ApiKeyOrJWT` 中间件鉴权（见 `server/middleware/api_key.go`），
+所有后台 API 共享同一把 key：
 
 ```yaml
 # server/config.local.yaml
-autocode:
-  api-key: "your-random-api-key-here"  # uuidgen 或 openssl rand -hex 32
+api-key:
+  enabled: true
+  key: "your-random-api-key-here"   # uuidgen 或 openssl rand -hex 32
+  mode: "write"                      # ⚠️ autocode 写操作期间必须是 write
 ```
 
+> **⚠️ mode 影响 autocode 可用性**
+> - `mode: "read"` — 中间件只放行 `get*/find*/list*/search*/preview/export*/count*/check*/page*` 前缀的路径。`preview` 能跑，但 `createTemp` / `createPackage` / `rollback` 会被拒 401。
+> - `mode: "write"` — 全放行。autocode 生成操作必须在此模式下。
+> - 生成完成后建议改回 `"read"` 以保持安全边界。改完需重启 server。
+
+**旧版（hz-admin-base 原始模板）—— `autocode.api-key` 子字段**
+
+```yaml
+autocode:
+  api-key: "your-random-api-key-here"
+```
+
+> `scripts/config.sh` 优先读新版（顶级 `api-key.key`），读不到时 fallback 到旧版。
 > `autocode` 的其他字段（web、server、module）均有代码级默认值，可省略。`module` 会自动从 `go.mod` 读取。
 
 ## 辅助脚本用法
@@ -162,6 +184,8 @@ $AC rollback <id> keep-table  # 回滚但保留数据库表
 ## 安全注意事项
 
 - API Key 存储在 `config.local.yaml`（.gitignore 中），建议 `chmod 600`
-- API Key 仅对 AutoCode 路由生效，不能访问用户/权限管理等其他接口
+- **新版顶级 `api-key` 段**注入的是超管 claims（`authorityId=1`），**可访问所有后台 API**，不仅限 AutoCode。使用期间要意识到这把 key 等同于超管凭证。
+  - 旧版 `autocode.api-key` 子字段仅对 AutoCode 路由生效（如果项目模板还保留该独立机制）。
+- **生成完成后建议把 `api-key.mode` 改回 `"read"`**，把写权限收回；这样这把 key 只能做查询，泄露风险降一档。
 - 操作日志中 Username 为 "api-key"，与人工操作可区分
 - 所有生成操作有历史记录，支持回滚

@@ -135,3 +135,57 @@ DiyFrom 会自动渲染新字段。如需自定义渲染（如选择器、特殊
 - **检查清单**: AutoCode 生成后，立即检查 TableName() 返回值是否带 `b_` 前缀
 - **日期**: 2026-03-20
 - **来源**: 需求 2-channel-table-binding，Channel 表名修正
+
+## 4. AutoCode 生成后必须用 sync-model-field 做完整检查
+
+- **现象**: AutoCode 生成 CRUD 后，以下问题高频出现：
+  1. `sys_table_columns` 多出 `CreatedBy/UpdatedBy/DeletedBy` 三条记录，但 Go model 的 `HAB_MODEL` / `HAB_MODEL_NOD` 根本没这些字段 → 前端 DiyTable 请求时报 `Error 1054 Unknown column 'b_xxx.created_by'`
+  2. 菜单 `parent_id=0`，出现在根级而非目标父菜单下
+  3. `translation/{zh-CN,en-US}/menu.json` 缺少菜单翻译，侧边栏显示英文 key
+  4. `translation/{zh-CN,en-US}/business/xxx.json` 里的 `CreatedBy/UpdatedBy/DeletedBy` 翻译也是多出来的
+  5. `decimal(18,2)` 精度丢失为 `decimal(10,0)`
+- **原因**: AutoCode 模板假设用的是带 by 字段的 GVA 原版 Model，但本项目 `HAB_MODEL` / `HAB_MODEL_NOD` 都**不带** `CreatedBy/UpdatedBy/DeletedBy`（见 `server/global/model.go`）。所以 AutoCode 生成的 `sys_table_columns` + 翻译里这三条都是垃圾数据。
+
+- **仲裁原则：⚠️ 一律以 Go 模型字段为准**
+
+  碰到 DB / `sys_table_columns` / 翻译文件互相对不上时，**不要**反向"给 DB 补列让 sys_table_columns 对得上"——应该**以 Go struct 字段为唯一真源**，多余的元数据（sys_table_columns 行、权限行、翻译条目）全部**删掉**。
+
+  ❌ 错误做法：`ALTER TABLE b_xxx ADD COLUMN created_by bigint ...`（给 DB 加不该有的列）
+  ✅ 正确做法：
+  ```sql
+  -- 1. sys_authority_cols 先删（外键关联）
+  DELETE FROM sys_authority_cols
+   WHERE sys_table_columns_id IN (
+     SELECT id FROM sys_table_columns
+      WHERE tb_name='b_xxx' AND json_name IN ('CreatedBy','UpdatedBy','DeletedBy'));
+  -- 2. 再删 sys_table_columns 本体
+  DELETE FROM sys_table_columns
+   WHERE tb_name='b_xxx' AND json_name IN ('CreatedBy','UpdatedBy','DeletedBy');
+  -- 3. 翻译文件移除对应 key（zh-CN + en-US 都要）
+  ```
+
+- **完整检查清单**: AutoCode 生成后执行：
+
+  ```
+  AutoCode createTemp 完成
+       ↓
+  1. 对齐 sys_table_columns vs Go struct：
+     SELECT json_name FROM sys_table_columns WHERE tb_name='b_xxx'
+     对比 Go struct 字段（含 HAB_MODEL 展开字段）
+     → 多出来的（如 CreatedBy/UpdatedBy/DeletedBy）删掉
+     → 少了的才走 sync-model-field 补
+  2. 菜单归属：SELECT id, parent_id FROM sys_base_menus WHERE name='xxx' → UPDATE parent_id + sort
+  3. 菜单翻译：检查 translation/{zh-CN,en-US}/menu.json 是否有对应条目 → 补充
+  4. 字段翻译：检查 translation/{zh-CN,en-US}/business/xxx.json → 与 sys_table_columns 完全一一对应，多的删、少的补
+  5. 权限检查：SELECT authority_id, COUNT(*) FROM sys_authority_cols 看每个角色条数 = sys_table_columns 条数
+  6. decimal/json/uniqueIndex 等 gorm tag 对齐检查
+  7. go build ./... 编译验证
+  ```
+
+  **简化版**：用 `/sync-model-field` 命令，它会按"Go 模型为真源"原则对齐。
+
+- **强制规则**: 使用 hab-autocode 之后必须使用 sync-model-field 检查，不可跳过
+- **日期**: 2026-04-16（初版） / 2026-04-23（更新："以 Go 模型为准"仲裁原则）
+- **来源**:
+  - 初版: 12-provider-api 需求，4 张表生成后遇到全部 4 类问题
+  - 更新: b_table_currency_configs 生成后重犯同样问题（误往 DB 加列，应删 sys_table_columns 行）

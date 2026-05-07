@@ -388,7 +388,90 @@ Agent tool:
 4. 验证 UI 资源完整性（如有 ui 角色）: Resources/ 非空、assets-manifest.md 自检通过、merge.html 无外部 URL
 5. 按决策结果修改对应文档，在 log.md 记录用户决策
 
-#### 3.4 用户确认与团队关闭
+#### 3.4 Codex 外部审查（不关闭团队）
+
+多端交叉对齐完成后，**不要**关闭评审团队。引入 Codex 作为外部审查员做一轮独立审查，再交由 Tech Lead 牵头完善。
+
+**Step 0 — 确认全员停工（进入 3.4 的前置条件，不可跳过）:**
+
+Codex 审查期间 teammate 必须处于静默空闲状态，避免一边评审一边修改造成脏读。进入 3.4 前必须满足：
+
+1. 使用 `TaskList` 查询 doc-review 团队所有任务，确认除「多端交叉对齐」外的评审任务全部 `completed`
+2. 使用 `TaskList` 或 `TaskGet` 确认各 teammate 无 `in_progress` / `pending` 任务
+3. 如仍有成员在工作中：
+   - 等待其自然完成（不要强制 shutdown）
+   - 必要时通过 `SendMessage` 询问剩余工作量和预计完成时间
+   - 对长时间卡住的成员，经用户确认后可 `TaskStop` 中止
+4. 所有成员确认停工后，向每位 teammate 发送一条「待命通知」：
+   ```
+   SendMessage:
+     to: "<member-name>"
+     message: 现进入 Codex 外部审查阶段，请暂停对 docs/ 的任何修改，保持待命。
+              收到 tech-lead 转发的审查意见后再继续工作。
+   ```
+5. 向用户汇报：`全员已停工待命，即将启动 Codex 外部审查。`
+
+**只有上述 5 步全部完成，才能进入 Step 1。**
+
+**Step 1 — 向用户提示**: `多端对齐完成，现在引入 **Codex 外部审查员** 对文档做独立交叉审查：`
+
+**Step 2 — 调用 Codex 做文档审查:**
+
+作为 Team Lead，使用 `/codex:rescue --wait` 命令把文档审查任务交给 Codex 子 agent。任务描述要明确：
+
+- 审查范围: `docs/$REQ_NAME/` 下所有文档（plan.md / tasks.md / tech/design.md / frontend/ / backend/ / ui/ / qa/）
+- 审查视角: 作为独立第三方，挑战业务闭环、技术可行性、前后端契约一致性、验收标准可测试性、UI 与前端实现对齐
+- 输出格式: 按"问题点 → 所在文件 → 严重程度(阻断/建议) → 建议修复方向"结构列出
+
+调用示例（由 Team Lead 在主会话中直接触发斜杠命令）:
+
+```
+/codex:rescue --wait 对 docs/$REQ_NAME/ 下所有文档做独立交叉审查。
+重点检查: (1) 业务需求是否可闭环 (2) 技术方案是否可落地
+(3) 前后端 API 契约一致性 (4) UI 设计与前端实现是否对齐
+(5) QA 验收标准是否可测试。按"问题点 → 文件 → 严重程度 → 建议"输出。
+```
+
+> 注: Codex 不是团队 teammate，它作为外部审查员通过斜杠命令调用，结果由 Team Lead 接收后转交给 Tech Lead，不加入 doc-review 团队。
+
+**Step 3 — 将 Codex 审查结果转交 Tech Lead:**
+
+拿到 Codex 输出后，Team Lead 通过 `SendMessage` 把完整审查结果发给 `tech-lead` teammate：
+
+```
+SendMessage:
+  to: "tech-lead"
+  message: |
+    Codex 外部审查结果已产出，现由你牵头完善文档。
+
+    ## 审查结果
+    [完整粘贴 Codex 输出]
+
+    ## 你的职责
+    1. 阅读并评估每条问题的有效性（可反驳明显错判，在 log.md 记录理由）
+    2. 对于有效问题，按路由协调团队修复:
+       - 业务问题 → SendMessage 给 pm
+       - UI 问题 → SendMessage 给 ui-designer
+       - 前端问题 → SendMessage 给 frontend
+       - 后端问题 → SendMessage 给 backend
+       - QA 问题 → SendMessage 给 qa
+       - 技术方案问题 → 你自己修复
+    3. 所有有效问题处理完毕后，汇总一份"Codex 审查闭环报告"
+       （每条问题对应的处置结果: 已修复 / 已反驳 / 保留跟进）回报给 team-lead
+    4. 在 docs/$REQ_NAME/log.md 追加"Codex 外部审查"章节，记录决策过程
+```
+
+**Step 4 — Tech Lead 牵头完善:**
+
+Tech Lead 按职责分发问题给对应 teammate，各成员修复后通过 SendMessage 回报给 tech-lead。Team Lead 通过 TaskList 监控进度，等待 tech-lead 的"Codex 审查闭环报告"。
+
+**Step 5 — 闭环确认:**
+
+收到 Tech Lead 的闭环报告后，Team Lead 快速再跑一次 3.3 的一致性检查（仅针对 Codex 命中且修改过的文件），确认修改未引入新的不一致。
+
+完成后进入 3.5。
+
+#### 3.5 用户确认与团队关闭
 
 在对齐完成后，**必须与用户沟通确认**，不可直接关闭评审团队:
 

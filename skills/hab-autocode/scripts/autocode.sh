@@ -23,9 +23,32 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source "$SCRIPT_DIR/config.sh"
 
 if [ -z "$HAB_API_KEY" ]; then
-    echo "Error: API Key not configured in config.yaml" >&2
+    echo "Error: API Key not configured." >&2
+    echo "  配置位置（任选其一）:" >&2
+    echo "    新版（推荐）顶级 api-key 段:" >&2
+    echo "      api-key:" >&2
+    echo "        enabled: true" >&2
+    echo "        key: \"<your-key>\"" >&2
+    echo "        mode: \"write\"" >&2
+    echo "    旧版 autocode.api-key:" >&2
+    echo "      autocode:" >&2
+    echo "        api-key: \"<your-key>\"" >&2
     exit 1
 fi
+
+# autocode 的 createTemp / createPackage / delPackage / rollback 都是写路径，
+# 顶级 api-key.mode=read 会被 middleware 挡下（只有 preview/getXxx 等前缀放行）。
+# 在写命令执行前提前提示，避免跑到一半才收到 401。
+case "${1:-}" in
+    create|createTemp|create-package|delete-package|rollback|delete-history)
+        if [ "$(echo "${HAB_API_KEY_MODE:-}" | tr '[:upper:]' '[:lower:]')" = "read" ]; then
+            echo "Error: api-key.mode=read，写操作会被 middleware 拒绝。" >&2
+            echo "  请在 $CONFIG_FILE 将 api-key.mode 临时改为 \"write\"，重启 server 后再试。" >&2
+            echo "  生成完成后建议改回 \"read\" 以保持安全边界。" >&2
+            exit 1
+        fi
+        ;;
+esac
 
 # 通用 curl 函数
 api_post() {
