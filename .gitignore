@@ -6,6 +6,7 @@
 .vscode/
 *.swp
 *.swo
+skills/.system
 
 # Python
 __pycache__/
