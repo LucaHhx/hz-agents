@@ -43,8 +43,20 @@ raw = bytes.ReplaceAll(raw, []byte(ctx.PPTableID), []byte(ctx.TableID))
 ```
 **不替换的症状**：客户端 `subscribe` channel 校验失败、`isTableSubscribed` 永远 false、10 秒后断连。
 
-### B2. 上游 winners 必须完全丢弃 PP 测试账号视角
-上游 `winner[]` 是 PP 测试账号视角。**完全丢弃** `upstream.Winner`，只复用 `gId/seq/table` 元信息。**不要**写"同 userId 用我方覆盖"这种合并逻辑（会泄露 PP 视角虚假用户）。
+### B2. 上游 winners 处理（**已修正 — 之前的"完全丢弃"是错误判断**）
+
+> ⚠️ **历史错误铁律纠正**：之前版本写"上游 winner[] 是 PP 测试账号视角，完全丢弃"。
+> capture 实证（cbcf6qas8fscb222 baccarat6）：单帧 `winner[]` 含 55 真实玩家，多语种 screenName（韩文/印尼/英文）+ 合理金额 + USD 货币；301 个不同 `ppc<timestamp>` userId（PP 的 customer ID 命名空间，不是 test）。客户端 main.js `setWinners({winners:n, total:{totalEur, winnersCount}, ...})` 真的渲染"赢家瀑布"社交 UI。**完全丢弃会让客户端 winnersCount=N 但 winner=[] 矛盾，且丢失社交体验**。
+
+**正确处理**（按 PP 协议设计）：
+
+1. **默认：pass 透传 winner[]** — 让客户端展示完整社交"赢家瀑布"（含其他渠道/商户的真实玩家）
+2. **可选：合并我方覆盖**
+   - 上游列表里包含我方用户的 ppc id → 用我方真实 userId/screenName 替换对应条目（更友好；但需建立 ppc id ↔ 我方 userId 映射）
+   - 不在我方的 ppc id → 保留原条目（PP 全网赢家）
+3. **绝不可**完全丢弃 winner[]（与 winnersCount 矛盾 + 社交 UI 空白）
+
+**资金安全说明**：winner[] 仅用于客户端社交展示，**不**用于扣款/派彩判定。每用户的实际派彩仍由我方私聊 `win` 帧（基于我方 Redis 注单 + payout 计算）驱动 — 资金链路独立于 winners 广播帧。
 
 ### B3. 多事件单帧顺序保证
 Go map 遍历不保证顺序 — 必须 `orderKeysByPriority` 显式排序。优先级：

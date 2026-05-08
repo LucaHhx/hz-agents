@@ -18,18 +18,24 @@
 
 ### baccarat 系列（baccarat / speedbaccarat / megabaccarat / fortune6 / amazingbaccarat / seotdabaccarat / squeeze / puntobanco）
 
-> 来源：bcpirpmfpeobc199 (speedbaccarat) 对接验证。其他 baccarat 子类**仍需 grep 验证**。
+> 来源：bcpirpmfpeobc199 (speedbaccarat) 对接验证 + cbcf6qas8fscb222 (baccarat6) capture 校正。其他 baccarat 子类**仍需 grep 验证**。
 
-**必合成**：`bets` / `winners` / `win`
+**必合成**：`bets`（betsclosed 触发器）/ `win`（每用户私聊派彩）
+
+**透传或合并（不合成）**：`winners` — 上游 winner[] 是真实玩家社交瀑布（known-pitfalls B2 修正版）；选 pass 透传 或 rewrite 合并我方覆盖
+
 **不合成**：`winningBetCodes` / `betSpotWin`（客户端 main.js 0 命中 — known-pitfalls B4）
 
 **结算消息顺序**：
 ```
-gameresult（透传）→ winners（合成广播）→ 对每用户：win（私聊）
+gameresult（透传）→ winners（pass 透传 / rewrite 合并 — 不再"完全合成丢弃"）→ 对每用户：win（私聊）
 ```
+
 通过 `pendingWins` 缓存实现 win 后置：
 - OnGameResult 算完每用户的 win 帧 → 入队 `pendingWins[gameID]`
-- OnWinners 末尾调 `flushPendingWins(gameID)` 私聊每用户
+- 收到上游 winners（pass 或 rewrite）后调 `flushPendingWins(gameID)` 私聊每用户
+
+> ⚠️ **历史错误**：早期 baccarat 实现按 B2 错误版本"完全丢弃 winner[] + 合成空 winners"，导致客户端 winnersCount=N 但 winner=[] 矛盾。新对接 baccarat 桌**改 pass 透传**或合并覆盖；既有机台 follow-up issue 修。
 
 ### roulette 系列（roulette / megaroulette / autoroulette / poweruproulette / lucky6roulette）
 
@@ -61,7 +67,7 @@ gameresult（透传）→ winningBetCodes → betSpotWin → winners → 对每�
 
 客户端只用作触发器（`setPhase(BetsClosed)` + `placeBets()`）→ **不需要**带投注详情。
 
-### winners（合成广播 — gameresult 后）
+### winners（**优先 pass 透传**；如需 rewrite 合并我方覆盖按下表字段）
 
 ```json
 {"winners": {
@@ -80,6 +86,15 @@ gameresult（透传）→ winningBetCodes → betSpotWin → winners → 对每�
 ```
 
 字段全部 string；`winner` 必须是数组（main.js 容忍单对象，但服务端**一律发数组**）；金额 4 位小数（PP 标准）。
+
+**默认行为**（新对接，按 B2 修正版）：
+- pass 透传上游 winner[] 让客户端展示真实玩家社交瀑布
+- 不要"完全丢弃 + 合成空 winners"（之前错误做法 — known-pitfalls B2 已修正）
+
+**可选 rewrite 模式**（合并我方覆盖）：
+- 上游 winner[] 中 ppc<timestamp> 与我方 userId 映射 → 用我方 userId/screenName 替换对应条目
+- 不在我方的 ppc id → 保留原条目（其他渠道真实玩家）
+- 仅在需要"我方玩家在自己桌看到自己同伴"时启用；否则默认 pass
 
 ### win（私聊每用户 — winners 之后）
 

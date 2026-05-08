@@ -41,7 +41,7 @@ bash scripts/codex_review_loop.sh <worktree_path> <round_label>
 
 【关键陷阱清单 — 逐项验证】
 1. tableId 字节级替换
-2. winners 完全丢弃 PP 测试账号视角
+2. winners 处理（pass 透传 winner[] 或 rewrite 合并我方覆盖；**不可完全丢弃** — 见 known-pitfalls B2 修正版）
 3. 多事件单帧按优先级处理（gameresult 必须先 winners）
 4. PP 视角全 drop（bet/bets/win/winningBetCodes/betSpotWin/command/pong）
 5. CanBet Redis 异常返回 false

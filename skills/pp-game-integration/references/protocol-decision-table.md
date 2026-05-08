@@ -11,7 +11,7 @@
 | verdict | 行为 | 何时用 |
 |---|---|---|
 | **pass** | 字节级转发原帧给客户端（含 tableId 替换）| 客户端需要原帧 |
-| **drop** | 不转发（return false, nil）| 客户端不接收 / 服务端自合成 / PP 测试账号视角 |
+| **drop** | 不转发（return false, nil）| 客户端不接收 / 服务端自合成 / 含 PP 内部测试帧（**非真实玩家** —— 注意：`winner[]` 已确认是真实玩家不属此类）|
 | **rewrite** | 用我方修改后的 payload 重新序列化转发 | betstats 增强 / 其他需要修改的字段 |
 
 ## decisions 推导原则
@@ -22,9 +22,10 @@
    - 否 → drop
    - 是 → 问 ②
 
-2. **该事件是 PP 测试账号视角还是真实玩家视角？**
-   - PP 视角（如 winners）→ drop + 服务端**自合成**真实玩家版本
-   - 真实玩家 / 公共帧 → pass
+2. **该事件含 PP 内部测试帧 还是 真实玩家数据？**
+   - 内部测试帧（如 `bet`/`win`/`command` 这类我方应该自合成的事件）→ drop + 自合成
+   - 真实玩家广播帧（如 `winners` 含全网真实赢家社交瀑布）→ pass 透传 或 rewrite 合并我方覆盖
+   - **注意**：之前版本错误地把 `winners` 列为"PP 测试账号视角"，已纠正为真实玩家数据 — 见 known-pitfalls B2 修正版
 
 3. **服务端是否需要修改字段后再发？**
    - 是 → rewrite
@@ -43,7 +44,7 @@
 | 事件 | verdict | 备注 |
 |---|---|---|
 | `table` `dealer` `game` `timer` | pass + cache | 客户端连接时回放给新连接 |
-| `subscribe`（上游） | **drop** | 我方在 sendInit 末尾自合成（B2 — 不直接透传 PP 视角）|
+| `subscribe`（上游） | **drop** | 我方在 sendInit 末尾自合成 channel 校验帧（subscribe channel 必须含本机台 tableCode 才能让客户端 isTableSubscribed=true；与 winners 不同，subscribe 不透传是因为 channel 字段需要替换）|
 | `betstats` | rewrite + cache | `events.EnrichBetstats` 增强；rewrite 数据是**内层 payload**（B7）|
 | `card` / `cardinc` / `ShoeSummary` / `statistic` | pass + cache | baccarat 流式发牌 + 牌靴/路单统计 |
 | `disablesidebets` | pass + cache + 内部解析 | 拆 value 到禁用集合 |
@@ -57,12 +58,14 @@
 | `betsclosed` | pass + 业务 | `MarkBetsClosed` 关窗 + `go handlers.SubmitBets(...)` 异步调商户 /bet |
 | `startDealing` | pass | |
 | `gameresult` | **pass + 业务** | OnGameResult 写 b_game_rounds + 全用户结算 + queuePendingWin |
-| `winners` | **drop** + 自合成 | 详见 known-pitfalls B2 |
+| `winners` | **pass 透传**（默认）/ rewrite 合并我方覆盖 | 详见 known-pitfalls B2 修正版 — 上游 winner[] 是真实玩家社交数据，**不是测试视角**；完全丢弃会导致客户端 winnersCount=N 但 winner=[] 矛盾 |
 | `goodroad` / `playersCount` | pass | baccarat 路单 / 在线人数 |
 
-### C. PP 测试账号视角（**全部 drop** — 见 known-pitfalls B2）
+### C. PP 内部测试 / 服务端自合成视角（**全部 drop**）
 
-`bet` / `bets` / `win` / `winningBetCodes` / `betSpotWin` / `command` / `pong` — 我方为每用户合成。
+`bet` / `bets` / `win` / `winningBetCodes` / `betSpotWin` / `command` / `pong` — 我方为每用户合成（这些是单用户的私聊帧 / 心跳，应由我方按真实账号视角生成；上游版本是 PP 测试账号或心跳，无意义）。
+
+> ⚠️ **注意**：`winners` **不属于此类**（之前版本错误归类）— `winners.winner[]` 是 PP 全网真实玩家社交瀑布，应 pass 透传 / 合并我方覆盖，详见 known-pitfalls B2 修正版。
 
 baccarat 还要特别看：`winningBetCodes` / `betSpotWin` 在客户端 main.js 0 命中（known-pitfalls B4）。新对接 roulette 时这两类**必须合成**（与 baccarat 相反）。
 
