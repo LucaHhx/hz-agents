@@ -33,14 +33,19 @@ cat tmp/<tableId>/state.json 2>/dev/null
 
 ## 核心约束（铁律 — 不可违反）
 
-1. **自主执行** — 触发后只在 4 处停下问用户：① Phase 0 询问主分支 ② Phase 1 检测到 factory 已注册 ③ Phase 6 codex 同问题第 3 次 ④ Phase 6 codex 卡死第 3 次。其他全部按 [references/known-pitfalls.md](references/known-pitfalls.md) + `<repo>/docs/integration-experience/` 自主决策
+1. **自主执行 — 只在 2 处停下问用户**：① Phase 0 询问主分支 ② Phase 1 检测到 factory 已注册（要求用户决定重新对接 / 跳过 / 退出）。**其他所有场景必须自主决策**，包括：codex 同问题 ≥3 次 / codex 卡死 ≥3 次 / 项目级修复必要性 / 后续 follow-up 缺口分流 / 经验文档结构 / scope 取舍 — 全部按 §"自主决策矩阵" + [references/known-pitfalls.md](references/known-pitfalls.md) + `<repo>/docs/integration-experience/` 决断
 2. **范围限定** — 协议事实**只**信 main.js 字面量 + capture 实际样本。**禁止**参考 `/Users/luca/work/ppgame` 老项目；**禁止**把 `<gametype>.json` 当单机台事实；**禁止**把 chip_amounts/ws_address 等运行时配置当开发资料
 3. **事实驱动** — **禁止**预列任何"机台可能用 X 接口/Y 字段"假设；HTTP endpoint / betCode 表 / 错误码表等**只**从当次 main.js / capture / server 现有代码实际发现
 4. **余额硬卡** — `lobby_launch.sh` 报告 `minBalanceToPlay > 6000` 时直接退出
 5. **fail-closed 资金路径** — Redis 故障 / context 超时 / 解析失败 → 拒绝；详见 [references/known-pitfalls.md](references/known-pitfalls.md) C 节
-6. **反复 codex 直到无问题** — 每次重大改动跑一轮，发现 → 修 → 再跑
+6. **codex review 硬上限 10 轮** — 不再"反复跑直到无问题"。10 轮跑完后剩余 finding **自动 `gh issue create` 留 follow-up**，不无限循环。每轮按 §"自主决策矩阵" 选择性修，不修等于"全 PASS"
 7. **每次对接结束**写经验文档到 `<repo>/docs/integration-experience/<gametype>/<tableId>.md`
 8. **不主动 PR** — worktree 内不 PR，PR 时机由用户决定
+9. **自动建 issue（不询问用户）** — 满足任一条件立即 `gh issue create` 后继续推进，**不停下**：
+   - codex 同问题 hash ≥ 3 次出现
+   - codex 卡死累计 ≥ 3 次
+   - finding 命中"large 影响范围"（见 §"自主决策矩阵"）
+   - Phase 6 跑满 10 轮仍有未修 finding
 
 ## 工作流（9 phase 自主推进）
 
@@ -72,6 +77,53 @@ Phase 8 ── 经验文档归档 + commit
 2. 查 [references/known-pitfalls.md](references/known-pitfalls.md) — 共性陷阱
 3. 按 skill 设计原则自主决定 — fail-closed / 事实驱动 / struct-only / silent error 写日志 / 注释最少
 4. 决策完成后追加到对应经验文档（详见 [references/codex-review-loop.md](references/codex-review-loop.md) 实时记录格式）
+
+## 自主决策矩阵（codex finding / 后续 follow-up gap 分流）
+
+不要"codex 找到的所有问题都修"。每个 finding 按下表分流，**自主决断**：
+
+| 等级 | 判定标准 | 处理 |
+|---|---|---|
+| **small** | 单文件改动 ≤ 50 行；本机台范围；无新抽象；测试只补 1-3 例；不影响其他机台 | **立即修** + commit + 实时记入经验文档 |
+| **medium** | 跨 1-2 文件 / 50-200 行；本机台 + 1 个相关公共 helper；改动模式与既有机台一致；可独立 PR | **看资金安全必要性**：是 → 修；否 → `gh issue create` 留 follow-up |
+| **large** | 跨机台联动 / 通用层重构 / 新建 model 表 / 新增 API 接口 / 改动 > 200 行 / 涉及未明确的协议字段语义 | **自动 `gh issue create`** + 经验文档第 15 节"已建 follow-up issue"标注，**本 PR 不修** |
+
+**资金安全必要性判断**（medium 级用）：
+- ✅ 必要：扣款/派彩金额错误 / 资金竞态 / fail-closed 缺失 / 玩家可绕过的协议校验缺失
+- ❌ 非必要：审计字段缺失（不影响实际资金）/ 历史 XML 节点缺失（不影响结算）/ 重复代码 / 命名不一致 / 测试组织风格
+
+**项目级跳过判断**（命中 [project-level-skips.md](references/project-level-skips.md) 5 项之一）：
+- 默认跳过；如**已修复版本存在于本 PR / 历史经验文档**则不再次提及，直接进下一轮
+- codex 重提项目级问题 ≥ 2 次 → 自动 `gh issue create` 关联本 PR + 不再回应
+
+**Issue 模板**（gh issue create 用）：
+
+```bash
+gh issue create --title "<gametype>/<tableId> follow-up: <一句话>" --body "$(cat <<'EOF'
+来源：PR #<本 PR 号> Phase 6 codex review round-N
+
+发现：
+<file:line + codex 描述>
+
+判定：
+- 等级：large / medium-非必要
+- 影响范围：<跨机台 / 通用层 / 待定>
+- 资金安全：是/否
+
+建议方案：
+<一句话>
+
+不在本 PR 修复的原因：
+<one of: 跨机台联动需独立设计 / 缺 capture 样本待生产数据 / 与项目级 #N 合并 / scope cap>
+EOF
+)"
+```
+
+**绝不再问用户的场景**（之前犯过的错）：
+- ❌ "codex 第 N 次重提 X，怎么推进？" → 直接建 issue 跳过
+- ❌ "F3+F4+F7 vs all vs none?" → 按矩阵自主分流
+- ❌ "项目级修复要不要做？" → small/medium 必要的修；large 建 issue
+- ❌ "经验文档要不要补 §X 节？" → 必要就补，不必要就不补，自己判断
 
 ## 详细参考（按需读取）
 
@@ -105,7 +157,7 @@ Phase 8 ── 经验文档归档 + commit
 
 - **worktree-task-flow** — Phase 5 **只复用其 `scripts/init-worktree.sh`**，不进入它的 brainstorming/串行 worker/squash gate（本 skill 自管 worker 流程）
 - **codex-review** — Phase 6 通过 `scripts/codex_review_loop.sh` 包装调用其 `codex_review.sh`
-- **brainstorming** — 仅 4 处停下问用户的场景才进
+- **brainstorming** — 仅 2 处铁律允许的场景才进；其他 follow-up 决策**禁止**调 brainstorming（会打断流程问用户）
 
 ## 完成判定
 

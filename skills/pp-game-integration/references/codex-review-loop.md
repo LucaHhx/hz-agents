@@ -85,30 +85,75 @@ bash scripts/codex_review_loop.sh <worktree_path> <round_label>
 无问题就回"无重大问题"。
 ```
 
-## 闭环条件
+## 闭环条件（**硬上限 + 自动 issue，绝不停下问用户**）
 
 - codex 报"**无重大问题**" → 退出循环 → 进 Phase 7
-- 同问题（按 finding 描述前 30 字符 hash 计数）≥ 3 次 → 停下报告用户
-- codex CLI 卡死 ≥ 3 次 → 停下报告用户
+- **跑满 10 轮**（Phase 6 硬上限）→ 自动整理剩余 finding → `gh issue create` 留 follow-up → 进 Phase 7
+- 同问题（按 finding 描述前 30 字符 hash 计数）**≥ 3 次** → **自动 `gh issue create`**（不再询问用户）+ 标记该问题 `repeated_problems[hash].auto_filed=true` + 后续轮跳过该 hash → 继续
+- codex CLI **卡死 ≥ 3 次** → **自动 `gh issue create`**（标题"codex CLI 环境异常 — Phase 6 卡死 3 次"）+ 进 Phase 7（已修部分提交即可，剩余靠测试反馈）
+- **绝不再"停下报告用户"**（之前的设计错误，与铁律 1/9 冲突）
 
-## 自主分类逻辑
-
-每个 codex finding 按以下规则分类：
+## 自主决策矩阵（每个 finding 必须三步分流）
 
 ```
-1. file path 在通用层（server/game/common/handlers/, runtime/, ...）？
-   是 → 项目级跳过（不修，记 design.md "已知项目级 #N"）
-   否 → 继续 ②
+Step 1：项目级跳过判断（命中即跳过，不再考虑后续步骤）
+   - file path 在 server/game/common/{handlers,runtime,merchantclient}/?
+   - 命中 project-level-skips.md 5 项之一？
+   - 与本 PR 已修的项目级 commit 重复？
+   - 同 hash 已 ≥ 2 次重提？
+   命中 → 跳过 + 第 1 次提及时一次性记入经验文档第 10 节"项目级跳过状态"
+   否则 → Step 2
 
-2. 命中 project-level-skips.md 5 项之一？
-   是 → 项目级跳过
-   否 → 继续 ③
+Step 2：影响范围分级（按 SKILL.md §自主决策矩阵 small/medium/large）
+   - 改动行数预估
+   - 是否跨机台联动
+   - 是否涉及新抽象 / 新表 / 新 API
+   - 是否纯协议正确性（main.js 字面量驱动）
 
-3. file path 在本机台目录（baccarat/<tableId>/ 或 factory）？
-   是 → 本机台修
-        ├── 写补丁 + commit
-        └── 实时记录到 docs/integration-experience/<gametype>/<tableId>.md 第 7 节
-   否 → 报告（codex 似乎指向了不该指的范围）
+Step 3：执行
+   - small（≤ 50 行 / 本机台 / 无新抽象） → 立即修 + commit + 经验文档第 7 节实时记录
+   - medium（50-200 行）：
+     * 资金安全必要 → 修
+     * 否则 → gh issue create + 经验文档第 15 节"follow-up issue 列表"
+   - large（> 200 行 / 跨机台 / 新表 / 新 API） → 自动 gh issue create + 第 15 节
+```
+
+**禁止**：
+- ❌ 把 codex 所有 finding 都修（最贵、最慢、最容易引入回归）
+- ❌ 反复 prompt 用户"X 项怎么推进"（铁律 1：只 2 处停下）
+- ❌ medium-非必要 finding 仍尝试修（应直接 issue）
+- ❌ 项目级问题第 2/3 次提及时还在 commit message 里详细解释（已记录的不重复，issue 链接即可）
+
+## 自动 gh issue create 模板
+
+每次需要建 issue 时：
+
+```bash
+gh issue create --title "<gametype>/<tableId> follow-up: <30 字内描述>" --body "$(cat <<'EOF'
+来源：PR #<本 PR 号> Phase 6 codex review round-<N>
+分类：<repeated-N-times | stuck-3-times | large-impact | round-cap-leftover>
+
+codex finding 原文：
+> <file>:<line> — <description>
+
+判定：
+- 影响范围：<small / medium-非必要 / large / project-level-#N>
+- 资金安全：<是 / 否>
+- 重提次数：<N>
+
+建议方案（不在本 PR 修复）：
+<one of:
+ - 跨机台联动需独立设计
+ - 缺 capture 样本待生产数据
+ - 与项目级 #N 合并
+ - scope cap 已达 10 轮硬顶
+ - 同问题 3 次重提，根本设计需 review
+>
+
+附：state.json: tmp/<tableId>/state.json
+worktree: <worktree_path>
+EOF
+)"
 ```
 
 ## 实时决策记录格式
@@ -148,37 +193,10 @@ bash scripts/codex_review_loop.sh <worktree_path> <round_label>
 }
 ```
 
-## 报告用户的格式（停下时）
+## 已废弃的"停下报告用户"设计
 
-### 同问题 3 次
-
-```
-⚠️ Phase 6 停下：同一问题第 3 次出现，设计可能有根本错误
-
-问题：<问题 hash 描述>
-出现轮次：1 / 3 / 5
-当前修复策略：<前两次怎么修的>
-建议：人工 review 该问题的根本设计假设。
-
-state.json 路径：tmp/<tableId>/state.json
-worktree：<worktree_path>
-```
-
-### codex 卡死 3 次
-
-```
-⚠️ Phase 6 停下：codex CLI 第 3 次卡死
-
-可能原因：
-- read-only sandbox 与 ~/.codex/sessions 写入冲突
-- prompt 过长导致 codex 启动慢
-- 网络异常导致 codex 无法访问 OpenAI API
-
-建议：
-- 检查 codex 进程：`ps aux | grep codex`
-- 重启 codex / 重置 sandbox
-- 简化 prompt 重试
-
-state.json 路径：tmp/<tableId>/state.json
-已闭环 N 轮：<前 N 轮的关键 findings>
-```
+> ⚠️ 历史设计：同问题 3 次 / codex 卡死 3 次时停下问用户。
+>
+> **已废弃**（与铁律 1/9 冲突 — 用户明确反馈"不要一直找询问询问"）。现在全部走"自动 gh issue create + 继续"，**永远不停下**。
+>
+> Phase 6 完成时 state.json 标 `phase: 6, status: "done"`，即使有未修 finding 也不算失败 — 由 issue 跟踪 + 测试阶段反馈驱动后续修复。

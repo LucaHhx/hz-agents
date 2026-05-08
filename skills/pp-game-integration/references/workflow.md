@@ -250,11 +250,11 @@ bash /Users/luca/.claude/skills/worktree-task-flow/scripts/init-worktree.sh \
 
 ---
 
-## Phase 6 — 反复 codex review
+## Phase 6 — codex review（**硬上限 10 轮，绝不停下**）
 
 **入口**：state.phase = 5 done。
 
-**动作**：循环：
+**动作**：循环（**最多 10 轮**）：
 ```bash
 WT=$(jq -r .worktree_path tmp/<tableId>/state.json)
 BASE=$(jq -r .base_branch tmp/<tableId>/state.json)
@@ -262,21 +262,34 @@ bash $SKILL_DIR/scripts/codex_review_loop.sh "$WT" "round-N" "$BASE"
 ```
 **注意**：`codex_review_loop.sh` 是 **AI 包装器**（非确定性），它内部调 codex CLI 做 AI 推理。该脚本会自动更新 `state.codex_rounds[]` / `state.codex_stuck_count`。
 
-**循环逻辑**：
+**循环逻辑**（按 SKILL.md §自主决策矩阵 + [codex-review-loop.md](codex-review-loop.md) 三步分流）：
 1. 跑 codex review，提取 🔴 / 🟡 / 🟢 findings
-2. 主 Claude 对每个 finding 自主分类：
-   - **本机台修** → 写补丁 + commit + **实时**追加到 docs/integration-experience/<gametype>/<tableId>.md 第 7 节
-   - **项目级跳过** → 查 [project-level-skips.md](project-level-skips.md)；命中则跳过
+2. 主 Claude 对每个 finding 自主三步分流：
+   - **Step 1 项目级跳过判断** — 命中则跳过 + 第 1 次提及时记入经验文档第 10 节
+   - **Step 2 影响范围分级** — small / medium-资金必要 / medium-非必要 / large
+   - **Step 3 执行**：
+     - small → 立即修 + commit + 经验文档第 7 节实时记录
+     - medium 资金必要 → 修
+     - medium 非必要 / large → **`gh issue create` + 经验文档第 15 节"follow-up issue 列表"**
 3. 跑下一轮；codex 报"无重大问题" → 退出循环
 
-**异常处理**（来自 [codex-review-loop.md](codex-review-loop.md)）：
+**自动建 issue 触发条件**（绝不停下问用户）：
 | 情况 | 处理 |
 |---|---|
-| codex CLI 卡死 | state.codex_stuck_count++；继续下一轮（脚本退出码 2）|
-| codex_stuck_count ≥ 3 | **停下报告用户**（环境异常）|
-| 同一问题（按 finding 描述前 30 字符 hash 计数）≥ 3 次 | **停下报告用户**（设计可能根本错误）|
+| codex CLI 卡死 | state.codex_stuck_count++；继续下一轮 |
+| codex_stuck_count ≥ 3 | **自动 `gh issue create`**（标题"codex CLI 环境异常 — Phase 6 卡死 3 次"）+ 进 Phase 7 |
+| 同一问题 hash ≥ 3 次 | **自动 `gh issue create`** + state.repeated_problems[hash].auto_filed=true + 后续轮跳过 → 继续 |
+| 跑满 10 轮仍有未修 finding | **整理剩余 → 自动 `gh issue create`** → 进 Phase 7 |
+| finding 命中 large 等级 | **立即 `gh issue create`** + 第 15 节登记 → 不在本 PR 修 |
+| finding 命中 medium 非必要 | **`gh issue create`** + 第 15 节登记 → 不在本 PR 修 |
 
-**过渡**：codex clean → 自动 Phase 7。
+**禁止**：
+- ❌ 跑超过 10 轮（硬上限，不可逾越）
+- ❌ "停下报告用户" 措辞 — 已与铁律 1/9 冲突
+- ❌ 把 codex 所有 finding 都修
+- ❌ 重复提及已建 issue 的项目级问题
+
+**过渡**：codex clean / 跑满 10 轮 / stuck 3 次 / 任一终止条件 → 自动 Phase 7（无论是否有未修 finding，由 issue 跟踪即可）。
 
 ---
 
