@@ -73,10 +73,14 @@ Phase 8 ── 经验文档归档 + commit
 
 按下列优先级，**不打断流程问用户**：
 
-1. 查 `<repo>/docs/integration-experience/<gametype>/*.md` — 同 gametype 已有先例（精确匹配 tableId 优先；无则回退到大类如 baccarat/ 任一文件）。**首次对接时该目录可能不存在 → 视为合法**
-2. 查 [references/known-pitfalls.md](references/known-pitfalls.md) — 共性陷阱
-3. 按 skill 设计原则自主决定 — fail-closed / 事实驱动 / struct-only / silent error 写日志 / 注释最少
-4. 决策完成后追加到对应经验文档（详见 [references/codex-review-loop.md](references/codex-review-loop.md) 实时记录格式）
+1. **`<repo>/docs/integration-experience/common/`** — 项目内方法论（**Phase 3-4 强制读**）：
+   - `client-rules-analysis.md` — 4 类客户端规则分析方法论 + §9 矩阵输出模板（agent-3 必读）
+   - `history-display-analysis.md` — 5 类历史入口分析方法论 + §10 审查表模板（agent-2 必读）
+   - **Phase 4 design.md 必须含 §7 矩阵 + §8 历史链路审查**（之前的设计错误：放到 Phase 8 才补 → 缺口到 codex 阶段才暴露）
+2. 查 `<repo>/docs/integration-experience/<gametype>/*.md` — 同 gametype 已有先例（精确匹配 tableId 优先；无则回退到大类如 baccarat/ 任一文件 → 再无则回退到相邻 gametype 如 sweetbonanza/）。**首次对接时该目录可能不存在 → 视为合法**
+3. 查 [references/known-pitfalls.md](references/known-pitfalls.md) — 共性陷阱
+4. 按 skill 设计原则自主决定 — fail-closed / 事实驱动 / struct-only / silent error 写日志 / 注释最少
+5. 决策完成后追加到对应经验文档（详见 [references/codex-review-loop.md](references/codex-review-loop.md) 实时记录格式）
 
 ## 自主决策矩阵（codex finding / 后续 follow-up gap 分流）
 

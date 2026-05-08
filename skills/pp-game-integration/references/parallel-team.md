@@ -65,6 +65,13 @@ gameType: <gametype>
 3. 只读当次 capture（main.js / message.json / clientResources）
 4. 输出文件必须落到指定位置
 5. 失败时 stderr 输出"agent-N: <错误描述>"+ 写空文件到输出位置
+6. **必读项目内方法论 + 既有经验**（按 agent 职责选）：
+   - `<repo_root>/docs/integration-experience/common/client-rules-analysis.md` — 客户端规则分析方法论（4 类规则矩阵；agent-3 必读）
+   - `<repo_root>/docs/integration-experience/common/history-display-analysis.md` — 历史链路分析方法论（5 类入口 + XML parser；agent-2 必读）
+   - `<repo_root>/docs/integration-experience/<gametype>/*.md` — 同 gametype 已有先例（任一 agent 都应读，作为字段命名 / 协议偏差对照）
+   - `<repo_root>/docs/integration-experience/<其他 gametype>/<最近一次>.md` — 跨 gametype 参考（首次对接同 gametype 时尤其重要，看相邻协议家族实测）
+
+**事先列出已读文件**：在产出文件开头一段写"📚 参考来源"列出实际读了的方法论文档 + 经验文档，便于后续审查溯源。
 ```
 
 ---
@@ -98,7 +105,7 @@ gameType: <gametype>
 
 ---
 
-## agent-2 HTTP 接口
+## agent-2 HTTP 接口（含 history endpoint **预审查**）
 
 ```
 <通用约束>
@@ -107,10 +114,11 @@ gameType: <gametype>
   - main.js: <main_js_path>
   - clientResources 全部 .js chunks: <capture_dir>/clientResources/apps/**/*.js
   - server 现有路由: <repo_root>/server/api/v1/
+  - **必读方法论**: <repo_root>/docs/integration-experience/common/history-display-analysis.md（§1.1 5 类历史入口 + §2 分析步骤）
 
 输出:
   - <capture_dir>/http_endpoints.json
-  - <capture_dir>/http_diff.md
+  - <capture_dir>/http_diff.md（**新增 §history-prelim 节**：5 类历史入口客户端调用情况）
 
 **铁律**: 禁止凭空假设 PP 客户端会用某 endpoint。所有 endpoint 必须**从 main.js 字面量或调用代码反推**。详见 <skill_dir>/references/http-analysis.md。
 
@@ -124,6 +132,13 @@ gameType: <gametype>
    - path mismatched（路径不一致）
    - field gap（响应字段缺）
    - 机台特殊数据（同 endpoint 但本机台需要不同字段）
+6. **history endpoint 预审查**（按 history-display-analysis.md §1.1）：grep 5 类入口在 main.js 中的命中情况
+   - /api/ui/history/{summary,dayWise}
+   - /cgibin/.../audit/game.jsp
+   - /api/ui/statisticHistory
+   - /api/fetchRoundHistory / /v2/fetchRoundHistoryByWS
+   - 机台特殊 endpoint
+   并对每项标 ✅命中 / ❌未命中 / ⚠️待确认；后端 grep 实现状态（GameHistorySummary / Detail / parser 等）
 
 工作方式: 用 rg / cat / bash 读文件，用 python 统计/分析。
 失败处理: **不许**把"分析失败"标成"无缺口"。失败时输出 {"endpoints": [], "error": "<原因>"} 到 http_endpoints.json + stderr。失败状态由主 Claude 决定是否重试。
@@ -131,20 +146,35 @@ gameType: <gametype>
 
 ---
 
-## agent-3 UI / 投注规则
+## agent-3 UI / 投注规则（**含 4 类规则矩阵预产出**）
 
 ```
 <通用约束>
 
-输入: main.js: <main_js_path>
-输出: <capture_dir>/ui_rules.md
+输入:
+  - main.js: <main_js_path>
+  - **必读方法论**: <repo_root>/docs/integration-experience/common/client-rules-analysis.md（§2 4 类规则框架 + §4 矩阵模板）
+  - 翻译表: <repo_root>/server/game/pp/client/apps/translations-ui/latest/zh/{core,<gametype>}.json（如存在）
 
-任务: 从 main.js 提取下列规则（**只列发现的**，不预设）:
+输出: <capture_dir>/ui_rules.md（**含 §X 客户端-后端一致性矩阵预产出**）
 
-1. 投注位 → betCode 映射（DOM data-bet-code / Pixi child name / Redux betSpot key）
-2. 互斥规则（同轮不能共存的对，如反向投注）
-3. 主投注前置规则（如 PlayerBonus 须先押 Player；详见 known-pitfalls.md B8）
-4. 限额规则（每 betCode 的 min/max；按 X% of mainBet 的边注上限）
+任务: 从 main.js 提取下列规则（**只列发现的**，不预设；按 client-rules-analysis.md §2 4 类框架）:
+
+A. **下注限额规则**（每 betCode min/max + 总台限）
+   - 按 §A.1-A.5 grep betLimits / *_bet_min / table_bet_min/max_limit
+   - 列字段映射表（客户端 il 枚举 ↔ tableConfig 字段名 ↔ 兜底默认 ↔ 渲染行名）
+B. **派彩封顶规则**（MAXIMUM_PAYOUT_V* + maxMultiplier + euroTablePayoutMax + table_payout_max）
+   - 按 §B.1-B.4 grep + 列客户端 fallback 表（如 maxMultiplier ?? 2e4）
+   - 必须三路取 min（known-pitfalls G3）
+C. **bet code 合法性 + 行为规则**
+   - 客户端 il 枚举 vs 后端 BC 枚举
+   - 联动规则（押 X 必须先押 Y / Bonus 主投注前置）
+   - 特殊收费（Booster / 等）
+D. **UI 状态机规则**
+   - 投注窗口 / decision 窗口 / 倒计时
+
+**输出 §矩阵预产出**：按 client-rules-analysis.md §4 模板列一张完整矩阵（每行：客户端展示项 / tableConfig 字段 / 后端 enforce 现状（暂标 ?）/ 默认值 / 差距等级 P0/P1/OK）。后端 enforce 列在 Phase 4 design.md 时由主 Claude 实际 grep server 后填实。
+
 5. 动态阈值（如 "X 局后禁用 Y 边注"，如有）
 6. 客户端特殊状态机（如 NotAllBetsAccepted 处理）
 

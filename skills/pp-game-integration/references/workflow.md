@@ -186,22 +186,32 @@ bash $SKILL_DIR/scripts/fetch_capture.sh <tableId> [duration_min]   # 默认 5
 
 ---
 
-## Phase 4 — 协议设计（含 HTTP 缺口）
+## Phase 4 — 协议设计（**必含 §客户端-后端一致性矩阵 + §历史链路审查**）
 
 **入口**：state.phase = 3 done。
 
-**动作**：基于 5 agent 输出 + docs/integration-experience/ 先例，主 Claude 写 `<repo>/tmp/<tableId>/design.md`，必含：
+**必读输入**（写 design.md 前主 Claude 读全）：
+- 5 agent 产出（含 agent-3 ui_rules.md 的 §矩阵预产出 + agent-2 http_diff.md 的 §history-prelim 节）
+- **`<repo>/docs/integration-experience/common/client-rules-analysis.md`**（§2 4 类规则 + §4 矩阵输出格式）
+- **`<repo>/docs/integration-experience/common/history-display-analysis.md`**（§2 5 步分析 + §3 落盘字段清单 + §5 输出格式）
+- `<repo>/docs/integration-experience/<gametype>/*.md`（同 gametype 先例）— 至少读最近一篇看节号约定
+- references/{protocol-decision-table.md, frame-synthesis.md, known-pitfalls.md}
 
-1. **机台元信息总览**（lobby + 协议事实）
-2. **协议处理决策表** — 对每个事件标 pass/drop/rewrite + 理由（参考 [protocol-decision-table.md](protocol-decision-table.md)）
-3. **服务端→客户端帧合成清单** — 哪些必须自合成（参考 [frame-synthesis.md](frame-synthesis.md)）
-4. **HTTP 接口缺口分析**（来自 agent-2 的 http_diff.md）
-   - missing endpoints — 必须新增
-   - path mismatched — 必须改 router
-   - field gap — 必须补字段
-   - 机台特殊数据 — 加机台分支
-5. **测试覆盖计划** — 按 [test-design-guide.md](test-design-guide.md)
-6. **预期跳过的项目级问题** — 引用 [project-level-skips.md](project-level-skips.md)
+**动作**：主 Claude 写 `<repo>/tmp/<tableId>/design.md`，**必含**（顺序按下表）：
+
+| § | 必含内容 | 来源 |
+|---|---|---|
+| 1 | 机台元信息总览 | lobby.json |
+| 2 | 协议处理决策表 — 每事件 pass/drop/rewrite + 理由 | protocol-decision-table.md |
+| 3 | 服务端→客户端帧合成清单 | frame-synthesis.md |
+| 4 | HTTP 接口缺口分析 | agent-2 http_diff.md |
+| 5 | 测试覆盖计划 | test-design-guide.md |
+| 6 | 预期跳过的项目级问题 | project-level-skips.md |
+| **7** | **客户端-后端一致性矩阵**（4 类 A 限额 / B 派彩封顶 / C bet code / D UI 状态机；按 client-rules-analysis.md §4 完整模板；后端 enforce 列必须实际 grep server 填实，**不允许写"待 Phase 5 worker 实现时再查"**）| **client-rules-analysis.md + agent-3 矩阵预产出** |
+| **8** | **历史链路审查**（5 类 endpoint 实现状态 + 详情 XML 字段映射表 + 落盘字段清单 §3 三个表逐项 ✅/❌ + 单测覆盖清单；按 history-display-analysis.md §5 完整模板）| **history-display-analysis.md + agent-2 §history-prelim** |
+| 9 | worker 拆分（按缺口大小划 worker-1/2/3/4） | 综合 |
+
+**§7 §8 必须在 Phase 4 完整产出**（之前的设计错误：放到 Phase 8 才补 → codex review 阶段才暴露 history XML parser 缺失 / Description i18n 缺失等真实缺口）。
 
 **决策点处理**：
 | 情况 | 处理 |
@@ -209,8 +219,10 @@ bash $SKILL_DIR/scripts/fetch_capture.sh <tableId> [duration_min]   # 默认 5
 | 决策无先例 + known-pitfalls.md 也无 | 按 skill 设计原则自主决定（不停下问用户）|
 | 决策与 docs/integration-experience/ 同 gametype 不一致 | 在 design.md 注明"为什么本机台特殊" |
 | HTTP 接口缺口 → worker-3 是否需要 | http_diff.md 有任意 missing/mismatched/field-gap → 必须加 worker-3 HTTP（Phase 5）|
+| §7 矩阵发现 P0 缺口（客户端承诺、后端无 enforce） | **必须**进 Phase 5 worker 任务清单（不可跳到 Phase 6 由 codex 才发现）|
+| §8 历史链路发现 baccarat/<gametype> XML parser 缺失 | 同上：进 worker-2 任务（缺 capture 样本可声明 follow-up issue 但仍要在 design.md 列出）|
 
-**过渡**：design.md 写完 → 自动 Phase 5（**不审，不询问用户**）。
+**过渡**：design.md 写完（含完整 §7 §8）→ 自动 Phase 5（**不审，不询问用户**）。
 
 ---
 
