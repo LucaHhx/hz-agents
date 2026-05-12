@@ -519,3 +519,195 @@ QA / 灰度阶段如果发现详情弹窗某节点空白 / 渲染失败 → 抓�
 | `b_game_user_actions{action=candy_drop_decision}` | OnUserDecision | 玩家选中糖果 index | renderCandyDropPayout 反查（issue #55） |
 
 **禁止**：只在 RawData 里留 sbz_gr 整帧 → 老解析路径走 raw_data，新结构化路径走 Extra；缺 Extra 时强制走 raw_data 兜底，性能差且容易因上游字段漂移失效。
+
+---
+
+## I. 协议保真度（防"抄既有机台模板"踩坑）
+
+**核心原则**：新机台**不允许**直接 fork 既有机台目录、改 tableId 就上线。下注 XML 容器、上游 ack 帧、错误码语义、KickUser 协议帧、`<bet>` echo、history `score` 字段——每一项都必须以**本机台客户端代码 + 本机台 pp.har 实测**为唯一真相源。dragontiger drag0ntig3rsta48 上线后实测 26 个 finding（codex Round 11/12）几乎全部是"抄 baccarat6 模板没二次验证"导致的，最严重的两条让"任何下注都弹会话超时"和"先下龙2000后下和2000时龙被覆盖丢失"长期未发现。
+
+### I1. 客户端业务模块在 `assets/<gametype>/<gametype>.js`，**不是** chunk-EQLH3F6G.js
+
+PP 客户端架构：
+- `chunk-EQLH3F6G.js` / `chunk-MIKRGMLI.js` — Angular **主框架共享**代码，处理通用 socket / alert / 翻译。`construct*BetCommands` 在这里，但**不是所有机台都走它**
+- `main-<HASH>.js` — Angular bootstrapper
+- **`assets/<gametype>/<gametype>.js`** — PIXI **业务模块**（dragontiger / baccarat / etc 各自一份），下注按钮、Bet UI、玩法逻辑住这里
+
+Phase 3 协议字典分析**必须**优先 grep 业务模块：
+
+```bash
+# 业务模块独立的下注 XML 构造（dragontiger 实测有自己的 sendSocketBetCommand
+# + constructPlaceBetCommands，与 chunk-EQLH3F6G.js 主框架版完全独立）
+find server/game/pp/client -path '*assets/<gametype>/<gametype>.js' -exec \
+  grep -oE '<(placeBet|placebets|lpbet|pbet|command)[^>]*>' {} \;
+```
+
+**踩过的坑**：dragontiger 业务模块发 `<placeBet>` 单数（不带 gameId、bet 子节点带 userId）— 与 chunk-EQLH3F6G.js 五个 `construct*BetCommands`（`<placebets>` / `<lpbet>` / `<pbet>`）格式完全不同。worker 没看业务模块，server 仅识别后三种 → `<placeBet>` 走 default 默默 ack success 不落库 → 下注流程根本不通过。
+
+### I2. 错误码常量必须独立定义，禁止跨机台 import
+
+```go
+// ❌ 反例（drag0ntig3rsta48 早期）
+import baccarat "hab/game/pp/internal/games/baccarat/cbcf6qas8fscb222"
+const ErrCodeBetNotOnTime = baccarat.ErrCodeBetNotOnTime  // 30+ 别名
+```
+
+后果：跨包耦合 + 错误码语义随 baccarat 漂移；feedback memory `不同机台应通过客户端分析，不要使用其他机台配置`被破坏。
+
+**正确做法**：每个机台 `enum.go` 独立定义。即使 PP 协议级码值跨机台相同，也要本机台 grep 实测 / capture 命中过后再加，且加注释说明"capture seq=N 实测 / main.js literal / 代码路径需要"——三选一的来源标注。
+
+### I3. 客户端会触发 sessionTimeout 弹窗的字段 / 帧 / 错误码 — 必须独立验证
+
+不同机台客户端版本对这些**"特殊语义触发器"** 实现可能不同：
+
+| 触发器 | 客户端反应 | 注意 |
+|---|---|---|
+| `<betValidationError extendedErrorCode="非空">` | 立即弹 9018 会话超时弹窗 + return | dragontiger 实测：仅 InvalidToken 等踢下线场景应填；普通错误必须留空 |
+| `<betValidationError extendedErrorCode=""/>`（空字符串） | 正常走 rejectBet 显示通用 alert | OK |
+| `<logout id="..."/>`（XML 帧） | 弹会话异常 + closeWebSocket | dragontiger 真协议（不是 sweetbonanza/baccarat6 的 JSON envelope `{"session":...}`）|
+| betValidationError `code === 1011` / `1037` / `1003` / `101019` / `10007` | rejectBet 走专用分支（清筹码 / SAFE_BETS / logout 等）| 与客户端 chunk `rejectBet` switch 对照 |
+
+Phase 3 必须 grep 一遍 `chunk-MIKRGMLI.js` 的 `BETVALIDATION_ERROR` case 和 `processAlert` ladder，列出"哪些字段非空会触发 sessionTimeout"，写入 dict.json `client_handler_caveats` 字段。
+
+**踩过的坑**：dict.json 把"extendedErrorCode 多余字段是协议噪声不会破坏"当结论 → server 每条 betValidationError 都填值 → 任何下注失败都弹"会话超时"。**实证手段**：把 server 端 `buildBetValidationError` 的 fixture 在浏览器 console 上手动 `socketHandler.onmessage` 喂一条，观察 UI 是否真弹 sessionTimeout 弹窗。
+
+### I4. 服务端落库 BC 必须归一化（边界归一化原则）
+
+客户端发下注 XML 用**原始数字字符串 betspotID**（如 `betcode="0"` Dragon），server 端有两种处理：
+
+| 路径 | BC 形式 | 原因 |
+|---|---|---|
+| `parseBets` 解析 → `iface.BetItem.BC` | **保留原始 "0"/"1"/...** | `<betValidationError betCode>` 必须 echo 原始数字字符串，让客户端 rejectBet 按 `betspotID == betCode` 定位 betspot 清筹码 |
+| `applyBet → BetSvc.PlaceBet` 写 Redis | **归一化为命名 BC `"dragon"`** | 后续 `enrichDTBetstats` / `settle.go::computeBetTxn` / `history_dragontiger::parseDragonTigerDetail` 都按命名 BC switch 命中 |
+
+**边界归一化原则**：归一化必须发生在**写入持久层（Redis/DB）的边界处**，对外协议出口（betValidationError）保留原始。
+
+**踩过的坑**：dragontiger 早期 `applyBet` 把原始数字 BC 直接传 `BetSvc.PlaceBet` 落 Redis bets[]。后续 `enrichDTBetstats` 按 `case BCDragon` ("dragon") 匹配 → 永远不命中 → 客户端 betstats 面板看不到我方下注金额（实测"下注 2000 但金额没增加 2000"）。
+
+### I5. server 端必须主动合成的帧——按客户端处理代码反查
+
+server 端**不是**只透传上游帧。客户端 socketHandler 期待 server 主动发送：
+
+| 帧 | 客户端处理 | 是否合并我方数据 |
+|---|---|---|
+| `<bet amount betcode seq/>`（placebets 复数路径 ack 后逐 bet echo）| `handleBets` 累计 `totalBetsAccepted` → BETS_ACCEPTED / NOT_ALL_BETS_ACCEPTED | 仅 echo 当前 user 已接受的 bets |
+| `<betstats>` (上游帧透传时 enrich) | UI 面板"龙/虎/和 total / count" | **必须** enrich 我方平台玩家累加金额 + count（货币换算 EUR）|
+| `<winners gId topWin totalEur winnersCount><winner>...</winners>`（上游 winners 重写广播）| 大厅 winners 列表 | **必须** 合并我方平台玩家 `CollectOurWinners` + 按观众货币 ConvertWinnersByCurrency |
+| `<logout id/>`（KickUser）| 弹会话异常 + closeWebSocket | 仅 InvalidToken / 会话失效场景发 |
+
+**踩过的坑**：dragontiger winners 帧仅透传上游不合并 → 大厅 winners 列表看不到本桌我方玩家；betstats 不 enrich 我方下注 → 玩家面板永远显示上游统计；placebets 复数路径不补 `<bet>` echo → 客户端 handleBets 不触发 → 2 秒后 UI 误报"未全部被接受"。
+
+### I6. 增量协议 vs 整批覆盖语义辨析（资金 P0）
+
+**`BetSvc.PlaceBet(bets, newTotal, ...)` 是整批覆盖语义**（Lua 脚本完全替换 Redis hash field `bets`）。这意味着：
+
+- **整批协议**（baccarat6 lpbet 客户端每次都发完整集合）→ 直接传当次发的 bets 即可
+- **增量协议**（dragontiger placeBet 客户端每次只发新增 1 条）→ **必须先 loadExistingBets 合并再传**
+
+Phase 3 客户端分析必须明确：
+
+```
+grep -B5 -A2 "constructPlaceBet\|sendSocketBetCommand\|placeBet\|placebets" assets/<gametype>/<gametype>.js
+```
+
+观察 `e.bets.push(a)` 前面有没有 `e.bets = []` 清空 / 遍历当前所有 betspot — 有 = 整批；只 push 当次点的格子 = 增量。
+
+**踩过的坑**：dragontiger 是增量协议但 server 走整批覆盖 → 玩家先下龙 2000 + 后下和 2000 时，第二次 PlaceBet 把 Redis bets 字段整个替换为 `[{tie,2000}]`，**龙的 2000 完全消失** → 下注金额错乱 + betstats 不准 + settle 漏算。
+
+修复模式：
+
+```go
+existingBets := loadExistingBets(ctx, gameId)
+// partialValidate 时同 BC 累加校验 max（防"多次小注绕单注 cap"）
+accepted, rejections := partialValidateBets(..., existingBets)
+// 落库前 merge：同 BC 累加金额，不同 BC 新增
+merged := mergeBets(existingBets, accepted)
+BetSvc.PlaceBet(..., merged, ...)
+```
+
+### I7. 客户端 partial accept 协议必须按 server 端 partial accept 实现
+
+dragontiger 客户端 dragontiger.js 内部维护 `totalBetsSent` / `totalBetsAccepted` / `totalBetsRejected`：
+
+```js
+// handleBets — server 每接受一个 bet 累加 totalBetsAccepted
+// rejectBet — server 每拒绝一个 bet 累加 totalBetsRejected
+// 最终判定：totalBetsRejected === totalBetsSent → BETS_REJECTED
+//          其它 → NOT_ALL_BETS_ACCEPTED
+```
+
+**server 端 batch-all-or-nothing 模式与此协议完全相反**：合法的 bet 因为同批一个非法 bet 整批拒，玩家看到所有筹码被清。
+
+**正确做法**：CheckBet 改为逐 bet 校验（IsKnownBetCode / 单注 min/max / 重复 BC / 累加台限）→ accepted / rejections 两组：accepted 落库 + 发 `<bet>` echo；rejections 各发 `<betValidationError betCode>`；command status: accepted 非空 → success。
+
+### I8. 历史详情 score / multipliers / payouts — 不能硬编码空字符串
+
+```go
+// ❌ 反例（drag0ntig3rsta48 早期 history_dragontiger.go）
+return &DragonTigerXML{
+    DragonCard:  dragonCard,
+    TigerCard:   tigerCard,
+    DragonScore: "",  // ← 客户端 history 直接显示 "0"
+    TigerScore:  "",
+    ...
+}
+```
+
+客户端 history 渲染**直接用字段值显示**，不会自己再算。settle/history 路径必须计算并填充。
+
+**dragontiger 点数算法**（与客户端 `dragontiger.js::getCardValue + removeSuitOffset` 对齐）：
+
+```
+card.value ∈ [0, 51]
+  [0..12]   clubs    → faceVal = v+2
+  [13..25]  diamonds → faceVal = v-13+2
+  [26..38]  hearts   → faceVal = v-26+2
+  [39..51]  spades   → faceVal = v-39+2
+getCardValue:  10/J/Q/K → 10;  A → 11(最大);  2-9 → 面值
+```
+
+server 端 `card_history.go::cardBodyValueToScore` 必须实现一致算法，写入 `cardSeatJSON.Score` → `parseDragonTigerDetail` 读出填 XML。
+
+**通用原则**：history XML 任何 `Score / Multiplier / Payout / TopWin` 字段都不能默认空字符串；缺数据时按可计算字段算，不可算时显式 `"0"`，**不要**空串（客户端 UI 显示成 0 / 报错 / 空白）。
+
+### I9. Phase 5 worker 必须做"协议对照矩阵"自检（合并到 verify.sh）
+
+worker 实现完每个机台时**强制**输出：
+
+**A. 客户端 → server 的所有 XML 帧**（grep `<command><X>` / 业务模块 socket 发送点）vs **server 端 ClientCommand struct 字段**：
+
+```
+| 客户端帧 | server struct | 是否能解析 |
+|---|---|---|
+| <command><placeBet><bet amount userId betcode action/>...</placeBet></command> | ClientCommand.PlaceBet | ✅ |
+| <command><placebets gameMode gameId userId ck>...</placebets></command> | ClientCommand.Placebets | ✅ |
+| <ping channel time/> | ClientPing | ✅ |
+```
+
+**B. server → 客户端的所有 XML 帧**（grep `xml.Marshal` / `BroadcastTo*`）vs **客户端 socketHandler case 标签**（`SOCKET_X` 常量值）：
+
+```
+| server 帧 | 客户端 case | 是否消费 |
+|---|---|---|
+| <command status seq/> | SOCKET_COMMAND | ✅ |
+| <betValidationError betCode code .../> | BETVALIDATION_ERROR | ✅ |
+| <logout id/> | SOCKET_LOGOUT | ✅ |
+| <bet amount betcode seq/> (echo) | SOCKET_BET → handleBets | ✅ |
+```
+
+任一行 ❌ → 协议不通，worker 阶段拦截，不进 codex review。
+
+**verify.sh 应该跑这个矩阵**（grep 双向），任何 mismatched 直接 fail。
+
+### I10. 资金 / UX 完整性必查清单（Phase 7 verify 必须跑）
+
+每个新机台 verify.sh 至少跑下列 **6 项实测验证**（自动 + 手测）：
+
+1. **下注落库 BC 字段**：Redis SCAN `bet:<tableID>:*` HGET bets，断言所有 BC 是命名字符串（"dragon" 等），不是原始数字
+2. **betstats enrich 命中**：构造我方下注后，下一个 betstats 帧的 dragon.total 应增量等于（amount × 货币率）
+3. **winners 合并**：本桌注入一笔我方玩家 win → 下一个 winners 帧 winner[] 含我方 userId
+4. **InvalidToken 触发 KickUser**：构造 401 wallet 响应 → 客户端应收到 `<logout id=本玩家id/>` XML 帧，WS 自动断
+5. **一般 betValidationError 不弹 sessionTimeout**：构造 1007 BetNotOnTime → 客户端不应进 sessionTimeout 状态
+6. **history score 非空**：settle 完一局后 GET `/cgibin/.../audit/game.jsp?game_id=X&format=xml` → `<DragonScore>` / `<TigerScore>` 必须有值（点数）
+
+**踩过的坑**：dragontiger 上线后第 1/2/3/4/5/6 项都 fail，但 verify.sh 没覆盖 → 上线后用户实测才报 bug。

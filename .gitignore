@@ -19,3 +19,4 @@ __pycache__/
 # Temp
 *.tmp
 *.temp
+thread_id.txt

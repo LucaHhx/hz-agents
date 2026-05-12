@@ -19,11 +19,47 @@ BASE_BRANCH="${3:-live}"
     exit 1
 }
 
-CODEX_REVIEW_SKILL="${CODEX_REVIEW_SKILL:-/Users/luca/.claude/skills/codex-review}"
-[[ -x "$CODEX_REVIEW_SKILL/scripts/codex_review.sh" ]] || {
-    echo "❌ codex-review skill 不存在: $CODEX_REVIEW_SKILL/scripts/codex_review.sh" >&2
+CODEX_COLLAB_SKILL="${CODEX_COLLAB:-${CODEX_COLLAB_SKILL:-${CODEX_REVIEW_SKILL:-/Users/luca/.claude/skills/codex-collab}}}"
+[[ -x "$CODEX_COLLAB_SKILL/scripts/codex_review.sh" ]] || {
+    echo "❌ codex-collab skill 不存在: $CODEX_COLLAB_SKILL/scripts/codex_review.sh" >&2
+    echo "   提示：原 skill 名 codex-review 已重命名为 codex-collab。设置 CODEX_COLLAB（推荐）或旧名 CODEX_COLLAB_SKILL 环境变量指向其根目录。" >&2
     exit 1
 }
+
+# 提前解析 TABLE_ID 和客户端代码路径（供 prompt 使用）
+REPO_ROOT_EARLY="${REPO_ROOT:-$(echo "$WT" | sed -E 's|/\.worktrees/[^/]+$||')}"
+TABLE_ID_EARLY=$(basename "$WT" | grep -oE '[a-z0-9]{8,32}$' 2>/dev/null || echo "")
+CLIENT_JS_DIR=""
+GAMETYPE_EARLY=""
+if [[ -n "$TABLE_ID_EARLY" ]]; then
+    # 从 state.json 读 gameType
+    STATE_EARLY="$REPO_ROOT_EARLY/tmp/$TABLE_ID_EARLY/state.json"
+    if [[ -f "$STATE_EARLY" ]]; then
+        GAMETYPE_EARLY=$(jq -r '.lobby.gameType // ""' "$STATE_EARLY" 2>/dev/null || echo "")
+    fi
+    # 客户端 JS 目录（Phase 2 录制的 clientResources）
+    CLIENT_JS_CANDIDATE="$REPO_ROOT_EARLY/tmp/$TABLE_ID_EARLY/clientResources/desktop/${GAMETYPE_EARLY:-$TABLE_ID_EARLY}"
+    [[ -d "$CLIENT_JS_CANDIDATE" ]] && CLIENT_JS_DIR="$CLIENT_JS_CANDIDATE"
+fi
+
+# 客户端代码段（注入 prompt 让 codex 能主动验证协议字段）
+if [[ -n "$CLIENT_JS_DIR" ]]; then
+    CLIENT_CODE_SECTION="
+【客户端代码路径 — 协议字段验证用】
+机台 JS 目录: $CLIENT_JS_DIR
+必须用此目录验证 XML struct 中每个属性名是否与客户端实际发送/解析的字段精确匹配。
+
+关键 grep 命令（可直接运行）:
+  # 下注格式（lpbet/pbet/placebets + bet 子节点属性）
+  grep -an 'pbet\|lpbet\|placebets\|betcode\|betCode\|amt\|amount' $CLIENT_JS_DIR/chunk-*.js | grep -v 'node_modules'
+  # 服务端回包（betValidationError / command / commandReply + 属性名）
+  grep -an 'betValidationError\|placebetError\|optErrorCode\|extendedErrorCode\|code.*attr\|category\|severity' $CLIENT_JS_DIR/chunk-*.js
+
+验证原则：struct tag 里的属性名与 JS 中字面量不符时为 🔴 must-fix。不可从其他机台照抄 struct。"
+else
+    CLIENT_CODE_SECTION="
+【注意】未找到客户端 JS 目录（TABLE_ID=$TABLE_ID_EARLY），请手动检查 tmp/$TABLE_ID_EARLY/clientResources/ 是否存在。"
+fi
 
 # 选 prompt 视角
 case "$LABEL" in
@@ -58,6 +94,7 @@ cat > "$PROMPT_FILE" <<EOF
 【视角】$VIEW
 
 【审查目标】当前 worktree 相对 ${BASE_BRANCH} 分支的全部改动（git diff ${BASE_BRANCH}...HEAD）。这是 PP 机台对接代码。
+$CLIENT_CODE_SECTION
 EOF
 
 OUTPUT_DIR="$WT/codex-output"
@@ -71,7 +108,7 @@ START_TS=$(date +%s)
 TMP_OUT=$(mktemp)
 
 (
-    cat "$PROMPT_FILE" | bash "$CODEX_REVIEW_SKILL/scripts/codex_review.sh" \
+    cat "$PROMPT_FILE" | bash "$CODEX_COLLAB_SKILL/scripts/codex_review.sh" \
         -d "$WT" -l "$LABEL_SAFE" 2>&1
 ) > "$TMP_OUT" &
 CODEX_PID=$!
@@ -106,9 +143,9 @@ wait "$CODEX_PID" 2>/dev/null || true
 mv "$TMP_OUT" "$OUTPUT_FILE"
 rm -f "$PROMPT_FILE"
 
-# 自动更新 state.json（以 worktree 路径推回主仓库 tmp）
-REPO_ROOT="${REPO_ROOT:-$(echo "$WT" | sed -E 's|/\.worktrees/[^/]+$||')}"
-TABLE_ID=$(basename "$WT" | grep -oE '[a-z0-9]{8,32}$' || echo)
+# 自动更新 state.json（复用提前解析的 REPO_ROOT_EARLY / TABLE_ID_EARLY）
+REPO_ROOT="${REPO_ROOT_EARLY}"
+TABLE_ID="${TABLE_ID_EARLY}"
 STATE_JSON=""
 if [[ -n "$TABLE_ID" && -d "$REPO_ROOT/tmp/$TABLE_ID" ]]; then
     STATE_JSON="$REPO_ROOT/tmp/$TABLE_ID/state.json"

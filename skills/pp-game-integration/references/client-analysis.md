@@ -34,6 +34,40 @@
 }
 ```
 
+## ⚠️ 优先定位"游戏专属业务模块"（不是 chunk-EQLH3F6G.js）
+
+PP 客户端有**两层** JS：
+
+| 层 | 文件 | 内容 |
+|---|---|---|
+| **Angular 主框架共享层** | `desktop/<gametype>/chunk-*.js`、`main-*.js` | 通用 socket / alert / 翻译；多机台共享的 `construct*BetCommands`（placebets / lpbet / pbet） |
+| **PIXI 游戏业务层** | `desktop/<gametype>/assets/<dir>/<gametype>.js` | 该机台特有的 betspot UI、下注按钮、玩法逻辑、socket 帧构造 |
+
+**协议字典分析必须先看业务层** —— 否则把"主框架共享代码"当协议事实，写出来的下注 XML / `<betValidationError>` 处理逻辑跟实际客户端发送/接收完全不符。
+
+```bash
+# 1. 定位业务层文件
+find server/game/pp/client/desktop/<gametype> -name '<gametype>.js' -path '*/assets/*'
+
+# 2. 业务层独立的下注 XML 构造（dragontiger 实测有自己的 sendSocketBetCommand
+#    + constructPlaceBetCommands，与 chunk-EQLH3F6G.js 主框架版完全独立）
+grep -oE '<(placeBet|placebets|lpbet|pbet|command)[^>]*' "$(find ... -name '<gametype>.js' -path '*/assets/*')"
+
+# 3. 业务层期待的 SOCKET_X case（哪些上游帧客户端会真正消费）
+grep -oE 'SERVER_DATA\}_[a-zA-Z]+' "$(find ... -name '<gametype>.js' -path '*/assets/*')" | sort -u
+```
+
+**冲突时**：业务层胜过主框架共享层（业务层是真实下发的代码路径）。
+
+**dict.json 必须记录**：
+- `bet_command_source` 字段：`assets/<dir>/<gametype>.js::<functionName>`（哪个业务函数构造下注 XML）
+- `bet_protocol_mode` 字段：`"incremental"`（每次只发新增 bet，server 必须累加）/ `"batch"`（每次发完整集合，server 整批覆盖）
+- `client_handler_caveats` 字段：业务层对 `<betValidationError>` / `<command>` ack 的特殊处理（如 dragontiger `extendedErrorCode` 非空触发 9018 sessionTimeout 弹窗）
+
+**踩过的坑**：dragontiger drag0ntig3rsta48 Phase 3 dict.json 仅看 chunk-EQLH3F6G.js → server 仅识别 `<lpbet>/<pbet>/<placebets>` 三种格式 → 客户端真实的 `<placeBet>` 单数走 server default 默默 ack success 不落库 → 下注流程根本不通过。Round 11 修复才识别。
+
+---
+
 ## grep 模式手册（按字典分组）
 
 ### 1. 上游事件枚举（main.js 字典 `r`）

@@ -69,33 +69,39 @@ test -f scripts/luca.sh || { echo "❌ 缺 scripts/luca.sh"; exit 1; }
 
 ---
 
-## Phase 0 — 询问主分支（**唯一主动交互**）
+## Phase 0 — 自动选 base 分支（**完全无人值守**）
 
 **入口**：fresh start（无 state.json）。
 
-**动作**：
-1. 跑 `git -C <repo_root> branch --list` 取本地分支
-2. 用 `AskUserQuestion` 询问 base 分支：
+**动作**：直接调脚本，不再问用户。脚本按以下优先级自动选 base：
 
-```
-question: "对接基于哪个主分支创建 worktree？"
-header:   "Base 分支"
-options:
-  - label: "live"           description: "当前生产分支（推荐 — 默认；机台对接通常合到这里）"
-  - label: "live-dev"       description: "线上开发分支"
-  - label: "dev"            description: "主开发分支"
-  - label: "pre"            description: "预发布分支（一般不直接基于这里）"
-```
-
-如本地无 live 分支（用户在别的分支工作）→ `--list` 自然不会有 → 走 fallback：让用户自由选当前任意分支。
-
-**写 state**：
 ```bash
-bash $SKILL_DIR/scripts/init_state.sh <tableId> <用户选择的 base>
+bash $SKILL_DIR/scripts/init_state.sh <tableId>
+# 可选环境变量覆盖：PP_BASE_BRANCH=live-dev bash ... <tableId>
+# 可选位置参数覆盖：bash ... <tableId> <override_base>
 ```
-脚本会校验 base 真实存在 + 创建 `tmp/<tableId>/state.json` + `mkdir -p docs/integration-experience/`。
 
-**过渡**：自动 Phase 1。
+优先级链（首个命中即选）：
+1. **resume-from-state**：已有 `state.base_branch`（恢复点继续）
+2. **env-PP_BASE_BRANCH**：环境变量 `$PP_BASE_BRANCH`
+3. **current-branch-whitelisted**：当前 git branch 在白名单内（`live` / `live-dev` / `dev` / `pre`）
+4. **whitelist-fallback**：依次试 `live` → `live-dev` → `dev` → `pre`，取首个真实存在的
+5. **fail-closed**：都不存在 → 写 `state.status=failed`、`failure_reason=no-usable-base-branch`，exit 2
+
+脚本同时初始化新字段（首次创建时）：
+
+```jsonc
+{
+  "base_branch_selection": {"reason": "...", "picked_at": "..."},
+  "codex_decisions":   [],
+  "codex_discussions": [],
+  "codex_budget_guard": {"decision_calls": 0, "discussion_rounds": 0, "max_discussion_rounds_per_trigger": 3},
+  "unresolved":        [],
+  "already_registered": false
+}
+```
+
+**过渡**：自动 Phase 1（status=done）；fail-closed 时整个流程结束。
 
 ---
 
@@ -115,15 +121,15 @@ bash $SKILL_DIR/scripts/lobby_launch.sh <tableId>
 5. **factory 检测**：grep `<repo>/server/game/pp/internal/factory/instance_factory.go` 是否含 tableId → 已注册 → exit 2 + 报告
 6. 写 state.json (phase=1, status=done, lobby={...})
 
-**决策点处理**：
+**决策点处理**（铁律 1：无人值守，全自动）：
 | 情况 | 处理 |
 |---|---|
-| `pp_tables.py` 退出非 0 | retry 1 次；再失败 exit + 报告 |
-| `minBalanceToPlay > 6000` | **直接 exit**（用户硬规则）|
-| factory 已注册同 tableId | **exit + 报告**（用户决定重新对接 / 查询经验 / 退出，唯一一处停下询问的边界场景）|
-| lobby JSON 缺 operatorGameId 或 gameType | exit + 报告（DGA 订阅必需）|
+| `pp_tables.py` 退出非 0 | retry 1 次；再失败写 `state.status=failed` + `failure_reason="lobby-launch-failed"` + 结束 |
+| `minBalanceToPlay > 6000` | **直接 exit**（用户硬规则，铁律 4）+ `state.status=failed` + `failure_reason="balance-cap-6000"` |
+| factory 已注册同 tableId | **自动 skip-this-table**：**只写** `tmp/<tableId>/state.json`（`already_registered=true` / `status=skipped` / `skip_reason="factory-already-registered"` / `experience_doc_path` 指向已存在的同 tableId 经验文档）；**不创建 worktree、不修改 docs/integration-experience/、不跑 Phase 2-8**（铁律 8：仅 worktree 内才能改文档；skip 路径无 worktree，因此不动文档）；流程结束 |
+| lobby JSON 缺 operatorGameId 或 gameType | 写 `state.status=failed` + `failure_reason="lobby-missing-required-fields"` + 结束（DGA 订阅必需）|
 
-**过渡**：成功 → 自动 Phase 2。
+**过渡**：成功 → 自动 Phase 2；skip / failed → 流程结束（不报错，由调用方读 state 判断）。
 
 ---
 
@@ -177,12 +183,33 @@ bash $SKILL_DIR/scripts/fetch_capture.sh <tableId> [duration_min]   # 默认 5
 **主 Claude 整合职责**：
 1. 等 5 个 agent 全部返回（asyncio）
 2. 验证产出文件存在
-3. 查 docs/integration-experience/<gametype>/*.md 对照已有先例（如 dict 错误码值跟既有不一致 → exit）
+3. 查 docs/integration-experience/<gametype>/*.md 对照已有先例（如 dict 错误码值跟既有不一致 → 不直接 exit；走"冲突沟通"流程）
 4. 写 state.agent_outputs
 
 **决策点处理**：见 [parallel-team.md](parallel-team.md) 各 agent 的失败处理。
 
-**过渡**：5 agent 全部成功 → 自动 Phase 4。
+**🤝 冲突沟通**（codex 沟通模式 — Phase 3 触发点）：
+当 5 个 agent 产出互相矛盾、`message.json` 与 `main.js` 字面量解释冲突、或重启单个 agent 后仍不一致：
+
+```bash
+# 首轮（新会话）
+bash $CODEX_COLLAB/scripts/codex_discuss.sh \
+  -d "$REPO_ROOT" \
+  --round 1 --max-rounds 3 \
+  -l "phase3-conflict-<short_id>" \
+  -- "<把冲突点 + 涉及文件路径 + 各 agent 不同结论喂进来>"
+
+# 抓输出里的 THREAD_ID=...，写入 state.codex_discussions[<id>].thread_id
+# 后续轮 resume：
+bash $CODEX_COLLAB/scripts/codex_discuss.sh \
+  -t "<thread_id>" \
+  --round N --max-rounds 3 \
+  -- "<下一轮追问>"
+```
+
+**退出条件**：codex 回复中含 `discussion_status: closing` → 写 state.codex_discussions[id].status="closed" + summary；或 `discussion_status: unresolved` / 达 3 轮仍 in-progress → 写 `state.unresolved[]`（category="codex-discuss-no-converge"）+ Claude 按 fail-closed（最保守的 agent 结论）继续。
+
+**过渡**：5 agent 全部成功（含冲突收敛后） → 自动 Phase 4。
 
 ---
 
@@ -218,9 +245,47 @@ bash $SKILL_DIR/scripts/fetch_capture.sh <tableId> [duration_min]   # 默认 5
 |---|---|
 | 决策无先例 + known-pitfalls.md 也无 | 按 skill 设计原则自主决定（不停下问用户）|
 | 决策与 docs/integration-experience/ 同 gametype 不一致 | 在 design.md 注明"为什么本机台特殊" |
-| HTTP 接口缺口 → worker-3 是否需要 | http_diff.md 有任意 missing/mismatched/field-gap → 必须加 worker-3 HTTP（Phase 5）|
-| §7 矩阵发现 P0 缺口（客户端承诺、后端无 enforce） | **必须**进 Phase 5 worker 任务清单（不可跳到 Phase 6 由 codex 才发现）|
-| §8 历史链路发现 baccarat/<gametype> XML parser 缺失 | 同上：进 worker-2 任务（缺 capture 样本可声明 follow-up issue 但仍要在 design.md 列出）|
+| HTTP 接口缺口 → worker-3 是否需要 | http_diff.md 有任意 missing/mismatched/field-gap → 调 codex 决策（见下"决策模式"）|
+| §7 矩阵发现 P0 缺口（客户端承诺、后端无 enforce） | 调 codex 决策（worker 修 vs 写 unresolved[]） |
+| §8 历史链路发现 baccarat/<gametype> XML parser 缺失 | 同上：调 codex 决策 |
+
+**🤖 决策模式**（codex 决策点 — Phase 4 触发）：
+当遇到 (a) 协议处理 pass/drop/rewrite 选择不确定，(b) HTTP/history 缺口分流，(c) §7/§8 P0 缺口处理，调用 codex_decide.sh 一次性决策：
+
+```bash
+bash $CODEX_COLLAB/scripts/codex_decide.sh \
+  -d "$REPO_ROOT" \
+  -l "phase4-decide" \
+  -- "$(cat <<EOF
+## 背景
+gameType: <gametype> / tableId: <tableId>
+设计草稿：tmp/<tableId>/design.md（已写到 §X）
+关联文件：tmp/<tableId>/{dict.json, http_diff.md, ui_rules.md, lifecycle.md}
+经验先例：docs/integration-experience/<gametype>/
+
+## 决策点
+决策 1：<具体问题，如 "winners 字段是 pass / drop / rewrite-merge"，列候选 + 判断标准>
+决策 2：<下一个问题，如 "HTTP /history 接口本轮启 worker-3 还是写 unresolved[]"，列候选 + 判断标准>
+EOF
+)"
+```
+
+**写回**：把 codex 输出的每个决策块解析为 `state.codex_decisions[]` 的一条记录（id/phase=4/timing/question/options/selected/rationale/inputs/written_to/created_at），并把决策结果同步进 design.md 第 2/4/7/8 节的"依据"列。
+
+**🤝 沟通模式**（design 草稿空洞 — Phase 4 触发）：
+当 design.md 出现 `?` / `待确认` / `无先例` 关键空洞，且影响 worker 范围：
+
+```bash
+bash $CODEX_COLLAB/scripts/codex_discuss.sh \
+  -d "$REPO_ROOT" \
+  --round 1 --max-rounds 2 \
+  -l "phase4-design-gap" \
+  -- "<贴 design.md 当前草稿 + 具体空洞条目 + 备选方向>"
+```
+
+**退出条件**：codex `discussion_status: closing` 给出"补哪些 worker / 哪些写 unresolved[] / 哪些跳过" → 写 state + 更新 design.md；`unresolved` 或达 2 轮 → Claude 按资金安全优先自行落判 + 写 state.unresolved[]。
+
+**fallback**：codex_decide.sh / codex_discuss.sh 超时 / 不可解析 → Claude 按 known-pitfalls.md + design 默认规则决策 + 写 state.unresolved[]（category="codex-script-failed"）。
 
 **过渡**：design.md 写完（含完整 §7 §8）→ 自动 Phase 5（**不审，不询问用户**）。
 
@@ -255,8 +320,42 @@ bash /Users/luca/.claude/skills/worktree-task-flow/scripts/init-worktree.sh \
 **决策点处理**：
 | 情况 | 处理 |
 |---|---|
-| worker 失败 | git reset --hard worktree-base + 重启该 worker |
+| worker 启动前路径不确定（A "复用同类机台结构" vs B "抽公共 helper"） | 调 codex_decide.sh 一次性决策（见下） |
+| worker 卡 ≥10min 无有效 diff / 失败 ≥2 次 | 调 codex_discuss.sh 多轮根因（见下，≤3 轮）|
+| 单 worker 失败首次 | git reset --hard worktree-base + 重启该 worker |
 | 单文件 > 500 行 | 按职责自由拆（参考 docs/integration-experience/ 同类先例的拆分模式）|
+
+**🤖 决策模式**（worker 路径选择 — Phase 5 触发）：
+
+```bash
+bash $CODEX_COLLAB/scripts/codex_decide.sh \
+  -d "$REPO_ROOT" \
+  -l "phase5-worker-path" \
+  -- "## 背景
+worker: <worker-N>
+design.md 第 9 节: <复制相关段>
+同 gametype 先例: <列文件路径 + 一句话差异>
+
+## 决策
+决策 1：worker 路径 A "复用 <gametype> 既有结构" vs B "抽到 common 新 helper"
+判断标准：A 改动 ≤50 行 / 不影响其他机台 → 优选；B 涉及 ≥2 机台联动 → 必须先写 unresolved[] 不实施"
+```
+
+**🤝 沟通模式**（worker 卡死 — Phase 5 触发，≤3 轮）：
+
+```bash
+bash $CODEX_COLLAB/scripts/codex_discuss.sh \
+  -d "$REPO_ROOT" \
+  --round 1 --max-rounds 3 \
+  -l "phase5-worker-stuck-<worker-N>" \
+  -- "worker-<N> 卡 / 失败 2 次。
+当前 diff: <git diff 摘要>
+失败日志: <最后 50 行>
+prompt: <worker prompt 摘要>
+请帮诊断根因 + 给出可执行修复路径。"
+```
+
+**退出条件**：`discussion_status: closing` → 按 codex 建议执行；`unresolved` 或达 3 轮 → Claude 回退到 git reset 重启 + 写 state.unresolved[]。
 
 **过渡**：worker 全部 commit → 自动 Phase 6。
 
@@ -282,26 +381,27 @@ bash $SKILL_DIR/scripts/codex_review_loop.sh "$WT" "round-N" "$BASE"
    - **Step 3 执行**：
      - small → 立即修 + commit + 经验文档第 7 节实时记录
      - medium 资金必要 → 修
-     - medium 非必要 / large → **`gh issue create` + 经验文档第 15 节"follow-up issue 列表"**
+     - medium 非必要 / large → **追加 `state.unresolved[]`**（铁律 9：禁 issue）+ 经验文档第 15 节摘要标注
 3. 跑下一轮；codex 报"无重大问题" → 退出循环
 
-**自动建 issue 触发条件**（绝不停下问用户）：
+**自动写 unresolved[] 触发条件**（绝不停下问用户，绝不调用 gh issue）：
 | 情况 | 处理 |
 |---|---|
 | codex CLI 卡死 | state.codex_stuck_count++；继续下一轮 |
-| codex_stuck_count ≥ 3 | **自动 `gh issue create`**（标题"codex CLI 环境异常 — Phase 6 卡死 3 次"）+ 进 Phase 7 |
-| 同一问题 hash ≥ 3 次 | **自动 `gh issue create`** + state.repeated_problems[hash].auto_filed=true + 后续轮跳过 → 继续 |
-| 跑满 10 轮仍有未修 finding | **整理剩余 → 自动 `gh issue create`** → 进 Phase 7 |
-| finding 命中 large 等级 | **立即 `gh issue create`** + 第 15 节登记 → 不在本 PR 修 |
-| finding 命中 medium 非必要 | **`gh issue create`** + 第 15 节登记 → 不在本 PR 修 |
+| codex_stuck_count ≥ 3 | **追加 `state.unresolved[]`**（category="stuck-3-times"）+ 进 Phase 7 |
+| 同一问题 hash ≥ 3 次 | **追加 `state.unresolved[]`**（category="repeated-N-times"）+ state.repeated_problems[hash].filed=true + 后续轮跳过 → 继续 |
+| 跑满 10 轮仍有未修 finding | **整理剩余 → 追加 `state.unresolved[]`**（category="round-cap-leftover"）→ 进 Phase 7 |
+| finding 命中 large 等级 | **追加 `state.unresolved[]`**（category="large-impact"）+ 第 15 节登记 → 不在本 worktree 修 |
+| finding 命中 medium 非必要 | **追加 `state.unresolved[]`**（category="medium-non-essential"）+ 第 15 节登记 → 不在本 worktree 修 |
 
 **禁止**：
 - ❌ 跑超过 10 轮（硬上限，不可逾越）
-- ❌ "停下报告用户" 措辞 — 已与铁律 1/9 冲突
+- ❌ "停下报告用户" 措辞 — 已与铁律 1 冲突
+- ❌ 调用 `gh issue create` / `gh pr create` 等任何仓库协作面操作（铁律 8/9）
 - ❌ 把 codex 所有 finding 都修
-- ❌ 重复提及已建 issue 的项目级问题
+- ❌ 重复提及已写 unresolved[] 的项目级问题
 
-**过渡**：codex clean / 跑满 10 轮 / stuck 3 次 / 任一终止条件 → 自动 Phase 7（无论是否有未修 finding，由 issue 跟踪即可）。
+**过渡**：codex clean / 跑满 10 轮 / stuck 3 次 / 任一终止条件 → 自动 Phase 7（无论是否有未修 finding，由 unresolved[] 跟踪即可）。
 
 ---
 
@@ -326,11 +426,56 @@ bash $SKILL_DIR/scripts/verify.sh "$WT" "$GT" <tableId> "$BASE"
 **决策点处理**：
 | 情况 | 处理 |
 |---|---|
-| 任一 FAIL | 自动诊断 + 修 + 回 Phase 6 跑一轮 codex |
+| 首次 FAIL | Claude 自动诊断 + 修 + 回 Phase 6 跑一轮 codex |
+| 失败 ≥2 次 / 失败类型横跨测试-实现-policy 边界 | 调 codex_decide.sh 做根因分类（见下） |
+| codex 决策仍不收敛 | 调 codex_discuss.sh 多轮讨论（≤2 轮，见下）|
 | cover < 25% | 自动按 [test-design-guide.md](test-design-guide.md) 补单测 |
 | policy-pr 报某文件超 500 行 | 自由拆，拆完回 Phase 6 |
 
-**过渡**：全 PASS → 自动 Phase 8。
+**🤖 决策模式**（verify 失败根因分类 — Phase 7 触发）：
+
+```bash
+bash $CODEX_COLLAB/scripts/codex_decide.sh \
+  -d "$REPO_ROOT" \
+  -l "phase7-verify-fail" \
+  -- "## 背景
+worktree: <worktree_path>
+gametype: <gametype> / tableId: <tableId>
+verify.sh 失败输出（最后 100 行）：
+\`\`\`
+<paste>
+\`\`\`
+最近一轮 codex review 摘要：tmp/<tableId>/codex-output/round-<N>.md
+
+## 决策
+决策 1：失败根因分类
+候选 A：实现 bug（worker 代码错）
+候选 B：测试断言错误（断言与 main.js Up 反查表不一致）
+候选 C：policy-pr 拆分问题（单文件超限）
+候选 D：设计遗漏（design.md §X 缺）
+
+决策 2：下一步动作
+候选 A：回 Phase 6 修代码
+候选 B：补/改测试断言
+候选 C：拆文件
+候选 D：回 Phase 4 修 design"
+```
+
+写回 `state.codex_decisions[]` + `state.verify_failures[].decision_id` 关联。
+
+**🤝 沟通模式**（决策仍不收敛 / 失败根因复杂 — Phase 7 触发，≤2 轮）：
+
+```bash
+bash $CODEX_COLLAB/scripts/codex_discuss.sh \
+  -d "$REPO_ROOT" \
+  --round 1 --max-rounds 2 \
+  -l "phase7-verify-rootcause" \
+  -- "<verify 失败 + 决策模式给出的初步分类 + Claude 自己尝试的修复 / 失败结果>"
+```
+
+**退出条件**：`closing` → 按建议回 Phase 6/4 / 拆文件 / 改测试；`unresolved` 或达 2 轮 → 写 `state.unresolved[]`（category="verify-no-converge"）+ 流程进 Phase 8（带未修 finding 归档）。
+
+**过渡**：全 PASS → 自动 Phase 8；2 轮讨论后仍未收敛 → 也进 Phase 8（unresolved 已写）。
 
 ---
 
