@@ -11,10 +11,11 @@
 ## 5 层 DAG
 
 ```
-Layer 1 (无依赖, 3 并行):
-   ENUM  ─┐
-   DICT  ─┤
-   ERRCODE ─┘
+Layer 1 (无依赖, 4 并行):
+   ENUM            ─┐
+   DICT            ─┤
+   ERRCODE         ─┤
+   CLIENT_FRAME_EFFECTS  ─┘  ← L1.4 客户端帧表现反向分析（L2.1 MODELS 强依赖）
         ↓ 等齐 → 层间 codex 审查 → fix
 Layer 2 (依赖 L1, 5 并行):
    MODELS / BETPROTO / RULES / PROCESSOR / INSTANCE
@@ -33,7 +34,7 @@ Layer 5 (依赖全部, 1):
 
 | Layer | 读 reference | AIU 数 |
 |---|---|---|
-| L1 | `phase-3-aiu-L1.md` | 3 |
+| L1 | `phase-3-aiu-L1.md` | **4** |
 | L2 | `phase-3-aiu-L2.md` | 5 |
 | L3 | `phase-3-aiu-L3.md` | 5 |
 | L4 | `phase-3-aiu-L4.md` | 6 |

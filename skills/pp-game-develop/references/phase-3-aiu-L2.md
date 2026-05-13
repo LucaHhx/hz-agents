@@ -7,12 +7,19 @@
 
 **产物**：`server/game/pp/internal/games/<gametype>/<tableId>/models.go`
 
-**分析输入**：
+**分析输入**（**`client_frame_effects.md` 必读**，写 struct 前必须先看每帧客户端表现）：
+- **L1.4 `tmp/<tid>/client_frame_effects.md`** ← **强依赖**，决定字段类型 / omitempty / 嵌套结构
 - L1 enum.go（常量参考）
 - `tmp/<tid>/message.jsonl` 真帧逐字段（**字段类型严格按真帧**）
 - `tmp/<tid>/tableConfig.jsonl` / `statisticHistory.jsonl` 字段
 - `tmp/<tid>/gameDetail.txt` XML 节点（如 ≥ 1 条）
 - main.js 补罕见事件 struct
+
+**写 struct 前必须理解每字段的客户端表现**（L1.4 client_frame_effects.md 已沉淀）：
+- 字段类型选择：`megawin` 是字符串 `"true"`/`"false"` 不是 bool（客户端严格字符串比较）
+- 嵌套 vs 扁平：`jackpotwheel_rng.slot` 是嵌套对象 `{number, multiplier}`（客户端按对象解构）
+- omitempty 决策：客户端 reducer 必读字段不能 omitempty；可选 UI 字段才 omitempty
+- 数字 vs 字符串：PP 协议常把数字下发为字符串（如 "1000.0"），struct 用 string 防 Number 转换丢精度
 
 **实现内容**：
 - 上游事件 Envelope + payload struct（`Envelope<EventName>` / `<EventName>` 各一）
@@ -21,8 +28,17 @@
 - `JSONStatisticHistoryRecord struct` (statisticHistory writer 写 Redis 用)
 - 字段 tag 严格（json + xml）；omitempty 仅可选字段
 - 不预设 capture 没出现的字段
+- **新增字段**（jackpotwheel 教训）：
+  - `Winners.TopWinMultiplier`（capture 真帧实测含）
+  - `JSONStatisticHistoryResponse.NumberOfGames`（statisticHistory 顶层必有）
+  - `ClientBet` FreeChip/Bonus attrs（`bcode/bettype/cv/cn/bonusId/betsubtype/rid` 全 omitempty，**L3 解析到任一非空必须 fail-closed 拒绝 B11**）
+  - `Win.Seq` 字段（**不可缺**，L3.3 FlushPendingWins 用 instance.frameSeq 填非 0）
 
-**B5 验收**：build PASS + vet 干净 + struct 字段数与真帧字段数一一对照
+**B5 验收**：
+- build PASS + vet 干净
+- struct 字段数与真帧字段数一一对照
+- **每个 Envelope struct 在 client_frame_effects.md 都有对应章节**（双向闭环）
+- 字段类型与 client_frame_effects.md "字段说明表" 一致
 
 **下游**：UPSTREAM / DOWNSTREAM_BET / SETTLE / HISTORY_PARSER
 

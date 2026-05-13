@@ -18,7 +18,7 @@
 6. 无论 unresolved 数量，进 Phase 5（绝不停问用户）
 ```
 
-## 固定 4 题（用户可在 pp-game `docs/integration-experience/common/self-review-checklist.md` §5+ 扩展）
+## 固定 5 题（用户可在 pp-game `docs/integration-experience/common/self-review-checklist.md` §6+ 扩展）
 
 ### Q1. winners 处理逻辑跨机台一致性
 
@@ -57,6 +57,47 @@ betsopen 开启机制（MarkBetsOpen + Redis TTL 30s）/ betsclosed 关闭（DEL
 - 双重 fail-closed ✅/❌
 - C3 撤单防御 ✅/❌
 - 跨机台对比
+
+### Q5. 消息格式三分类决策（每个事件分类必须有 capture 实证）
+
+PP 机台运行时所有消息（client ↔ server）分为三类，必须**逐个 upstream / downstream 事件分类**，
+并与 capture 实证对齐。漏分类或分类错都会导致：客户端卡死 / 时序错乱 / 字段被误透传。
+
+**三类定义**：
+
+| 分类 | 含义 | 典型例子 |
+|---|---|---|
+| **A: 上游 → 直接转发** (pass) | PP 上游帧 server 不动字节直传给客户端 | dealer / game / timer / winners / playersCount / pong（透传） |
+| **B: 上游 → server 修改后转发** (rewrite) | PP 上游帧 server 拦截 + 改字段 / enrich 再发 | betstats（EnrichBetstats 加我方平台金额） / table（B1 tableId 字节替换） |
+| **C: 上游不发 → server 自合成** (synthesize) | PP 上游不发，server 主动构造发给客户端 | **subscribe ack**（I5 协议铁律，1 上游 fan-out N client 必须自合成） / bet echo（accepted 落账后回） / win 帧（我方私聊） / betValidationError |
+
+**自答模板**：
+
+```markdown
+| 事件 / 帧 | 分类 | 实现位置 file:line | 证据 |
+|---|---|---|---|
+| `betsopen` | A pass | upstream_handlers.go:N | capture seq=N |
+| `subscribe` ack | C 自合成 | downstream_dispatch.go:sendSubscribeAck | capture PP 上游连接时发 1 次，多 client 必须各自合成 |
+| `bet` | C 自合成（OnMerchantBetResult accepted） | downstream_bet.go:echoBetsAfterMerchantAck | capture betsclosed 后 1.4s |
+| `win` | C 自合成（FlushPendingWins） | settle_persistence.buildWinFrame | capture winners 后 ~500ms |
+| `betstats` / `betResultStats` | B rewrite | betstats_enrich.go | capture 真帧 + Redis 用户下注合并 |
+| `betValidationError` | C 自合成（lpbet 校验失败） | downstream_bet.go:buildBetValidationError | capture 未观察到（main.js 7 字段） |
+| `dealer` | A pass + side-effect 解析 dealer.value 存 cache | upstream_cache.go:cacheDealer | capture seq=2 |
+| `<gametype>gameresult` | A pass + 业务触发结算 | upstream_handlers.go:on<G>GameResult | capture seq=N |
+| `winners` | A pass + 触发 FlushPendingWins 延迟 | upstream_dispatch.go:onWinners + time.AfterFunc | B2 修正版 |
+| `command` reply | C 自合成（lpbet ack） | downstream_bet.go:sendCommandReply | capture lpbet 后立即回 |
+| `switch` | drop + 业务（B10 reconnect） | upstream_handlers.go:onSwitch | capture 罕见 |
+| ... 全部事件 ... | | | |
+```
+
+**关键陷阱（必检）**：
+- **C 类自合成易漏**：subscribe ack（PP 单上游连接发一次 → 多 client fan-out 必须各自合成；
+  jackpotwheel 历史教训：漏掉导致客户端 isTableSubscribed 永远 false → 不发 ping）
+- **B 类 rewrite 易引入双信封**（B7）：rewrite 后必须 unwrapEnvelope 再放回 action.data
+- **A 类 pass 不能丢字段**：单帧多 key 时按 B3 priority rebuild envelope（drop 一个 key 不
+  应丢同帧其他 pass key）
+
+**自检发现问题**：同前 4 题格式 — 调 codex_decide / fix agent / 写 unresolved。
 
 ## codex_decide.sh 调用模板（每问题一次）
 

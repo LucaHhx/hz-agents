@@ -4,7 +4,7 @@
 > 产物：`<repo>/docs/integration-experience/<gametype>/<tableId>.md`（worktree 内）。
 > 阶段：❌ 禁止向用户提问；commit 到 worktree 子分支，不 PR。
 
-## 13 节 + 2 节扩展模板
+## 16 节 + 2 节扩展模板（v2：含客户端帧表现手册 §16）
 
 ```markdown
 # <tableId> 对接经验（<gametype> / <PP 机台名>）
@@ -178,6 +178,32 @@ coverage: <X>%
 - 建 issue 跟进
 - 排期到下个 sprint
 - 忽略（确认非必要）
+
+## 16. 客户端帧表现手册（**强制节，从 L1.4 输出复制 + Phase 3-6 实测补全**）
+
+> 数据来源：`tmp/<tableId>/client_frame_effects.md`（L1.4 AIU 产出，Phase 3-6 实测迭代）。
+> 归档时整段复制到此节，让后续相同 gameType 机台对接**直接照抄**调整（最大价值）。
+
+每个 server→client 帧含 6 字段：
+1. **分类**：A pass / B rewrite / C synthesize
+2. **客户端 reducer**：main.js / chunk evidence 行号
+3. **state 字段切换**：哪个 redux state 字段被设置
+4. **UI 表现**：实际看到什么变化
+5. **缺失影响**：不发会怎样（必含具体卡死路径，如"isTableSubscribed 永 false → 不发 ping → 10s 断连"）
+6. **字段说明表**：每个字段的类型 / 客户端用途 / server 填法
+
+按帧分组：
+- §16.1 init 阶段帧（handleConnect 必发的最小集）
+- §16.2 运行时帧（订阅成功后随回合推送）
+- §16.3 结算帧
+- §16.4 错误帧
+- §16.5 心跳
+- §16.6 状态机映射总览（client state 字段 ↔ 触发帧矩阵）
+
+具体内容直接复制 `tmp/<tableId>/client_frame_effects.md`。
+
+**最大价值**：后续相同 gameType 机台对接时，**L1.4 直接 fork 本节**作为起点，
+只调差异字段，省 80% 客户端反向分析工作。
 ```
 
 ## commit + 索引更新

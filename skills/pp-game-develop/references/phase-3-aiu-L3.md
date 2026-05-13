@@ -20,15 +20,51 @@
 - **tableId 字节替换 (B1)**：`HandleUpstream` 入口 `bytes.ReplaceAll(raw, ctx.PPTableID, ctx.TableID)`
 - **orderKeysByPriority (B3)**：单帧多 key 按 gameresult > winners > betsclosed > betsclosingsoon > betsopen > 其他
 - **verdict 分流**：每事件 pass / drop / rewrite（按 capture 实证 + L1 DICT + 既有机台默认）
-- **init cache**：table/dealer/game/timer/disablesidebets 等首连重放
+- **init cache + server 自合成 init —— 严格遵守"最少 + 最必要 + 尽量自合成"**：
+
+  init 序列**只发 L1 DICT `init_frame_sequence` 列出的帧**（已经过客户端 main.js
+  状态机反向分析最小化），**不要**多发无关帧（playersCount / betstats 等进入游戏
+  后才需要的不在 init 序列）。
+
+  **优先级**：C（自合成） > B（rewrite 重放） > A（pass ReplayCache）。
+  能用 ctx.TableID / state.CurrentGameID / DB 配置 / 常量构造的，**都走 C 类**。
+  只有 PP 上游独有数据（如真实 dealer.id UUID）才回退 A/B。这样：
+  - 多 client fan-out 时不依赖上游帧到达时序
+  - server 启动早期客户端连入也能拿到完整 init
+  - 易单测（纯函数构造，无需 mock 上游）
+
+  按 L1 DICT 分类执行：
+  - **A pass（最少用）**：上游来的帧缓存 → 客户端连入时 ReplayCache 重放
+  - **B rewrite**：betstats / table（tableId 字节替换）需 enrich 后重放
+  - **C 自合成（首选）**：server 用 state/常量构造。jackpotwheel 历史教训：缺
+    `subscribe ack` 自合成 → 客户端 isTableSubscribed 永远 false → 永不发 ping → 卡死。
+    typical 自合成清单：
+    - `{"subscribe":{"channel":"table-<code>","table":"<code>","status":"success","seq":<auto>}}`
+    - `{"table":{"newTable":"false","openTime":"","seq":<auto>,"value":"<MOW13 或机台短名>"}}`
+    - `{"game":{"id":"<state.CurrentGameID>","table":"<tableCode>","seq":<auto>,...}}`
+    - `{"timer":{"id":"<state.CurrentGameID>","table":"<tableCode>","seq":<auto>,"value":"<state.Countdown>"}}`
+    - 其他按 L1 DICT `init_frame_sequence` 标注 C 类的帧
+
+  实现位置：`handleConnect` 内顺序为 — JoinRoom → 按 init_frame_sequence 顺序逐帧
+  send（C 优先 / B 次 / A 最后兜底）→ RegisterConn。**严格按 L1 DICT 序列**，
+  不增不减。
+
+  **seq 字段**：所有 C 类自合成帧用 instance 级 `frameSeq atomic.Int64` 分配
+  （单调递增，跨 conn 共享）。多 client 视角 seq 一致；与上游帧 seq 不冲突
+  （客户端只要求单帧 seq 单调，不要求与上游对齐）。
 - **核心 handler**：
   - `onBetsOpen` → `MarkBetsOpen` + `UpsertRoundStartedAt`（H5）
-  - `onBetsClosed` → `MarkBetsClosed` + 异步 `SubmitBets`
+  - `onBetsClosed` → `MarkBetsClosed` + 异步 `SubmitBets`（**注意**：`SubmitBets` 第 3 参
+    必须传 `p.OnMerchantBetResult`，**不是 nil** — 否则注单永远不 MarkBetAccepted 导致
+    settle 阻断；jackpotwheel 历史 P0 教训）
   - `on<gametype>GameResult` → 结算锚（调 SETTLE 接口）
   - `onCanceled` → DEL Redis 下注窗口
   - `onSwitch` → ctx.Reconnect（B10：wsAddress + httpAddress 都必须 string）
+  - `onDealer` → 解析 `dealer.value` 写入 Processor.dealerName 缓存（settle 落
+    b_game_rounds.dealer_name 用；漏存导致 history XML `<seat><name>` 缺失）
 
-**B5 验收**：build/vet/test 过 + dispatch_test 覆盖多事件单帧顺序 + tableId 替换
+**B5 验收**：build/vet/test 过 + dispatch_test 覆盖多事件单帧顺序 + tableId 替换 +
+**ReplayCache + 自合成 init 序列**（与 L1 DICT init_frame_sequence 对齐）
 
 **下游**：SETTLE / BETSTATS / WINNERS
 
@@ -89,31 +125,109 @@
 
 ---
 
-## L3.4 — HISTORY_PARSER
+## L3.4 — HISTORY_PARSER（registry 模式，机台自实现）
+
+> **架构改进（jackpotwheel 后引入）**：旧 fallback 模式（runtime 公共 GameEntryXML +
+> switch by gameType）已废弃；新机台**强制**走 `historyreg.DetailProvider` registry。
+> 每个机台在自己的 internal 包内产出 `history.go`，自定义最小标准 XML struct，**与
+> instance 完全解耦**。dragontiger / sweetbonanza / baccarat6 / crystalroulette 等旧
+> 机台保留旧 fallback 路径，不强制迁移。
 
 **产物**：
-- `server/game/pp/runtime/history.go`（新增 `<Gametype>XML struct`，注意是已有文件，**append 不修改既有 struct**）
-- `server/game/pp/runtime/history_<gametype>.go`（新建）
-- `server/game/pp/runtime/history_service.go` (添加 `case "<gametype>"` 分支)
-- `runtime/history_<gametype>_test.go`
+- `server/game/pp/internal/games/<gametype>/<tableId>/history.go`（**新建，机台内部**）
+- `server/game/pp/internal/factory/history_factory.go` 加一行注册（**集中注册，与 instance_factory.go 同模式**）
 
 **分析输入**：
-- L2 MODELS struct
 - **`tmp/<tid>/gameDetail.txt` 真 XML**（字段名 100% 权威，逐字段对照）
-- main.js grep `additional.<gametype>.<field>` 解析路径补真 XML 没出现的字段
-- 既有 parser 参考：`history_dragontiger.go` / `history_sweetbonanza.go`
+- **PP 真服 curl 响应**（强烈推荐 — 与 capture 对照避免缩进/字段名假设错误）：
+  ```bash
+  # 从 capture 录制时记录的 PP 真服 URL（如 report.<region>.../audit/game.jsp）curl 一份
+  curl 'https://report.<...>/cgibin/usermanagement/audit/game.jsp?JSESSIONID=...&user_id=...&game_id=<...>&format=xml'
+  ```
+- main.js 中 client XML→JSON 转换（通常在某个 chunk 内，grep `e.games.game.<field>`）
+- 既有 registry 实现参考：`jackpotwheel/md500q83g7cdefw1/history.go`（首个 registry 范例）
 
-**实现内容**：
-- `<Gametype>XML struct` 字段名严格匹配 gameDetail.txt 真 XML（大小写敏感 H4）
-- `parse<Gametype>Detail(round, txns)` 函数
-- 每用户视角抽 BC（payout 最大者）+ aggregate BetAmount/Win/mCap（H3）
-- `<multiplier>` / `<payout>` 缺数据填 `"0"` **不空串**（I8 dragontiger 教训）
-- `history_service.GetGameDetail` 加 case 分支
-- 单测用真 XML（gameDetail.txt）跑 parser，断言关键字段非空
+**实现内容**（机台 history.go 4 部分）：
 
-**B5 验收**：build/vet/test 过 + history_<gametype>_test 覆盖 4+ 局型（megawin / mCap / normal / 边界）
+```go
+package <tableId>
 
-**下游**：无（API 层 GetGameDetail 调用）
+import (
+    "encoding/xml"
+    "hab/game/pp/runtime/historyreg"
+    "hab/model/gameData"
+)
+
+// 1. NewHistoryProvider 工厂函数（由 factory.history_factory.go 集中注册，
+//    与 instance_factory.go 同模式：机台 internal 不自 init() 注册）
+func NewHistoryProvider() historyreg.DetailProvider {
+    return &historyProvider{}
+}
+
+// 2. provider 实现
+type historyProvider struct{}
+
+func (p *historyProvider) BuildGameDetail(
+    round *gameData.BGameRounds,
+    txns []gameData.BGameTransactions,
+    user historyreg.User,
+) (any, error) {
+    // 按 PP 真服 capture + curl 字段精确构造
+    return &<gametype>HistoryDoc{Account: ..., Game: ...}, nil
+}
+
+// 3. 机台自定义最小标准 XML struct（按 PP 真服字段顺序与名称）
+// 字段按字母序（PP 标准），不复用 runtime 公共 GameEntryXML
+type <gametype>HistoryDoc struct {
+    XMLName xml.Name `xml:"games"`
+    Account <gametype>Account `xml:"account"`
+    Game    <gametype>GameEntry `xml:"game"`
+}
+type <gametype>Account struct {
+    CurrencyBefore bool `xml:"currencyBefore"`   // PP 真服必填
+    CurrencyCode   string `xml:"currencyCode"`   // padded 41 字符
+    CurrencySymbol string `xml:"currencySymbol"` // padded 41 字符
+    FirstName      string `xml:"firstName"`
+    FullName       string `xml:"fullName"`
+    LastName       string `xml:"lastName"`
+    RowCount       int    `xml:"rowCount"`       // 真服必填，通常 0
+    ScreenName     string `xml:"screenName"`
+    UserId         string `xml:"userId"`
+}
+// ... <gametype>GameEntry / <gametype>Bet / <gametype>Seat / 机台特化嵌套节点
+```
+
+**强制要求**：
+
+1. **PP 真服 curl 字段对照**：开发完成后必须 curl PP 真服一份响应，与机台 `BuildGameDetail` 输出做 diff，**字段名 / 字段顺序 / 字段集**必须一致（缺字段或多字段都可能让客户端报错）。
+
+2. **bet 节点禁止盲目继承通用 GameBetXML**：PP 真服各机台 bet 节点字段不同。
+   **jackpotwheel 历史教训**：通用 GameBetXML 含 `partiallyRefunded`，但 PP 真服 jackpotwheel `<bet>` **无此字段**，导致客户端解析时多余字段。机台自定义 struct 时**精确按 PP 真服字段集**。
+
+3. **客户端 GameType enum 映射**（与 L1 DICT 输出对应）：history list `type` 字段必须经
+   `gameTypeToClientType` 转 PascalCase 后，`toUpperCase()` 能匹配 client main.js 中 `m.d.<GAMETYPE>` 字符串值。
+   **必须**在 `server/game/pp/runtime/history_parse.go:gameTypeMap` 加一行：
+   ```go
+   "<dbGameType>": "<PascalCase>",  // 如 "jackpotwheel": "Megawheel"
+   ```
+   否则 history 详情显示"无法预期的错误"。
+
+4. **持久化字段完整性**（L3.3 SETTLE 配合）：history XML 需要的字段必须在 settle 时**完整落到 b_game_rounds + b_game_transactions**：
+   - `b_game_rounds.dealer_name` ← `Processor.dealerName`（cacheDealer 内解析 `dealer.value`）
+   - `b_game_rounds.round_id` ← `evt.ID + "008"`（PP 标准格式）
+   - `b_game_rounds.game_type` ← `ctx.GameType` 空时用 `enum.GameType` 兜底
+   - `b_game_rounds.extra` ← multiplier / rngSlot / value / face / sector / maxcapValue 等机台特化字段
+   - `b_game_transactions.description` ← `payout.BetCodeDescription(bc)`（face value 字符串如 "1"/"5"/"40"，**不是** "Face X" 长字符串）
+
+**B5 验收**：
+- build/vet/test 过
+- history.go + history_test.go 覆盖 4+ 局型（megawin / mCap / normal / 边界）
+- 机台 internal 导出 `NewHistoryProvider() historyreg.DetailProvider` 工厂函数
+- factory/history_factory.go 加 `<gametype>.TableID: <gametype>.NewHistoryProvider()` 一行
+- PP 真服 curl 字段对照通过（手动 diff 或单测断言）
+- gameTypeMap 加映射 + L1 dict.json `client_gametype_enum` 一致
+
+**下游**：API 层 `tryHistoryRegistry` 调用（与 instance 完全解耦，不依赖 instance 状态）
 
 ---
 
