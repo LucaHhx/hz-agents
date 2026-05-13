@@ -1,0 +1,120 @@
+# Phase 3 — AIU DAG 实现概览
+
+> 触发：Phase 2 完成（worktree 已建），自此进入完全无人值守模式。
+> 目的：按 5 层 17 AIU DAG 实现机台对接代码。每层完成立即跑层间 codex 审查。
+> 阶段：❌ 禁止向用户提问，不确定走 codex-collab。
+
+## AIU = Analysis-Implementation Unit
+
+每个 AIU 一个 agent owner，单 agent 做"分析 + 实现 1 个文件"配对工作。窄上下文（只读自己需要的数据），不读全部 capture/main.js。详见 `phase-3-aiu-LN.md` 各层定义。
+
+## 5 层 DAG
+
+```
+Layer 1 (无依赖, 3 并行):
+   ENUM  ─┐
+   DICT  ─┤
+   ERRCODE ─┘
+        ↓ 等齐 → 层间 codex 审查 → fix
+Layer 2 (依赖 L1, 5 并行):
+   MODELS / BETPROTO / RULES / PROCESSOR / INSTANCE
+        ↓ 等齐 → 层间 codex 审查 → fix
+Layer 3 (依赖 L2, 5 并行):
+   UPSTREAM / DOWNSTREAM_BET / SETTLE / HISTORY_PARSER / CHECK_BET
+        ↓ 等齐 → 层间 codex 审查 → fix
+Layer 4 (依赖 L3, 6 并行):
+   PAYOUT / BETSTATS / WINNERS / STATS_API / TABLECONFIG_API / RTP_API
+        ↓ 等齐 → 层间 codex 审查 → fix
+Layer 5 (依赖全部, 1):
+   FACTORY → 跑全量 build → 层间 codex 审查 → fix
+```
+
+## 各层详情索引（执行该层时再读）
+
+| Layer | 读 reference | AIU 数 |
+|---|---|---|
+| L1 | `phase-3-aiu-L1.md` | 3 |
+| L2 | `phase-3-aiu-L2.md` | 5 |
+| L3 | `phase-3-aiu-L3.md` | 5 |
+| L4 | `phase-3-aiu-L4.md` | 6 |
+| L5 | `phase-3-aiu-L5.md` | 1 |
+
+层间 codex 审查执行：`phase-3-layer-review.md`
+
+## 调度伪代码
+
+```
+read state.json → 取 base_branch / worktree_path / gametype / tableId
+
+for layer in [L1, L2, L3, L4, L5]:
+    # 1. 读对应 phase-3-aiu-LN.md 拿本层 AIU 定义
+    aius = read_layer_definition(layer)
+
+    # 2. 同层全部 AIU 并行启动（同一条 Agent tool message 多次 Agent 调用）
+    aiu_results = parallel(Agent(prompt=render_aiu_prompt(aiu, state, prev_layer_commits))
+                           for aiu in aius)
+
+    # 3. 验收 B5 契约（commit/build/vet/test/policy-pr/关键决策 6 项）
+    for r in aiu_results:
+        assert b5_passed(r)
+        state.aiu_progress[layer].done.append(r.aiu_name)
+        state.aiu_progress[layer].commits.append(r.commit_sha)
+
+    layer_head = git_head()
+
+    # 4. 层间 codex 审查（≤2 轮，按 phase-3-layer-review.md）
+    for round in [1, 2]:
+        review = bash(codex_review.sh -d worktree -l layer-N-round-K -- render_layer_review_prompt(layer))
+        if review.no_issues(): break
+        # small / medium-必要 finding → fix agent 立即修；其他 → state.unresolved[]
+        for f in review.findings:
+            if f.severity in ("small", "medium-必要"):
+                fix = Agent(prompt=render_fix_prompt(f))
+                assert b5_passed(fix)
+            else:
+                state.unresolved.append(f)
+    else:
+        # 2 轮仍有 finding → unresolved + 进下层
+        state.unresolved += review.findings
+
+    update_state(phase=3, current_layer=layer, layer_head=layer_head)
+
+# 全 5 层完成 → 进 Phase 4 自问审查
+```
+
+## 失败回滚策略
+
+| 情况 | 处理 |
+|---|---|
+| 单 AIU 失败首次 | `git reset --hard` 该 AIU 改动 + 重启该 AIU（不影响同层其他 AIU 已 commit） |
+| 同 AIU 失败 ≥ 2 次 | 调 `codex_discuss.sh` ≤ 3 轮诊断根因（见 codex-collab.md S1） |
+| 同层多 AIU 失败 | 调 `codex_decide.sh` 一次性根因（可能上游 AIU 字段不全，需补） |
+| L1 ENUM 失败 = block 整层 | 必须先修，否则下游全部受阻；写 unresolved[] 后绝不停问用户 |
+
+## codex-collab 三模式触发点（详见 `codex-collab.md`）
+
+| 触发 | 模式 | reference 节 |
+|---|---|---|
+| 每层完成审查（≤ 2 轮） | review | layer-review.md |
+| AIU 启动前路径选择（复用/抽 helper） | decide | codex-collab.md D1 |
+| L2 MODELS 字段类型歧义 | decide | codex-collab.md D2 |
+| AIU 卡 ≥ 10 min / 失败 ≥ 2 次 | discuss | codex-collab.md S1 |
+
+## state.json 写入
+
+每层完成后更新：
+
+```jsonc
+{
+  "phase": 3,
+  "current_layer": "L2",
+  "aiu_progress": {
+    "L1": {"done": ["ENUM","DICT","ERRCODE"], "commits": ["sha1","sha2","sha3"], "review_rounds": 1},
+    "L2": {"done": [], "commits": [], "review_rounds": 0},
+    ...
+  },
+  "last_updated": "ISO"
+}
+```
+
+全 5 层完成后 `phase=3, status="done"`，进 Phase 4。
