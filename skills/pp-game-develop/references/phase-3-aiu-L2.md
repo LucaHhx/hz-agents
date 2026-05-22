@@ -10,8 +10,8 @@
 **分析输入**（**`client_frame_effects.md` 必读**，写 struct 前必须先看每帧客户端表现）：
 - **L1.4 `tmp/<tid>/client_frame_effects.md`** ← **强依赖**，决定字段类型 / omitempty / 嵌套结构
 - L1 enum.go（常量参考）
-- `tmp/<tid>/message.jsonl` 真帧逐字段（**字段类型严格按真帧**）
-- `tmp/<tid>/tableConfig.jsonl` / `statisticHistory.jsonl` 字段
+- `tmp/<tid>/message.txt` 真帧逐字段（**字段类型严格按真帧**）
+- `tmp/<tid>/tableConfig.txt` / `statisticHistory.txt` 字段
 - `tmp/<tid>/gameDetail.txt` XML 节点（如 ≥ 1 条）
 - main.js 补罕见事件 struct
 
@@ -50,16 +50,17 @@
 
 **分析输入**：
 - L1 DICT bc 全集
-- `tmp/<tid>/message.jsonl` send 帧 lpbet/placebet/pbet 实例
+- `tmp/<tid>/message.txt` send 帧 lpbet/placebet/pbet 实例
 - main.js 客户端下注代码 grep `e.bets.push` / `placeBet` / `placebets`
 
 **实现内容**（4 节）：
 1. **上行 XML 模板**：`<command channel><lpbet gm gId uId ck><bet amt bc ck/></lpbet></command>` 各字段含义 + 字段值实例
 2. **bc 全集表**：bc 数值 / 名称 / face_value（如有）
-3. **协议模式判定**：
-   - `incremental`（客户端每次发新增 delta）— **server 必须 loadExistingBets + mergeBets**（I6）
-   - `batch`（客户端每次发完整集合）
-   - 判定方法：grep main.js `e.bets.push(a)` 前是否有 `e.bets = []` 清空
+3. **协议模式判定（两步，缺一不可 — 见 known-pitfalls I6 / J1）**：
+   - `batch / 全量快照`（客户端每帧发本局完整 bet 集合，如 `lpbet`）— server 按 bc 唯一直接覆盖 Redis，**不 merge**
+   - `incremental`（客户端只发新增 1 条，如 `<placeBet>` 单数）— **server 必须 loadExistingBets + mergeBets**（I6）
+   - 判定：① `lpbet`（复数语义）帧名 → 几乎必为全量快照；② 取一个 Rebet（"重复下注"恢复多点位）样本看是否含本局全部 bet。⚠️ 单看 `grep e.bets.push` 前是否 `e.bets=[]` **不可靠**（megaroulette 因此误判为增量 → #193）
+   - ⚠️ `bet.ck` 是该批发送时间戳、**不是 per-bet 唯一 ID**（Rebet 多 bet 共享同一 ck），禁止用作去重键；按 `bc` 去重；同帧重复 bc = 损坏帧 fail-closed（J1）
 4. **特殊 bettype**：FreeChip / Bonus / Booster 等（如 main.js 含相关字段则列；如本机台无则明确写"无"）
 
 **B5 验收**：4 节齐全 + incremental/batch 结论明确 + 配 grep 证据行号
@@ -76,7 +77,7 @@
 
 **分析输入**：
 - L1 ENUM bc 枚举
-- `tmp/<tid>/tableConfig.jsonl` 全字段实际值（9 段位 / total 限额 / 派彩封顶）
+- `tmp/<tid>/tableConfig.txt` 全字段实际值（9 段位 / total 限额 / 派彩封顶）
 - main.js fallback 默认值（`?? 2e4` `?? 5e5` `?? 100`）+ typo 字段（如 megawheel `fourty`）+ bc 联动规则
 
 **实现内容**：
@@ -150,4 +151,4 @@
 - C1 / C7 / C9 Redis fail-closed
 - I2 错误码独立定义不跨包 import
 - I4 边界归一化（bc 原始 vs 命名化）
-- I6 incremental 协议必须 mergeBets
+- I6 incremental 协议必须 mergeBets / **J1 `lpbet` 全量快照禁用 `ck` 去重**

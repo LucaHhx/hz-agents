@@ -31,14 +31,14 @@ bash $CODEX_COLLAB/scripts/codex_review.sh \
 - Redis key 前缀走 enum.go 常量
 
 **主信息源**：
-- capture: `tmp/<tid>/{message.jsonl, tableConfig.jsonl}`
+- capture: `tmp/<tid>/{message.txt, tableConfig.txt}`
 - main.js: `tmp/<tid>/clientResources/apps/<key>/<ver>/main.js`
 - 上游：无
 
 ### L2 — MODELS / BETPROTO / RULES / PROCESSOR / INSTANCE（struct 与真帧匹配）
 
 **审查重点**：
-- models.go 各 struct 字段 vs `tmp/<tid>/message.jsonl` recv 帧逐字段对照
+- models.go 各 struct 字段 vs `tmp/<tid>/message.txt` recv 帧逐字段对照
 - 字段类型严格（string/number/嵌套对象 — 如 jackpotwheel_rng.slot 是嵌套不是平铺）
 - omitempty 标签是否合理（可选字段才标）
 - bet_limits.go 含 G2 默认值常量（DefaultMaxMultiplier=20000 / DefaultEuroTablePayoutMax=500000）
@@ -64,9 +64,9 @@ bash $CODEX_COLLAB/scripts/codex_review.sh \
 - CheckBet 9 段位单注 + 台限累加 + bonus 联动 (B8)
 
 **主信息源**：
-- capture message.jsonl 双向帧（lifecycle 时序）
+- capture message.txt 双向帧（lifecycle 时序）
 - **gameDetail.txt 真 XML**（HISTORY_PARSER 唯一权威）
-- tableConfig.jsonl（CHECK_BET 限额）
+- tableConfig.txt（CHECK_BET 限额）
 - main.js（rejectBet 分支）
 - 上游：L1 + L2 全部产物
 
@@ -114,9 +114,9 @@ bash $CODEX_COLLAB/scripts/codex_review.sh \
 
 【主信息源（必读，用于验证产物正确性）】
 1. capture（事实最高权威）：
-   - tmp/<tid>/message.jsonl
-   - tmp/<tid>/tableConfig.jsonl
-   - tmp/<tid>/statisticHistory.jsonl
+   - tmp/<tid>/message.txt
+   - tmp/<tid>/tableConfig.txt
+   - tmp/<tid>/statisticHistory.txt
    - tmp/<tid>/gameDetail.txt
    - tmp/<tid>/clientResources/apps/<key>/<ver>/main.js
 2. 上游 AIU 产物（参考，不审）：

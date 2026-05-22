@@ -58,10 +58,10 @@ git diff <base_branch>...HEAD —— 全 worktree 改动 vs base 分支
 5. **测试覆盖完整性**：
    - payout_test ≥ 4 capture 真帧样本（F1）
    - dictionary parity（F2）
-   - I6 incremental 回归测试
+   - I6 incremental / J1 全量快照去重回归测试
    - I7 partial-accept 测试
    - history_<gametype>_test 用真 XML
-6. **协议铁律 known-pitfalls A-I 全节**：
+6. **协议铁律 known-pitfalls A-J 全节**：
    - B1 tableId 字节替换
    - B2 winners pass 透传
    - B3 多事件单帧顺序
@@ -73,7 +73,17 @@ git diff <base_branch>...HEAD —— 全 worktree 改动 vs base 分支
    - I4 边界归一化
    - I6 incremental
    - I8 history 字段非空
-7. **policy-pr**：单文件 ≤ 500 行 / 嵌套 ≤ 3 层
+   - J1 lpbet 全量快照 / 禁 ck 去重
+   - J2 帧时效语义二分（缓存 / 回放）
+   - J3 下注规则 capture 实证
+   - J4 betValidationError code 客户端可识别
+   - J5 上游 seat drop
+   - J6 展示配置统一驱动
+   - J7 历史投注类型 / 开奖结果分离
+7. **协议保真度清单（强制跑）**：逐项核对
+   `<repo>/docs/integration-experience/common/protocol-fidelity-checklist.md` §1-6
+   —— 双层 JS 架构 / 下注 XML 协议事实表 / 帧合成 / 错误码语义 / verify 自动断言 / 自检矩阵
+8. **policy-pr**：单文件 ≤ 500 行 / 嵌套 ≤ 3 层
 
 【主信息源】
 1. capture 5 文件（事实最高权威）

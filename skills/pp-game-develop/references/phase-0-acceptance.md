@@ -24,22 +24,22 @@
 
 | # | 指标 | AI 检测命令 |
 |---|---|---|
-| 1 | 3 个 JSONL 文件齐全 + 非空 | `[[ -s tmp/<tid>/message.jsonl && -s tmp/<tid>/tableConfig.jsonl && -s tmp/<tid>/statisticHistory.jsonl ]]` |
+| 1 | 3 个数据文件齐全 + 非空（内容 JSONL） | `[[ -s tmp/<tid>/message.txt && -s tmp/<tid>/tableConfig.txt && -s tmp/<tid>/statisticHistory.txt ]]` |
 | 2 | main.js 存在 | `find tmp/<tid>/clientResources/apps -maxdepth 3 -name main.js \| head -1` |
-| 3 | 上行 send 帧 ≥ 5 | `jq -s '[.[]\|select(.dir=="send")]\|length' tmp/<tid>/message.jsonl` |
-| 4 | 上行 lpbet ≥ 2 | `jq -s -r '.[]\|select(.dir=="send")\|.payload' tmp/<tid>/message.jsonl \| grep -c '<lpbet '` |
+| 3 | 上行 send 帧 ≥ 5 | `jq -s '[.[]\|select(.dir=="send")]\|length' tmp/<tid>/message.txt` |
+| 4 | 上行 lpbet ≥ 2 | `jq -s -r '.[]\|select(.dir=="send")\|.payload' tmp/<tid>/message.txt \| grep -c '<lpbet '` |
 | 5 | 4 关键事件齐全 | 按 gametype 查（见 §3）|
 | 6 | ≥ 2 局完整循环 | 取 betsopen/closed/result/winners 计数最小值 ≥ 2 |
 | 7 | 4 事件数量对齐 | 4 个计数应相等 |
-| 8 | tableConfig.jsonl ≥ 1 | `wc -l tmp/<tid>/tableConfig.jsonl` |
+| 8 | tableConfig.txt ≥ 1 | `wc -l tmp/<tid>/tableConfig.txt` |
 
 ### 🟡 P1 应该通过（> 2 项警告 → degraded 询问用户）
 
 | # | 指标 | AI 检测 |
 |---|---|---|
-| 9 | 总帧数 ≥ 100 | `wc -l tmp/<tid>/message.jsonl` |
-| 10 | 时间跨度 ≥ 60s | `jq -s '(map(.ts)\|max-min)/1000' tmp/<tid>/message.jsonl` |
-| 11 | statisticHistory ≥ 1 | `wc -l tmp/<tid>/statisticHistory.jsonl` |
+| 9 | 总帧数 ≥ 100 | `wc -l tmp/<tid>/message.txt` |
+| 10 | 时间跨度 ≥ 60s | `jq -s '(map(.ts)\|max-min)/1000' tmp/<tid>/message.txt` |
+| 11 | statisticHistory ≥ 1 | `wc -l tmp/<tid>/statisticHistory.txt` |
 | 12 | send ping ≥ 3 | `jq -s -r '.[]\|select(.dir=="send")\|.payload' ... \| grep -c '<ping '` |
 | 13 | 机台特化关键事件 | 按 gametype 查（见 §3）|
 | 14 | tableConfig 含核心限额字段 | 按 gametype 查（见 §3）|
@@ -141,7 +141,7 @@
 
 主 AI 自行 grep main.js 提取：
 - 事件名：`grep -oE '"<gametype>?[a-z]*gameresult":\|"betsopen":\|"betsclosed":' main.js | sort -u`
-- tableConfig 字段：`jq -s '.[0].params | keys' tmp/<tid>/tableConfig.jsonl`
+- tableConfig 字段：`jq -s '.[0].params | keys' tmp/<tid>/tableConfig.txt`
 - 然后判断哪些是关键
 
 ## 4. P0/P1/P2 综合判断
@@ -156,12 +156,12 @@ P0 全过 + P1 警告 > 2 → status="degraded"，向用户报告问题 → 询�
 
 | 字段 | 来源 + 命令 |
 |---|---|
-| `tableId` | 参数（验证 tableConfig.tableId 一致）：`jq -s '.[0].tableId' tableConfig.jsonl` |
-| `operatorGameId` | `jq -s -r '.[0].operatorGameId // empty' tableConfig.jsonl` |
+| `tableId` | 参数（验证 tableConfig.tableId 一致）：`jq -s '.[0].tableId' tableConfig.txt` |
+| `operatorGameId` | `jq -s -r '.[0].operatorGameId // empty' tableConfig.txt` |
 | `gameLoaderKey` | `ls -d tmp/<tid>/clientResources/apps/*/` 取非 video/feature-flags/translations-* 之外的目录名 |
 | `gameType` | 优先 release.json：`jq -r '.gametype' tmp/<tid>/clientResources/apps/<gameLoaderKey>/*/release.json`；fallback `ls tmp/<tid>/clientResources/apps/translations-help/latest/*/` 任一 zh 等语言下非 common.json 的文件名（去 .json） |
-| `limits.min/max` | `jq -s -r '.[0].params.table_bet_min_limit, .params.table_bet_max_limit' tableConfig.jsonl` |
-| `dealer.name` | `jq -s -r '.[]\|select(.dir=="recv")\|.payload' message.jsonl \| grep -oE '"dealer":\{[^}]*"value":"[^"]+"' \| head -1 \| grep -oE '"value":"[^"]+"' \| cut -d'"' -f4` |
+| `limits.min/max` | `jq -s -r '.[0].params.table_bet_min_limit, .params.table_bet_max_limit' tableConfig.txt` |
+| `dealer.name` | `jq -s -r '.[]\|select(.dir=="recv")\|.payload' message.txt \| grep -oE '"dealer":\{[^}]*"value":"[^"]+"' \| head -1 \| grep -oE '"value":"[^"]+"' \| cut -d'"' -f4` |
 
 ## 6. state.json 写入模板
 

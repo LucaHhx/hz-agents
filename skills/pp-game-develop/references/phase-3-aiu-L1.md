@@ -8,8 +8,8 @@
 **产物**：`server/game/pp/internal/games/<gametype>/<tableId>/enum.go`
 
 **分析输入**（按需读，不读全部）：
-- `tmp/<tid>/message.jsonl` recv 帧抽事件名集 + send 帧抽 bc 集
-- `tmp/<tid>/tableConfig.jsonl` `.betCode` 字段
+- `tmp/<tid>/message.txt` recv 帧抽事件名集 + send 帧抽 bc 集
+- `tmp/<tid>/tableConfig.txt` `.betCode` 字段
 - `tmp/<tid>/clientResources/.../main.js` grep `Qp` 枚举 / errorCode 字面量 / `tf`/`nf` 映射表 / 罕见事件名
 
 **实现内容**：
@@ -151,7 +151,7 @@ table/dealer/game/timer） + `client_gametype_enum` 含本机台 enum 值 + `mes
 **产物**：`tmp/<tableId>/error_codes.md`（**非代码，是分析文档**）
 
 **分析输入**：
-- `tmp/<tid>/message.jsonl` 实际触发的 betValidationError 帧（通常 2-5 个组合）
+- `tmp/<tid>/message.txt` 实际触发的 betValidationError 帧（通常 2-5 个组合）
 - main.js grep 所有 errorCode 字面量（30-50 个全集）
 - main.js client switch 分支（rejectBet 清筹码 / sessionTimeout 弹窗 / generic alert / 静默）
 - `extendedErrorCode` 触发器（**仅 9018 InvalidToken 触发 SESSION_TIMEOUT** — known-pitfalls I3 dragontiger 教训）

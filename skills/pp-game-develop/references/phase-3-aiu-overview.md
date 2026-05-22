@@ -42,6 +42,54 @@ Layer 5 (依赖全部, 1):
 
 层间 codex 审查执行：`phase-3-layer-review.md`
 
+## 机台文件布局参照（6 已对接机台共性提炼）
+
+> 每张机台是 `server/game/pp/internal/games/<gametype>/<tableId>/` 下一个独立 Go 包。
+> 无固定文件数（职责不绑定文件），但 6 机台收敛出稳定的**核心文件集**，下表标注产出该文件的 AIU。
+> 用途：L5 FACTORY 前自检文件是否齐全；新机台对接时按此预估 policy-pr 拆分。
+
+### 核心文件集（6 机台全部或近全部都有）
+
+| 文件 | 产出 AIU | 职责 |
+|---|---|---|
+| `enum.go` | L1.1 ENUM | TableID / GameType / UpstreamFmt / ResultKey / 事件名常量 / errorCode / betCode 范围 / Redis key |
+| `models.go` | L2.1 MODELS | 上游消息 + 下游合成帧的具名 struct（禁匿名 struct / 禁 Sprintf 拼 JSON） |
+| `instance.go` | L2.5 INSTANCE | `New()` 装配，嵌 `common.GameInstanceBase`，持 `*Processor` |
+| `bet_window.go` | L2.5 INSTANCE | 下注窗口状态机 `MarkBetsOpen/Closed` + `CanBet`（C1 Redis 异常 false） |
+| `bet_redis.go` | L2.5 INSTANCE | Redis bet key 读写，fail-closed（C7 / C9） |
+| `processor.go` | L2.4 PROCESSOR | `Processor` 类型，嵌 `handlers.EventHandler`，锁 / 窗口 / idle 状态 |
+| `bet_limits.go` | L2.3 RULES | 按 bc / 币种取限额（处理 typo 字段）；轮盘族在 gametype 层共享 |
+| `upstream_dispatch.go` | L3.1 UPSTREAM | PP→server 单入口：B1 tableId 字节替换 + 事件 switch + verdict |
+| `upstream_handlers.go` | L3.1 UPSTREAM | 上游业务 handler（gameresult / HTTP stat 回调 / bet 确认） |
+| `upstream_cache.go` | L3.1 UPSTREAM | init 类帧缓存回放（J2：仅 table/dealer + 每局重发的全量快照帧，最小化） |
+| `downstream_dispatch.go` | L3.2 DOWNSTREAM_BET | 客户端→server 单入口：`raw==nil` 新连接发 init 序列 / `raw!=nil` 按 root 元素分发 |
+| `downstream_bet.go` | L3.2 DOWNSTREAM_BET | 下注业务：解析 lpbet/placeBet、校验、`BetSvc.PlaceBet`、合成确认帧 |
+| `xml_util.go` | L3.2 DOWNSTREAM_BET | 仅 XML 机台；ping/pong 等 trivial 帧 attr helper（业务 XML 走 struct，见下方注意） |
+| `check_bet.go` | L3.5 CHECK_BET | `CheckBet` override：窗口 + 币种 + 限额 fail-closed |
+| `settle.go` | L3.3 SETTLE | 结算核心：`OnGameResult` 写 b_game_rounds / 读 Redis bets / 算派彩 / 写 txn / 调商户 |
+| `payout.go` | L4.1 PAYOUT | 纯赔率 / 派彩计算函数（保持纯函数易单测） |
+| `history.go` | L3.4 HISTORY_PARSER | `historyreg.DetailProvider` 自实现（registry 模式，与 instance 解耦） |
+| `archive_detect.go` | L3.1 UPSTREAM | upstream-log 归档小 helper |
+
+### 按 gametype 的附加文件
+
+| 文件 | 出现于 | 职责 |
+|---|---|---|
+| `card_history.go` / `description_en.go` | baccarat / dragontiger | 牌面累计 + betCode→人类可读 Description |
+| `side_bet_rule.go` / `side_bets_gate.go` | baccarat / dragontiger | 边注启停闸门（按 `ShoeSummary.totalGames` 自算，**不靠上游 disablesidebets** — J2） |
+| `betstats_enrich.go` | dragontiger / jackpotwheel | betstats 帧 rewrite 注入我方玩家（L4.2 BETSTATS） |
+| `winners_broadcast.go` | dragontiger / jackpotwheel / megaroulette | `CollectOurWinners` + 合并 + 按币种 rewrite（L4.3 WINNERS） |
+| `settle_block.go` / `settle_persistence.go` | dragontiger / jackpotwheel / megaroulette | 结算 fail-closed 阻断 + `b_settlement_failed` 持久化 |
+| `candy_drop*.go` | sweetbonanza | 玩家决策状态机（选球，须落 `b_game_user_actions` — H7） |
+| `models_client.go` / `*_helpers.go` | megaroulette 等 | 纯为满足 policy-pr 500 行拆分（按职责拆，仍属同一 AIU） |
+
+### 注意
+
+- **XML 解析模板看 dragontiger / megaroulette**（`encoding/xml` struct 解析），**不要参考 baccarat / sweetbonanza** 的 `xml_util.go` regex extractAttr —— 后者是已记录的违规（`feedback_struct_only`），新机台勿传播。
+- **目录名 ≠ tableId**：megaroulette 目录是 `megaroulettelxuq` 但 `enum.TableID` 是 `1hl65ce1lxuqdrkr`。一律从 `enum.go` 读 TableID，不从目录名推断。
+- 注册：唯一改动机台目录外的文件 —— `factory/instance_factory.go`（switch case + `ImplementedTableIDs`）+ `factory/history_factory.go`（L3.4）。
+- `lifecycles/` 目录当前为空：`ARCHITECTURE.md` 描述的 `GameLifecycle` 层尚未拆出，6 机台全部把逻辑放机台包内。**按现有机台做**，不要照 ARCHITECTURE.md 新建 `lifecycles/<gametype>.go`。
+
 ## 调度伪代码
 
 ```

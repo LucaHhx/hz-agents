@@ -38,13 +38,13 @@ cat tmp/<tableId>/state.json 2>/dev/null  # 检查恢复点
 
 `tmp/<tableId>/`：
 
-- `message.jsonl` — game WS 双向帧（每行 JSON）
-- `tableConfig.jsonl` — tableConfig 响应
-- `statisticHistory.jsonl` — 历史响应
+- `message.txt` — game WS 双向帧（每行 JSON）
+- `tableConfig.txt` — tableConfig 响应
+- `statisticHistory.txt` — 历史响应
 - `gameDetail.txt` — game.jsp XML（每行一条，推荐 ≥ 1）
 - `clientResources/apps/<gameLoaderKey>/<ver>/main.js`
 
-录制工具：pp-game 仓库 `scripts/game_dev/fetch_client.mjs`（headed 模式 + 实时 JSONL）。**本 skill 不主动录**。
+录制工具：pp-game 仓库 `scripts/game_dev/fetch_client.mjs`（headed 模式，所有数据落 `.txt`，内容为 JSONL）。**本 skill 不主动录**。
 
 ## 8 Phase 概览 + 读取计划（progressive disclosure）
 
@@ -58,12 +58,12 @@ cat tmp/<tableId>/state.json 2>/dev/null  # 检查恢复点
 | **3** | AIU DAG 实现（5 层 17 单元，每层完成立即层间 codex 审查） | `references/phase-3-aiu-overview.md`，进入某 L 时再读对应 `phase-3-aiu-LN.md` + `phase-3-layer-review.md` |
 | **4** | 自问审查 4 题 + codex_decide 每题决策 | `references/phase-4-self-review.md` |
 | **5** | 整体循环 codex review（≤5 轮） | `references/phase-5-overall-review.md` |
-| **6** | verify 7 项（含 I9 + I10） | `references/phase-6-verify.md` |
-| **7** | 经验文档归档（13 节） | `references/phase-7-experience-doc.md` |
+| **6** | verify 13 项（含 I9/I10 + V10-V13 生产 bug 闸门） | `references/phase-6-verify.md` |
+| **7** | 经验文档归档（16 节） | `references/phase-7-experience-doc.md` |
 
 **跨 phase 共用 references**（按需 grep，不必预读）：
 - `references/codex-collab.md` — 三模式调用 + 全 prompt 模板 + state 跟踪
-- `references/known-pitfalls.md` — 协议铁律 A-I 精华版
+- `references/known-pitfalls.md` — 协议铁律 A-J 精华版（J = 生产 bug 复盘）
 
 ## Phase 1 — 选 base + factory 检测（AI 直接执行）
 

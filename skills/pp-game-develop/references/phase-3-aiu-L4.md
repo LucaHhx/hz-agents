@@ -11,7 +11,7 @@
 - L1 ENUM（bc / face / 默认值常量）
 - L2 RULES（bet_limits 三路 cap 字段）
 - L3 SETTLE 调用接口
-- `tmp/<tid>/message.jsonl` <gametype>gameresult 真帧（payout_test 4 样本来源）
+- `tmp/<tid>/message.txt` <gametype>gameresult 真帧（payout_test 4 样本来源）
 
 **实现内容**：
 - `Calculate(amount, face, megaMul)` 纯函数 — **payout 含本金**（不是只净赢）
@@ -38,7 +38,7 @@
 **分析输入**：
 - L2 MODELS（betstats struct）
 - L1 ENUM bc 全集
-- `tmp/<tid>/message.jsonl` 实际 betstats/betResultStats 帧（验证 bucket key）
+- `tmp/<tid>/message.txt` 实际 betstats/betResultStats 帧（验证 bucket key）
 
 **实现内容**：
 - `EnrichBetstats` 函数（参考 dragontiger `enrichDTBetstats`）
@@ -59,7 +59,7 @@
 
 **分析输入**：
 - L2 MODELS（winners struct）
-- `tmp/<tid>/message.jsonl` winners 真帧（含外渠道真实玩家结构）
+- `tmp/<tid>/message.txt` winners 真帧（含外渠道真实玩家结构）
 - main.js setWinners 客户端渲染逻辑
 
 **实现内容**：
@@ -80,7 +80,7 @@
 
 **分析输入**：
 - L3 SETTLE writer 写入的 record 字段
-- `tmp/<tid>/statisticHistory.jsonl` 真 records
+- `tmp/<tid>/statisticHistory.txt` 真 records
 - **main.js `Object.keys(tf)` 客户端实测 key**（如 megawheel 是 `["1","2",..."40"]` 数字字符串，非 `"One"..."Forty"`）
 - 既有 api_stats.go 路由分支机制
 
@@ -104,7 +104,7 @@
 
 **分析输入**：
 - L1 ENUM（typo 字段映射）
-- `tmp/<tid>/tableConfig.jsonl` 真响应 shape
+- `tmp/<tid>/tableConfig.txt` 真响应 shape
 - main.js client 读取 betLimits 代码
 
 **实现内容**：

@@ -1,23 +1,23 @@
 # Phase 6 — verify 全量验收（AI 自检指南）
 
 > 触发：Phase 5 整体 codex review fix 完成。
-> 9 项验收（5 确定性 + I9 + I10 + V8 时序 + V9 GameType 映射 — 后 4 项为语义判断）。
+> 13 项验收（5 确定性 + I9/I10/V8/V9 语义判断 + V10-V13 生产 bug 复盘闸门，对应 known-pitfalls J1-J7）。
 > 阶段：❌ 禁止向用户提问；失败首次 Claude 自修；≥2 次走 codex_decide 根因分类。
 
 ## AI 执行步骤
 
 ```
 1. cd <worktree>
-2. 按顺序跑 7 项验收（详见 §2-§8）
+2. 按顺序跑 13 项验收（详见 §2 起）
 3. 任一项失败：
    - 首次：Claude 自修（小问题）+ 重跑该项
    - ≥2 次：调 codex_decide.sh 根因分类（见 codex-collab.md D5）
    - 决策不收敛：调 codex_discuss.sh ≤ 2 轮（S3）
-4. 全 7 项 PASS → 进 Phase 7 归档
+4. 全 13 项 PASS → 进 Phase 7 归档
 5. 全程不停问用户
 ```
 
-## 7 项验收
+## 13 项验收
 
 ### V1. go build
 
@@ -72,7 +72,7 @@ PASS 标准：单文件 ≤ 500 行 + 嵌套 ≤ 3 层。
 
 ```bash
 # A. 客户端→server XML 帧 → 抽出所有 root tag + 属性
-jq -s -r '.[]|select(.dir=="send")|.payload' tmp/<tid>/message.jsonl | grep -oE '<[a-zA-Z]+[^/]*>' | sort -u
+jq -s -r '.[]|select(.dir=="send")|.payload' tmp/<tid>/message.txt | grep -oE '<[a-zA-Z]+[^/]*>' | sort -u
 
 # B. server 端 ClientCommand struct → grep
 grep -rE 'type Client[A-Z][a-zA-Z]*Cmd' <worktree>/server/game/pp/internal/games/<gametype>/<tableId>/
@@ -124,7 +124,7 @@ cd <worktree>/server && go test -v -run "TestParse<Gametype>" ./game/pp/runtime/
 
 ```bash
 # 1. PP capture 真服时间序列（recv + send 按 ts 排序）
-jq -s -r '.[] | "\(.ts) \(.dir) \(.payload[0:120])"' tmp/<tid>/message.jsonl > /tmp/pp_seq.txt
+jq -s -r '.[] | "\(.ts) \(.dir) \(.payload[0:120])"' tmp/<tid>/message.txt > /tmp/pp_seq.txt
 
 # 2. 对每个回合做关键事件时序提取（betsopen → 客户端 lpbet → betsclosingsoon →
 #    betsclosed → bet echo 序列 → gameresult → winners → win 帧 → 下一局 game）
@@ -182,6 +182,76 @@ grep -A 20 'gameTypeMap' server/game/pp/runtime/history_parse.go
 **FAIL 处理**：
 - 加映射到 `history_parse.go:gameTypeMap`（jackpotwheel → "Megawheel"）
 
+### V10. Rebet 全量快照去重（J1，AI 跑）
+
+**目的**：确认下注协议被正确判定为全量快照、按 `bc` 去重、**无 `ck` 去重逻辑** —— megaroulette #193 根因是误判增量 + 用 `ck` 当去重键（`ck` 是批次时间戳，Rebet 多 bet 共享同一 ck）。
+
+**AI 检查步骤**：
+
+```bash
+DIR=<worktree>/server/game/pp/internal/games/<gametype>/<tableId>
+# 1. 协议判定文档结论
+grep -E 'batch|快照|incremental' tmp/<tid>/bet_protocol.md | head -5
+# 2. 代码不得用 ck 做 map key / 去重键（仅可作 echo 透传字段）
+grep -rnE '\bck\b' "$DIR"/downstream_bet*.go
+# 3. 单测覆盖同帧重复 bc fail-closed + Rebet 多点位无重复 bc
+grep -rE 'Test.*(Dup|Rebet|Snapshot)' "$DIR"
+```
+
+**PASS 标准**：`bet_protocol.md` 明确判 batch / 全量快照；代码无 `ck` 去重；单测覆盖"同帧重复 bc → fail-closed 拒整帧"。
+
+**FAIL 处理**：误判增量 → 改纯覆盖模型（按 bc 唯一直接覆盖 Redis）；用 `ck` 去重 → 改按 `bc`。
+
+### V11. betValidationError code 客户端可识别（J4，AI 跑）
+
+**目的**：每个拒单 `code` 在客户端 main.js `betValidationError` / `rejectBet` switch 有对应 toast 分支；否则落 default 弹"请联系客服"把普通拒单放大成系统故障（#161 / #181 / #182）。
+
+**AI 检查步骤**：
+
+```bash
+MAIN=$(find tmp/<tid>/clientResources/apps/<gameLoaderKey> -name 'main.js' | head -1)
+DIR=<worktree>/server/game/pp/internal/games/<gametype>/<tableId>
+# 1. 客户端识别的 error code 全集（main.js switch case 标签）
+grep -oE 'case ?"?[0-9]{3,5}"?' "$MAIN" | grep -oE '[0-9]{3,5}' | sort -u
+# 2. server 用的拒单 code 常量
+grep -rnoE 'ErrCode[A-Za-z]+|"[0-9]{4,5}"' "$DIR"/enum.go
+```
+
+**PASS 标准**：server 每个拒单 `code` ∈ 客户端识别集；普通拒单 `extendedErrorCode` 留空（仅 InvalidToken 填 9018）；拒单后无追发 `command status=error`。
+
+**FAIL 处理**：换成客户端识别的 code（被禁 betCode 用 `20602` BET_NOT_ALLOWED）。
+
+### V12. seat drop + 帧时效分类审查（J2 / J5，AI 跑）
+
+**目的**：上游 `seat` 一律 drop；`upstream_cache` 只缓存"每局重发的全量快照帧"，不缓存时效状态帧。
+
+**AI 检查步骤**：
+
+```bash
+DIR=<worktree>/server/game/pp/internal/games/<gametype>/<tableId>
+# 1. seat 必须 drop
+grep -nE 'seat|Seat' "$DIR"/upstream_dispatch.go
+# 2. 缓存集合不得含 disablesidebets / timer / seat 等时效状态帧
+grep -nE 'cache|Cache' "$DIR"/upstream_cache.go
+```
+
+**PASS 标准**：`seat` → drop；`upstream_cache` 缓存集合仅含 init 类（table / dealer）+ 每局重发的全量快照帧（走势 `<statistic>` / `<ShoeSummary>`）；时效状态帧（`disablesidebets` / `timer`）不在缓存集。
+
+**FAIL 处理**：seat 透传 → 改 drop；缓存了时效状态帧 → 移除，状态改后端按权威数据自算。
+
+### V13. DB-config 前置 + post-merge live-launch checklist（清单交付，AI 填）
+
+**目的**：代码 build / test 全过 **≠ 机台能跑**。jackpotwheel 上线后才暴露 12 个运行时 bug（operatorGameId 路由 / subscribe ack 漏发 / 僵尸连接 / dealer_name NULL / history chunk 加载失败），test 与 codex 都抓不到。本项把上线前后必查项**填实进经验文档第 12 节**。
+
+**AI 填实清单**（无网络 / 无 DB，是清单交付不是自动化检查）：
+
+- **DB 配置前置**：`b_tables` 行（`game_type` / `operator_game_id` / `activity_check_interval`）、`b_table_currency_configs`（含 G2 兜底字段 + typo 字段）、`b_currency_rates` 有启用的 `EUR` 行 + `symbol` 字段（J6）
+- **gameType 字符串四处对齐**：`b_tables.game_type` ↔ 后端 `enum.GameType` ↔ `history_parse.go:gameTypeMap` ↔ 客户端 `m.d.<GAMETYPE>` enum（任一不一致 → history 详情"无法预期的错误"）
+- **betCode 列长**：`b_game_transactions.bet_code` 是 `size:10`。字符串 betCode 命名 **≤ 10 字符**（dragontiger `DRAGON_BLACK` 12 字符曾致 data too long → 派彩成功但注单行丢失）→ 须有命名长度回归断言
+- **post-merge live-launch 必查**（test / codex 抓不到，须真人启动验证）：operatorGameId 路由命中、subscribe ack 实发、僵尸连接清理、`dealer_name` 非 NULL、history chunk 正常加载、币种符号正确
+
+**PASS 标准**：经验文档第 12 节填实上述四组清单；betCode 命名长度有回归断言。
+
 ## 失败决策树
 
 ```
@@ -221,7 +291,11 @@ grep -A 20 'gameTypeMap' server/game/pp/runtime/history_parse.go
     "V6_I9_protocol_matrix": "PASS",
     "V7_I10_real_xml_test": "PASS",
     "V8_message_timing": "PASS — bet echo @ OnMerchantBetResult / win @ WinnersBroadcastDelay / subscribe ack 自合成",
-    "V9_gameType_enum_map": "PASS — gameTypeMap[<dbGameType>] = <PascalCase> 经 toUpperCase 匹配 client enum"
+    "V9_gameType_enum_map": "PASS — gameTypeMap[<dbGameType>] = <PascalCase> 经 toUpperCase 匹配 client enum",
+    "V10_snapshot_dedup": "PASS — lpbet 判定全量快照 / 按 bc 去重 / 无 ck 去重 / 重复 bc fail-closed",
+    "V11_errcode_client_recognized": "PASS — 拒单 code 全命中客户端 switch / 普通拒单 extendedErrorCode 空",
+    "V12_seat_drop_frame_timeliness": "PASS — seat drop / 缓存集仅全量快照帧",
+    "V13_db_config_live_launch": "DELIVERED — 经验文档 §12 填实 DB 前置 + post-merge 必查清单"
   },
   "verify_failures": [
     // {"item": "V4_cover", "round": 1, "value": "18%", "fixed_by": "添加 payout_test", "round_2": "27%"}

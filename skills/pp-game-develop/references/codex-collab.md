@@ -43,7 +43,7 @@
 【审查范围】<具体 git diff>
 【审查重点】<按 phase / layer 注入清单>
 【主信息源】
-- capture: tmp/<tid>/{message.jsonl, tableConfig.jsonl, ...}
+- capture: tmp/<tid>/{message.txt, tableConfig.txt, ...}
 - main.js: tmp/<tid>/clientResources/apps/<key>/<ver>/main.js
 - 上游 AIU 产物: <list>
 - known-pitfalls: $SKILL_DIR/references/known-pitfalls.md + <repo>/docs/integration-experience/common/

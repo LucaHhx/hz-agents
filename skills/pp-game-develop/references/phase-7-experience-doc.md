@@ -4,7 +4,11 @@
 > 产物：`<repo>/docs/integration-experience/<gametype>/<tableId>.md`（worktree 内）。
 > 阶段：❌ 禁止向用户提问；commit 到 worktree 子分支，不 PR。
 
-## 16 节 + 2 节扩展模板（v2：含客户端帧表现手册 §16）
+## 经验文档模板（16 节，全部必填）
+
+> **完整性铁律**：§1-§16 **全部必填**。某节无内容写 `无 / N/A` 并一句话说明原因，
+> **禁止整节省略**（已对接机台曾省略"客户端-后端一致性矩阵 / 历史链路审查"节，
+> 导致后续相同 gameType 对接无参照）。节号固定，新机台直接 fork 本模板，不自行增删节号。
 
 ```markdown
 # <tableId> 对接经验（<gametype> / <PP 机台名>）
@@ -27,14 +31,14 @@
 
 ## 2. 协议事实速查（capture 实证）
 
-主要上游事件（来自 message.jsonl recv）：
+主要上游事件（来自 message.txt recv）：
 - `betsopen`: N 次，样本字段 `{table, game, seq}`
 - `betsclosed`: N 次
 - `<gametype>gameresult`: N 次，**关键字段** `{value, multiplier, ..., seq}`
 - `winners`: N 次
 - `<机台特化事件>`: N 次
 
-主要下游事件（来自 message.jsonl send）：
+主要下游事件（来自 message.txt send）：
 - `<ping channel="..." time="..."/>` × N
 - `<command channel><lpbet gm="<gametype>_desktop" ...><bet amt bc/></lpbet></command>` × N
 
@@ -61,7 +65,19 @@ betsopen → betsclosingsoon → betsclosed → <startDealing/mwDealing> → <ja
 | winners | pass 透传 | flushPendingWins | known-pitfalls B2 |
 | bet/bets/win/winningBetCodes/betSpotWin/command/pong | drop | 自合成 | 客户端 main.js 0 命中（B4） |
 | switch | drop + 业务 | ctx.Reconnect | B10 |
+| seat | drop | Inactivity 我方自管 | known-pitfalls J5 |
 | ... | | | |
+
+### 5.1 客户端-后端一致性矩阵（G7 强制节）
+
+客户端展示的每个约束类数值（限额 / 封顶 / 赔率 / 合法投注），后端必须用同字段同来源同兜底 enforce：
+
+| 客户端展示项 | 来源字段（含 typo） | 客户端 fallback | 后端 enforce 位置 | 一致? |
+|---|---|---|---|---|
+| 单注上下限 | `tableConfig.params.xxx` | `?? 100` | check_bet 段位校验 | ✅ |
+| 派彩封顶 | `euro_table_payout_max` 等 | `?? 5e5` | payout 三路 cap（G3） | ✅ |
+| maxMultiplier | `tableConfig.params.xxx` | `?? 2e4` | payout cap A 路 | ✅ |
+| ... | | | | |
 
 ## 6. 服务端→客户端帧合成清单
 
@@ -115,9 +131,9 @@ betsopen → betsclosingsoon → betsclosed → <startDealing/mwDealing> → <ja
 - `history_<gametype>_test.go` — I10 真 XML 单测
 
 capture 5 文件作 fixture 路径：
-- `tmp/<tableId>/message.jsonl`
-- `tmp/<tableId>/tableConfig.jsonl`
-- `tmp/<tableId>/statisticHistory.jsonl`
+- `tmp/<tableId>/message.txt`
+- `tmp/<tableId>/tableConfig.txt`
+- `tmp/<tableId>/statisticHistory.txt`
 - `tmp/<tableId>/gameDetail.txt`
 - `tmp/<tableId>/clientResources/.../main.js`
 
@@ -216,7 +232,7 @@ TABLE_ID=$(jq -r .tableId tmp/<tid>/state.json)
 
 DOC="$WT/docs/integration-experience/$GAMETYPE/$TABLE_ID.md"
 mkdir -p "$(dirname "$DOC")"
-# Claude 按 13+2 节模板填实写入 $DOC
+# Claude 按 16 节模板填实写入 $DOC（§1-§16 全部必填）
 
 # 2. 更新索引（如 docs/integration-experience/README.md 含目录则补一行）
 
@@ -225,7 +241,7 @@ cd "$WT"
 git add docs/integration-experience/
 git commit -m "docs(integration-experience): $GAMETYPE/$TABLE_ID 对接经验
 
-13 节经验文档 + 自问审查摘要 + unresolved 列表。
+16 节经验文档 + 自问审查摘要 + unresolved 列表。
 
 capture 5 文件作 fixture，main.js 路径见第 9 节。"
 ```

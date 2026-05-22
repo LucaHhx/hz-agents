@@ -13,13 +13,16 @@
 **分析输入**：
 - L2 MODELS / PROCESSOR
 - L1 ENUM 事件名 / DICT 全集
-- `tmp/<tid>/message.jsonl` recv 帧时序（lifecycle 顺序）
+- `tmp/<tid>/message.txt` recv 帧时序（lifecycle 顺序）
 - 协议决策表参考（known-pitfalls B 节 + 既有机台经验）
+- **方法论必读**：`<repo>/docs/integration-experience/common/upstream-frame-handling.md`
+  —— 按"用途/作用"归类上游帧（跨机台 key 变体对应）+ verdict / 缓存 init 回放 /
+  本地合成三维度决策 + 帧角色归类表
 
 **实现内容**：
 - **tableId 字节替换 (B1)**：`HandleUpstream` 入口 `bytes.ReplaceAll(raw, ctx.PPTableID, ctx.TableID)`
 - **orderKeysByPriority (B3)**：单帧多 key 按 gameresult > winners > betsclosed > betsclosingsoon > betsopen > 其他
-- **verdict 分流**：每事件 pass / drop / rewrite（按 capture 实证 + L1 DICT + 既有机台默认）
+- **verdict 分流**：每事件 pass / drop / rewrite（按 capture 实证 + L1 DICT + 既有机台默认）。⚠️ 上游 `seat` 一律 **drop**（J5）；缓存 / 回放按帧时效语义二分（J2）—— `disablesidebets` / `timer` 等时效状态帧不缓存；`<statistic>` / `<ShoeSummary>` 等每局重发的全量快照帧必须缓存并在新连接回放；`<statisticLA>` 增量帧不缓存
 - **init cache + server 自合成 init —— 严格遵守"最少 + 最必要 + 尽量自合成"**：
 
   init 序列**只发 L1 DICT `init_frame_sequence` 列出的帧**（已经过客户端 main.js
@@ -62,6 +65,9 @@
   - `onSwitch` → ctx.Reconnect（B10：wsAddress + httpAddress 都必须 string）
   - `onDealer` → 解析 `dealer.value` 写入 Processor.dealerName 缓存（settle 落
     b_game_rounds.dealer_name 用；漏存导致 history XML `<seat><name>` 缺失）
+  - `onSeat` → **drop**（J5：上游 `seat` 按 PP 代理账号广播、含其它会话的 idle/timeout，
+    透传给下游客户端会误弹 Inactivity 遮罩 + 强制断 WS；Inactivity 改由我方 per-user
+    `IdleWatcher` 自管，阈值取 `b_tables.activity_check_interval`，0 = 禁用不 fallback）
 
 **B5 验收**：build/vet/test 过 + dispatch_test 覆盖多事件单帧顺序 + tableId 替换 +
 **ReplayCache + 自合成 init 序列**（与 L1 DICT init_frame_sequence 对齐）
@@ -79,16 +85,23 @@
 
 **分析输入**：
 - L2 MODELS（ClientLpbet 等） / BETPROTO（incremental/batch 判定） / RULES
-- `tmp/<tid>/message.jsonl` send 帧（含 lpbet 实例）
+- `tmp/<tid>/message.txt` send 帧（含 lpbet 实例）
 - main.js client switch 分支 + B6 ping 单/双引号
+- **方法论必读**：
+  - `<repo>/docs/integration-experience/common/bet-confirmation-frames.md` —— bet/bets
+    确认帧两类形态、三种下发时序（**必须在商户 /bet 成功之后**）、客户端清盘风险、
+    六机台矩阵与对接 checklist
+  - `<repo>/docs/integration-experience/common/client-rules-analysis.md` —— 客户端规则
+    分析方法论，产出"客户端-后端一致性矩阵"
 
 **实现内容**：
 - ping/subscribe/command 路由（subscribe 是我方合成，不是上游来）
 - lpbet/placebet/pbet 解析（按 L2 BETPROTO 判定的协议形态）
-- **incremental 协议 (I6)**：`loadExistingBets` + `mergeBets` + 同 bc 累加
+- **协议形态按 L2.2 BETPROTO 判定**：batch / 全量快照 → 按 bc 唯一直接覆盖 Redis（**不 merge**）；incremental (I6) → `loadExistingBets` + `mergeBets` + 同 bc 累加。⚠️ `lpbet` 几乎必为快照，`ck` 不可作去重键、同帧重复 bc fail-closed（J1）
 - **partial-accept (I7)**：accepted 落库 + bet echo（B5/I5）；rejected 各发 betValidationError
 - **betValidationError 7 字段全填 (B9)**：betCode / code / extendedErrorCode / optExtErrorCode / optExtErrorMsg / category / severity
 - ⚠️ extendedErrorCode 仅 InvalidToken 等踢下线场景填 9018（**I3 dragontiger 教训**），普通错误必须留空
+- **error code 必须客户端真识别 (J4)**：拒单 `code` 必须命中客户端 main.js `betValidationError` / `rejectBet` switch 真有 toast 的分支（被禁 betCode 用 `20602` BET_NOT_ALLOWED，**不要用** `1028` / `1059` / `1060`，否则落 default 弹"请联系客服"通用错误）；拒单后**不要追发** `command status=error`
 - **FreeChip / 特殊 bettype fail-closed (B11)**：如 `bet.Nc != ""` / `lpbet.Bcode/Bettype 非空` → 返回 `ErrCodeFreeChipUnknownError`
 - **空 lpbet 撤单防御 (C3)**：必须先 CheckBet 校验窗口才清 Redis
 - `xml_util.go` `extractXMLAttr` 单/双引号兼容 + `xmlRootTag` helper
@@ -106,7 +119,7 @@
 **分析输入**：
 - L2 MODELS（<gametype>GameResult struct）
 - L1 ENUM FaceValueToBC
-- `tmp/<tid>/message.jsonl` <gametype>gameresult 真帧字段
+- `tmp/<tid>/message.txt` <gametype>gameresult 真帧字段
 - 既有机台参考：dragontiger / sweetbonanza settle.go
 
 **实现内容**：
@@ -139,6 +152,8 @@
 
 **分析输入**：
 - **`tmp/<tid>/gameDetail.txt` 真 XML**（字段名 100% 权威，逐字段对照）
+- **方法论必读**：`<repo>/docs/integration-experience/common/history-display-analysis.md`
+  —— 客户端历史记录展示分析方法论（5 类入口 + 字段映射 + 单测）
 - **PP 真服 curl 响应**（强烈推荐 — 与 capture 对照避免缩进/字段名假设错误）：
   ```bash
   # 从 capture 录制时记录的 PP 真服 URL（如 report.<region>.../audit/game.jsp）curl 一份
@@ -246,7 +261,7 @@ type <gametype>Account struct {
 - 9 段位（或对应 bc）单注限额校验 → 返 `ErrCodeBetTooLow/TooHigh`
 - 该用户当前局总 stake + 新 bet > 台限 → 返 `ErrCodeTableLimitExceeded`
 - bc 白名单校验 → 不在 → 返 `ErrCodeUnknownBetCode`
-- bc 联动规则（B8 bonus 前置：押 PlayerBonus 必先押 Player）
+- bc 联动规则（B8 bonus 前置：同帧含**任一非 Bonus bet** 即可，**不要求同侧** — 见 J3；下注规则必须 capture 实证不凭直觉）
 - **整批拒清 Redis 仅限非窗口类 (C4)**：窗口拒绝不清，防止 "界面已撤实际扣款"
 
 **B5 验收**：build/vet/test 过 + validate_test 覆盖单注/台限/窗口/联动 4 类
@@ -258,5 +273,5 @@ type <gametype>Account struct {
 ## prompt 模板
 
 参考 `phase-3-aiu-L1.md` 末尾通用 prompt 模板。L3 AIU prompt 额外注入：
-- **铁律 reminder**：B1/B3/B5/B6/B9/B10/B11 + C1/C3/C4/C7/C8/C9 + D 全部 zap.Error + H3/H5/H6 + I3/I4/I6/I7/I8
+- **铁律 reminder**：B1/B3/B5/B6/B9/B10/B11 + C1/C3/C4/C7/C8/C9 + D 全部 zap.Error + H3/H5/H6 + I3/I4/I6/I7/I8 + **J1-J7 生产 bug 复盘铁律全部**（J1 lpbet 快照 / J2 帧时效 / J3 下注规则 capture 实证 / J4 error code / J5 seat drop / J6 展示配置 / J7 历史字段）
 - 上游 AIU 已 commit sha + 产物路径（来自 state.aiu_progress.L1.commits + L2.commits）

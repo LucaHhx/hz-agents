@@ -26,7 +26,7 @@
 
 **B7 EnrichBetstats 返回完整 envelope**：`{"betstats":{...}}` 整 envelope。rewrite 链路必须 `unwrapEnvelope` 解出内层后存到 dispatchAction.data，否则会变成 `{"betstats":{"betstats":{...}}}` 双信封。
 
-**B8 Bonus 边注主投注前置**：押 PlayerBonus（如 betCode 12）必先押 Player（betCode 0），否则返 1059 PlayerBonusBetWithoutMainBet。具体码值按字典实际值。
+**B8 Bonus 边注需任一非 Bonus 陪伴投注（同帧，不要求同侧）**：押 Bonus 类（PlayerBonus / BankerBonus 等）时同帧必须含**任一非 Bonus bet**（任意主注 / 对子 / Super6 都算合法陪伴）。**不要求同侧** —— `Tie + BankerBonus`、`PlayerNC + BankerBonus` 在真 PP 均 success。废弃"同侧耦合"假设（旧 1059/1060 同侧码）。见 J3。capture #182 实证。
 
 **B9 BetValidationError 字段 7 个**：betCode / code / extendedErrorCode / optExtErrorCode / optExtErrorMsg / category / severity。后 4 个虽 omitempty，但商户错误透传必须能填。
 
@@ -145,11 +145,15 @@ DefaultEuroTablePayoutMax = 500000.0  // 与 main.js `?? 5e5`
 **I5 server 主动合成帧**：bet echo / betstats enrich（我方平台金额）/ winners 合并 / logout。
 
 **I6 incremental vs batch 协议**：
-- 整批协议（baccarat6 lpbet 客户端每次发完整集合）→ 直接传当次 bets
-- 增量协议（dragontiger placeBet 客户端只发新增 1 条）→ **必须 loadExistingBets + mergeBets**
-- 判定：grep main.js `e.bets.push(a)` 前是否 `e.bets = []` 清空
+- 整批 / 全量快照协议（客户端每次发本局完整 bet 集合，如 baccarat6 / crystalroulette / megaroulette 的 `lpbet`）→ 按 bc 唯一、直接用当次快照覆盖 Redis；**不做 loadExistingBets / mergeBets**
+- 增量协议（客户端只发新增 1 条，如 dragontiger `<placeBet>` 单数）→ **必须 loadExistingBets + mergeBets**
+- 判定（两步，缺一不可）：
+  1. `lpbet`（复数语义）帧名 → **几乎必为全量快照**；`<placeBet>` 单数才倾向增量
+  2. 取一个 Rebet（"重复下注"恢复多点位）capture 样本，看该帧是否含**本局全部 bet** → 含全部 = 快照；只含 delta = 增量
+- ⚠️ 单看 `grep e.bets.push` 前是否 `e.bets=[]` **不可靠**（megaroulette 因此误判为增量 → #193，见 J1）
 
 dragontiger 历史教训：增量协议但 server 走整批覆盖 → 玩家先下龙 2000 + 后下和 2000 → Redis 整个替换为 `[{tie,2000}]` → 龙的 2000 消失。
+megaroulette 反向教训：全量快照协议被误判为增量 + 用 `ck` 做去重键 → Rebet 多点位共享同一 `ck` 互相覆盖 → 见 J1。
 
 **I7 partial-accept 协议**：客户端按 `totalBetsRejected === totalBetsSent` 判 BETS_REJECTED；server batch-all-or-nothing 完全相反。改逐 bet 校验：accepted 落库 + bet echo；rejections 各发 betValidationError。
 
@@ -164,3 +168,57 @@ dragontiger 历史教训：增量协议但 server 走整批覆盖 → 玩家先�
 4. InvalidToken 触发 KickUser（logout XML）
 5. 一般 betValidationError 不弹 sessionTimeout
 6. history score 非空（cgibin/audit/game.jsp 返 XML 有值）
+
+## J. 生产 bug 复盘铁律（issue 实证）
+
+> 来源：pp-game 仓库已对接机台的**上线后真实 bug** issue 复盘，每条对应 ≥1 个 fixing commit。
+> 与 A-I 区别：A-I 来自对接期 codex 审查；J 是 verify 阶段漏网、上线才暴露的 ——
+> 对接新机台时优先级最高，verify（phase-6 V10-V13）逐条闸门。
+
+**J1 `lpbet` 是全量快照协议，禁止用 `ck` 做去重键**（修正 I6）
+PP 客户端每帧 `lpbet` 重发本局全部 bet。**按 `bc` 唯一、incoming 全量快照直接覆盖 Redis**，不 merge。
+- `ck` 不是 per-bet 唯一 ID，是"该批 bet 发送时的时间戳"。点"重复下注"一次恢复多点位时这些 bet **共享同一个 `ck`** → 用 `ck` 去重会互相覆盖（封盘后 `<bets>` 确认帧返回重复条目）。
+- 同一帧出现重复 `bc` = 帧损坏 → fail-closed 拒整帧。
+- betCode 解析必须规范化（堵前导零等绕过）。
+crystalroul / jackpotwheel / sweetbonanza / baccarat 全是纯覆盖模型，新轮盘机台必须对齐。
+来源：#193 / commit `b7149478`。
+
+**J2 上游帧时效语义二分法**（缓存 / 回放决策）
+对每类上游帧标注时效语义再决定缓存与回放 —— 两个方向相反的 bug 同一根因（没区分帧时效语义）：
+- **时效状态帧**（`disablesidebets` / `seat` / `timer` 等）：**不缓存、不回放**。回放会与上游真实状态脱节。状态由后端按权威数据自算（如边注禁用按缓存的 `ShoeSummary.totalGames` 算 `round`，随每帧实时刷新、新靴自然解禁；无权威数据时 fail-closed 全禁）。
+- **每局重发的全量快照帧**（`<statistic>` 走势 5 路 / `<ShoeSummary>` 等）：**必须缓存最新一帧并在新连接 `initFrames` 回放**，否则走势板 / 统计空白（`#NaN` / `undefined`）。下一帧 live 自我纠正，过期风险可接受。
+- **增量帧**（`<statisticLA>` 等）：**不缓存** —— 内容已被全量快照覆盖，回放会重复追加。
+来源：#178（过期 `disablesidebets` 回放 → 提前禁边注）、#169（走势帧不回放 → 走势板空白）/ commits `ad02b6e9` `326ab9c4`。
+
+**J3 下注规则必须 capture 实证，禁凭直觉假设**
+safebet / 免佣 / Bonus 前置 / 边注禁用阈值 —— 每条下注校验规则都要有 capture 样本支撑（哪个 gameId 的什么组合 success / rejected）。recurring 根因：实现者凭直觉（"对子要押同侧""全押覆盖率太高""免佣是整桌属性"）写规则，真 PP 行为完全不同。
+- Bonus 前置：同帧含**任一非 Bonus bet** 即可，不要求同侧（见 B8）。
+- 免佣：经独立 betCode 表达（main.js enum `Player=11 / Banker=10`），须把 NC betCode 加白名单 + 限额复用主注 + 赔付走 `gameresult.bnc/pnc` 独立字段；普通桌运行时勾选免佣也要支持，不能只按 `baccarat6` 常量推断整桌变体。
+- safebet：轮盘 `SafeBetPct=0`，`betOnAll / megaChances` 等是 PP 官方高覆盖玩法、不走覆盖率拒绝；派彩失控由 settle 三路 cap 兜底（G3）。
+- 禁用集 / betCode 白名单：逐项核对 `tableConfig.disableSideBets` map 完整全集，别只挑显眼的几个（#178 漏 Super6）。
+来源：#161 #181 #182 #178 / commits `39f0eb0a` `44cb668b` `ad02b6e9`。
+
+**J4 `betValidationError` 必须命中客户端真识别的 error code**（扩展 B9 / I3）
+后端选了客户端 `betValidationError` / `rejectBet` switch 不识别的 code（`1028` / `1059` / `1060`），客户端落 `default` 弹"请联系客服"通用错误，把普通业务拒单放大成系统故障。
+- 对接每张机台必须读客户端 main.js 的 error switch，建"我方拒单语义 → 客户端真有 toast 的 code"映射表。被禁 betCode 用客户端识别的 `20602`（`BET_NOT_ALLOWED`），不要用 `1028`。
+- 普通拒单 `extendedErrorCode` **留空**（仅 InvalidToken 类填 `9018`，见 I3）。
+- 拒单后**不要追发** `command status=error` —— 会把前端带到通用错误弹窗。
+来源：#161 #181 #182 / commits `39f0eb0a` `44cb668b`。
+
+**J5 上游 `seat` 事件一律 drop，Inactivity 我方自管**
+上游 `seat` 事件按 PP 代理账号广播，混入其它会话的 `idle` / `timeout`，透传给下游客户端会误弹 Inactivity 遮罩 + 强制断 WS（刷新进入 ~8.8s 即触发）。
+- 所有机台 `upstream_dispatch` 一律 drop 上游 `seat`。
+- Inactivity 用我方 per-user `IdleWatcher`，阈值取 `b_tables.activity_check_interval`（0 = 禁用，**不 fallback 默认值**）。
+- session 改固定 TTL，仅"下注被接受"触发续期。
+来源：#184 / commit `1a13b55b`。
+
+**J6 展示配置统一配置驱动，禁硬编码 / 禁散落多份**
+- 币种符号走 `b_currency_rates` 配置驱动（`CurrencyRate.symbol` 字段 + `configCache.CurrencySymbol` 统一取用），禁止写死 `&#36;`；`currency` 与 `currencyCode` 必须表达同一币种。
+- 同一映射禁止在多个机台各抄一份（旧代码 megaroulette / jackpotwheel 各一份 `currencySymbol`）。
+- 兜底逻辑（如 `applyTableConfigParamsCompat`）必须覆盖**所有调用路径**：JSON 路径 `buildTableConfigResponse` 与 XML 路径 `writeCgibinTableConfigBody` 都要跑，新增兜底时 grep 全部调用点。
+来源：#188（币种符号硬编码）#163（标题兜底漏 XML 路径）/ commits `9f8754ff` `39f0eb0a`。
+
+**J7 历史"投注类型"与"开奖结果"是各自独立、逐笔保存的字段**
+每笔交易独立保存 `description`（来自 `BetCodeDescription(bc)`，玩家实际下注点）与本局 `result`（开奖结果），二者**绝不混用**。客户端历史表渲染"投注类型"读 `bet.description` 不是 `bet.result`。
+核对特殊倍率 / 奖励格结算时，触发条件是 `value == rngSlot`（特殊格正好被转中），不能拿"画面上有该格"当结算依据。
+来源：#162（历史明细投注类型误显示为开奖结果，复核为无法复现但规则有效）#167（Mega Wheel 倍率格误报）。
