@@ -51,21 +51,24 @@ bash $CODEX_COLLAB/scripts/codex_review.sh \
 - main.js
 - 上游：L1 enum.go / dict.json / error_codes.md
 
-### L3 — UPSTREAM / DOWNSTREAM_BET / SETTLE / HISTORY_PARSER / CHECK_BET（业务符合 lifecycle）
+### L3 — UPSTREAM / DOWNSTREAM_BET / SETTLE / HISTORY_DETAIL / HISTORY_REPORT / CHECK_BET（业务符合 lifecycle）
 
 **审查重点**：
 - upstream tableId 字节替换 (B1) + orderKeysByPriority (B3)
 - downstream_bet **incremental** loadExistingBets + mergeBets (I6)
 - downstream_bet partial-accept (I7) + bet echo (B5) + betValidationError 7 字段 (B9)
-- settle face_value→bc 映射 + b_game_rounds.Extra 字段齐全（capture 真帧每字段都落盘）
-- history_<gametype>.go XML 字段名 vs gameDetail.txt 真 XML 逐字段对照
-- history parser multiplier/payout 缺数据填 "0" 不空串 (I8)
+- settle face_value→bc 映射 + b_game_rounds.Extra 字段齐全（capture 真帧每字段都落盘，**含 luckyMul / r / seq / superBoosterMul 等机台特化数组字段**）
+- **HISTORY_DETAIL** `history.go` XML 字段名 vs `gameDetail.txt` 真 XML 逐字段对照（BuildGameDetail）
+- HISTORY_DETAIL multiplier/payout 缺数据填 "0" 不空串 (I8)
+- **HISTORY_REPORT** `report.go` HTML 骨架 vs `roundDetail/*.html` capture 视觉对照（BuildGameReport，≥ 90% 相似度 + SVG 卡片）
+- HISTORY_REPORT 自包含 HTML（不引外部 CSS / JS，所有样式内联）
 - CheckBet 双重 fail-closed（内存 + Redis C1）
 - CheckBet 9 段位单注 + 台限累加 + bonus 联动 (B8)
 
 **主信息源**：
 - capture message.txt 双向帧（lifecycle 时序）
-- **gameDetail.txt 真 XML**（HISTORY_PARSER 唯一权威）
+- **gameDetail.txt 真 XML**（HISTORY_DETAIL 唯一权威）
+- **roundDetail/*.html 报表 HTML + Details 弹窗**（HISTORY_REPORT 唯一权威；含 PP 内嵌 base64 SVG 卡片样例）
 - tableConfig.txt（CHECK_BET 限额）
 - main.js（rejectBet 分支）
 - 上游：L1 + L2 全部产物

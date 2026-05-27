@@ -222,3 +222,17 @@ safebet / 免佣 / Bonus 前置 / 边注禁用阈值 —— 每条下注校验�
 每笔交易独立保存 `description`（来自 `BetCodeDescription(bc)`，玩家实际下注点）与本局 `result`（开奖结果），二者**绝不混用**。客户端历史表渲染"投注类型"读 `bet.description` 不是 `bet.result`。
 核对特殊倍率 / 奖励格结算时，触发条件是 `value == rngSlot`（特殊格正好被转中），不能拿"画面上有该格"当结算依据。
 来源：#162（历史明细投注类型误显示为开奖结果，复核为无法复现但规则有效）#167（Mega Wheel 倍率格误报）。
+
+**J8 capture 目录命名跟随 hall external_code，不等于 PP tableId**
+hall-for-live 上游不支持长 PP gameId 直接取启动链接，`scripts/game_dev/fetch_client.mjs` 用 hall `external_code`（数字，如 `2244`）命名 capture 目录；但 PP 真实 tableId 仍是字符串（如 `gatesofolympus01`），机台目录 / `enum.TableID` / `instance_factory` 注册键全部用 PP tableId 而非 capture 目录名。
+- **AI 永远从 `tmp/<dir>/tableConfig.txt` 第一条记录的 `tableId` 字段反查**真实 PP tableId，不可拿目录名当 tableId 用。
+- state.json 必须同时记录 `capture_dir`（数字目录名）+ `tableId`（PP 字符串）两个字段，所有 `tmp/<...>/` 路径用 `capture_dir`，所有代码 / 配置 key 用 `tableId`。
+- 不区分两者的常见 bug：机台目录名误用数字（破坏 PP 协议）/ enum.TableID 误填数字（运行时桌台路由失败）/ 老 capture 路径冲突。
+来源：scripts/game_dev/fetch_client.mjs 改造引入（hall round_detail_failed 排查时发现路径差异）。
+
+**J9 BuildGameDetail 与 BuildGameReport 是两个独立接口**
+旧 fallback 模式 `server/game/pp/runtime/history_<gametype>.go` 已废弃。两个接口现在机台内 internal 包独立实现：
+- `history.go::BuildGameDetail` —— PP `cgibin/usermanagement/audit/game.jsp` XML 历史详情（客户端"我的历史"按钮）；数据源：`tmp/<capture_dir>/gameDetail.txt`
+- `report.go::BuildGameReport` —— PP `gameHistory/game.jsp?token=...` 报表 HTML（商户后台 / 玩家"局详情"按钮）；数据源：`tmp/<capture_dir>/roundDetail/*.html`；要求 ≥ 90% 视觉还原 + SVG 卡片 + 内联 CSS 自包含
+两者数据源 / 产物 / 单测分离；同一 `historyProvider` struct 实现双接口，`factory/history_factory.go` 一次性注册即可。
+来源：jackpotwheel 后引入 registry + gatesofolympus01 实践 90% 视觉对齐时确立。

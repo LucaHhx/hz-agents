@@ -20,8 +20,8 @@ Layer 1 (无依赖, 4 并行):
 Layer 2 (依赖 L1, 5 并行):
    MODELS / BETPROTO / RULES / PROCESSOR / INSTANCE
         ↓ 等齐 → 层间 codex 审查 → fix
-Layer 3 (依赖 L2, 5 并行):
-   UPSTREAM / DOWNSTREAM_BET / SETTLE / HISTORY_PARSER / CHECK_BET
+Layer 3 (依赖 L2, 6 并行):
+   UPSTREAM / DOWNSTREAM_BET / SETTLE / HISTORY_DETAIL / HISTORY_REPORT / CHECK_BET
         ↓ 等齐 → 层间 codex 审查 → fix
 Layer 4 (依赖 L3, 6 并行):
    PAYOUT / BETSTATS / WINNERS / STATS_API / TABLECONFIG_API / RTP_API
@@ -36,7 +36,7 @@ Layer 5 (依赖全部, 1):
 |---|---|---|
 | L1 | `phase-3-aiu-L1.md` | **4** |
 | L2 | `phase-3-aiu-L2.md` | 5 |
-| L3 | `phase-3-aiu-L3.md` | 5 |
+| L3 | `phase-3-aiu-L3.md` | **6**（HISTORY_PARSER 拆 DETAIL + REPORT） |
 | L4 | `phase-3-aiu-L4.md` | 6 |
 | L5 | `phase-3-aiu-L5.md` | 1 |
 
@@ -65,10 +65,11 @@ Layer 5 (依赖全部, 1):
 | `downstream_dispatch.go` | L3.2 DOWNSTREAM_BET | 客户端→server 单入口：`raw==nil` 新连接发 init 序列 / `raw!=nil` 按 root 元素分发 |
 | `downstream_bet.go` | L3.2 DOWNSTREAM_BET | 下注业务：解析 lpbet/placeBet、校验、`BetSvc.PlaceBet`、合成确认帧 |
 | `xml_util.go` | L3.2 DOWNSTREAM_BET | 仅 XML 机台；ping/pong 等 trivial 帧 attr helper（业务 XML 走 struct，见下方注意） |
-| `check_bet.go` | L3.5 CHECK_BET | `CheckBet` override：窗口 + 币种 + 限额 fail-closed |
+| `check_bet.go` | L3.6 CHECK_BET | `CheckBet` override：窗口 + 币种 + 限额 fail-closed |
 | `settle.go` | L3.3 SETTLE | 结算核心：`OnGameResult` 写 b_game_rounds / 读 Redis bets / 算派彩 / 写 txn / 调商户 |
 | `payout.go` | L4.1 PAYOUT | 纯赔率 / 派彩计算函数（保持纯函数易单测） |
-| `history.go` | L3.4 HISTORY_PARSER | `historyreg.DetailProvider` 自实现（registry 模式，与 instance 解耦） |
+| `history.go` | L3.4 HISTORY_DETAIL | `BuildGameDetail`：PP `cgibin/.../audit/game.jsp` XML 历史详情，registry 注册 |
+| `report.go` | L3.5 HISTORY_REPORT | `BuildGameReport`：PP `gameHistory/game.jsp?token=...` 报表 HTML（含 SVG + 内联 CSS 自包含），90%+ 还原 PP 真服 |
 | `archive_detect.go` | L3.1 UPSTREAM | upstream-log 归档小 helper |
 
 ### 按 gametype 的附加文件
@@ -87,7 +88,8 @@ Layer 5 (依赖全部, 1):
 
 - **XML 解析模板看 dragontiger / megaroulette**（`encoding/xml` struct 解析），**不要参考 baccarat / sweetbonanza** 的 `xml_util.go` regex extractAttr —— 后者是已记录的违规（`feedback_struct_only`），新机台勿传播。
 - **目录名 ≠ tableId**：megaroulette 目录是 `megaroulettelxuq` 但 `enum.TableID` 是 `1hl65ce1lxuqdrkr`。一律从 `enum.go` 读 TableID，不从目录名推断。
-- 注册：唯一改动机台目录外的文件 —— `factory/instance_factory.go`（switch case + `ImplementedTableIDs`）+ `factory/history_factory.go`（L3.4）。
+- 注册：唯一改动机台目录外的文件 —— `factory/instance_factory.go`（switch case + `ImplementedTableIDs`）+ `factory/history_factory.go`（L3.4 + L3.5 同一 provider 实例双接口注册）。
+- **runtime/history_<gametype>.go 已废弃**：旧 runtime 公共 GameEntryXML + switch by gameType fallback 不再用。新机台 100% 走 registry，BuildGameDetail / BuildGameReport 全部落在机台 internal 包内。
 - `lifecycles/` 目录当前为空：`ARCHITECTURE.md` 描述的 `GameLifecycle` 层尚未拆出，6 机台全部把逻辑放机台包内。**按现有机台做**，不要照 ARCHITECTURE.md 新建 `lifecycles/<gametype>.go`。
 
 ## 调度伪代码

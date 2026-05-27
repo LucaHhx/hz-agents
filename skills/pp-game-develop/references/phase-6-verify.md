@@ -1,7 +1,7 @@
 # Phase 6 — verify 全量验收（AI 自检指南）
 
 > 触发：Phase 5 整体 codex review fix 完成。
-> 13 项验收（5 确定性 + I9/I10/V8/V9 语义判断 + V10-V13 生产 bug 复盘闸门，对应 known-pitfalls J1-J7）。
+> 14 项验收（5 确定性 + I9/I10a/I10b/V8/V9 语义判断 + V10-V13 生产 bug 复盘闸门 + V14 赢钱反推验证）。
 > 阶段：❌ 禁止向用户提问；失败首次 Claude 自修；≥2 次走 codex_decide 根因分类。
 
 ## AI 执行步骤
@@ -87,29 +87,54 @@ grep -rE 'type Client[A-Z][a-zA-Z]*Cmd' <worktree>/server/game/pp/internal/games
 
 **FAIL 处理**：如 dragontiger 历史教训 — 客户端发 `<placeBet>` 单数但 server 仅识别 `<lpbet>` 复数 → 走 default 默默 ack 不落库 → 协议不通。任一行 ❌ → 必须修。
 
-### V7. I10 真 XML 单测（语义判断，AI 跑）
+### V7a. I10 BuildGameDetail 真 XML 单测（语义判断，AI 跑）
 
-**目的**：history_<gametype>_test.go 用 `tmp/<tid>/gameDetail.txt` 真 XML 跑 parser，断言关键字段非空。
+**目的**：机台内 `history_test.go` 用 `tmp/<capture_dir>/gameDetail.txt` 真 XML 跑 BuildGameDetail，断言关键字段非空。
 
 **AI 检查步骤**：
 
 ```bash
+DIR=<worktree>/server/game/pp/internal/games/<gametype>/<tableId>
 # 1. 取真 XML 样本
-head -1 tmp/<tid>/gameDetail.txt > /tmp/sample.xml
-
-# 2. 找 history_<gametype>_test.go 是否有真 XML 测试
-grep -rE 'gameDetail.txt|TestParse<Gametype>.*real|os.Open.*gameDetail' <worktree>/server/game/pp/runtime/history_<gametype>_test.go
-
+head -1 tmp/<capture_dir>/gameDetail.txt > /tmp/sample.xml
+# 2. 找 history_test.go 是否有真 XML 测试（机台内，不是 runtime/）
+grep -rE 'gameDetail.txt|TestBuildGameDetail.*real|os.Open.*gameDetail' "$DIR"/history_test.go
 # 3. 跑测试
-cd <worktree>/server && go test -v -run "TestParse<Gametype>" ./game/pp/runtime/...
+cd <worktree>/server && go test -v -run "TestBuildGameDetail" "./game/pp/internal/games/<gametype>/<tableId>/..."
 ```
 
 **PASS 标准**：
 - 单测含至少 1 个用真 XML 的测试函数
-- 断言关键字段非空：gameResult / multiplier / payout / bc 等
+- 断言关键字段非空：gameResult / multiplier / payout / bc / 机台特化（如 olympusRouletteDetails）等
 - I8：multiplier/payout 缺数据填 "0" 不空串
 
-**FAIL 处理**：如 gameDetail.txt 在 capture 中为 0 条（玩家未点详情）→ 退化为构造样本（I10 H10：开发期可接受）；如 ≥ 1 条但单测未用真 XML → 🔴 must-fix 立即改测试。
+**FAIL 处理**：gameDetail.txt 在 capture 中为 0 条（玩家未点详情）→ 构造样本（开发期可接受）；≥ 1 条但单测未用真 XML → 🔴 must-fix 立即改测试。
+
+### V7b. BuildGameReport 真 HTML 单测（语义判断，AI 跑）
+
+**目的**：机台内 `report_test.go` 用 `tmp/<capture_dir>/roundDetail/*.html` 真 HTML 跑 BuildGameReport，断言生成 HTML 的关键 DOM 节点 / SVG 元素 / 字段值与 capture 一致。
+
+**AI 检查步骤**：
+
+```bash
+DIR=<worktree>/server/game/pp/internal/games/<gametype>/<tableId>
+# 1. capture roundDetail 文件齐全
+ls tmp/<capture_dir>/roundDetail/*.html
+# 2. 找 report_test.go 是否有真 HTML 视觉对齐测试
+grep -rE 'roundDetail|TestBuildGameReport|gameHeader|playerSummary|<svg' "$DIR"/report_test.go
+# 3. 跑测试
+cd <worktree>/server && go test -v -run "TestBuildGameReport" "./game/pp/internal/games/<gametype>/<tableId>/..."
+```
+
+**PASS 标准**：
+- 含至少 1 个用真 capture HTML 的测试
+- 断言生成 HTML 含 `<table id="gameHeader">` / `<table id="gameResult">` / `<table id="playerSummary">` / `<table id="playerDetails">` / `<div id="modal">` / `<form id="hiddenForm">` 等关键骨架节点
+- 断言 SVG 元素存在（轮盘机台必须 Game Result `<svg>` + viewBox + winNumber + 邻号；Bonus / Multipliers 也要 SVG 卡片）
+- 断言字段值对齐（玩家汇总金额 / 玩家明细每笔 Description / Payout / Status="Settled" / EUR 列计算正确）
+- 视觉相似度 ≥ 90%（PASS / FAIL 由人工目测 + 自动 DOM 节点 diff 联合判定）
+- **自包含 HTML**：grep 输出 HTML 不含 `<link rel=stylesheet href="/"`（所有 CSS 内联，0 外部依赖）
+
+**FAIL 处理**：缺关键 table id → 补 `write*Table` 函数；缺 SVG → 实现 `gor*SVG` helper；视觉相似度低 → 比照 capture 调样式 + 字段补齐。
 
 ### V8. 消息流时机对照（PP capture vs server 实际行为，AI 跑）
 
@@ -252,6 +277,51 @@ grep -nE 'cache|Cache' "$DIR"/upstream_cache.go
 
 **PASS 标准**：经验文档第 12 节填实上述四组清单；betCode 命名长度有回归断言。
 
+### V14. 赢钱反推验证（capture 局对照算钱，AI 跑）
+
+**目的**：从 capture message.txt 取**已结算的真实局**（含 lpbet 序列 + `<gametype>gameresult` 帧），
+用机台 `payout.go::Calculate / CalcBetPayout` 函数模拟，对比 PP 真服的实际 payoff —— **同样下注 + 同样开奖结果，
+我方算出的玩家赢钱必须与 PP 真服一致**，否则代码里 payout 逻辑有错。
+
+是 verify 阶段最重最末闸门：构建 + 单测 + 协议都过了的代码仍可能在"金额"上偷偷算错（赔率漏/倍率乘错位/cap 顺序错），
+肉眼 review + codex review 都难抓到。
+
+**双数据源对照**：
+- **PP 真服 payoff（ground truth）**：`tmp/<capture_dir>/roundDetail/<rid>-Details-<userId>.html` 里 modal 内的 7 列玩家明细，每笔 bet 有 `betcodeName / betAmount / **betPayoff** / betStatus`
+- **我方算出的 payoff**：从同一局 message.txt 取该 user 的 lpbet 序列 + gameresult.winNumber + 该局 luckyMul[]，用 payout 函数算
+
+**AI 检查步骤**：
+
+```bash
+DIR=<worktree>/server/game/pp/internal/games/<gametype>/<tableId>
+CAPTURE=tmp/<capture_dir>
+# 1. 找已结算 round（roundDetail/{rid}-Details-*.html 存在 → 一定有玩家 + 明细）
+ls "$CAPTURE/roundDetail/"*-Details-*.html | head -3
+
+# 2. 对每个有 Details 的 round，做：
+#    a. 解析 roundDetail/{rid}-Details-{userId}.html 的 modal 表格 → 每笔 bet (betcodeName, betAmount, betPayoff)
+#    b. 反查 message.txt 取该 round 的 gameresult（winNumber / mul / sector 等）+ gorRng.luckyMul[]
+#    c. 反查该 userId 在该 round betsopen-betsclosed 窗口内的所有 lpbet 帧
+#    d. 用机台 payout 函数 Calculate(bc, betAmount, winNumber, luckyMul, ...) 算 expected
+#    e. 对比 expected vs PP 真服 betPayoff，差异 > 0.01 IDR 视为 FAIL
+
+# 3. 写 v14_payout_reverse_test.go：
+#    - 用 capture HTML/message.txt 做 fixture
+#    - 每个 round 一个 t.Run subcase
+#    - 至少覆盖 3 局（含 megawin / 普通 / 全输 三种局型）
+cd <worktree>/server && go test -v -run "TestV14PayoutReverse" "./game/pp/internal/games/<gametype>/<tableId>/..."
+```
+
+**PASS 标准**：
+- ≥ 3 个真实 round 的反推全部一致（差异 ≤ 0.01 货币单位）
+- 至少覆盖：①普通 winNumber 直注命中 ②luckyMul 倍率命中（megawin）③全输（payout=0）三种局型
+- v14_payout_reverse_test.go 用 capture HTML + message.txt 真数据做 fixture，不允许构造数据
+
+**FAIL 处理**：
+- 单注差异 → check `payout.go::Calculate(bc, amount, winNumber, luckyMul)` 赔率或 luckyMul 命中逻辑
+- 全局差异（所有 bet 多 / 少同一系数）→ 三路 cap min 顺序错（G3）
+- 某 bc 差异其它正确 → 该 bc 赔率常量错（与 odds.go 期望不符）
+
 ## 失败决策树
 
 ```
@@ -289,13 +359,15 @@ grep -nE 'cache|Cache' "$DIR"/upstream_cache.go
     "V4_cover": "27.3%",
     "V5_policy_pr": "PASS",
     "V6_I9_protocol_matrix": "PASS",
-    "V7_I10_real_xml_test": "PASS",
+    "V7a_I10_buildgamedetail_real_xml": "PASS",
+    "V7b_buildgamereport_real_html": "PASS — 含 SVG 卡片 + 自包含 CSS / 视觉相似度 ≥ 90%",
     "V8_message_timing": "PASS — bet echo @ OnMerchantBetResult / win @ WinnersBroadcastDelay / subscribe ack 自合成",
     "V9_gameType_enum_map": "PASS — gameTypeMap[<dbGameType>] = <PascalCase> 经 toUpperCase 匹配 client enum",
     "V10_snapshot_dedup": "PASS — lpbet 判定全量快照 / 按 bc 去重 / 无 ck 去重 / 重复 bc fail-closed",
     "V11_errcode_client_recognized": "PASS — 拒单 code 全命中客户端 switch / 普通拒单 extendedErrorCode 空",
     "V12_seat_drop_frame_timeliness": "PASS — seat drop / 缓存集仅全量快照帧",
-    "V13_db_config_live_launch": "DELIVERED — 经验文档 §12 填实 DB 前置 + post-merge 必查清单"
+    "V13_db_config_live_launch": "DELIVERED — 经验文档 §12 填实 DB 前置 + post-merge 必查清单",
+    "V14_payout_reverse_check": "PASS — N round 反推一致 / 含 megawin + 普通 + 全输 三局型"
   },
   "verify_failures": [
     // {"item": "V4_cover", "round": 1, "value": "18%", "fixed_by": "添加 payout_test", "round_2": "27%"}

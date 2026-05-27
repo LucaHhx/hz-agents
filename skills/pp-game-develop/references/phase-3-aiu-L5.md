@@ -43,8 +43,8 @@ case <别名>.TableID:
 
 ## 实现约束
 
-- **不修改任何前序 AIU 已 commit 的文件**（包括所有 internal/games/`<gametype>`/`<tableId>`/* 文件、runtime/history*.go、internal/gateway/api/*）
-- 只改 `instance_factory.go` 1 个文件，3 处改动
+- **不修改任何前序 AIU 已 commit 的文件**（包括所有 internal/games/`<gametype>`/`<tableId>`/* 文件、internal/gateway/api/*；旧 `runtime/history_<gametype>.go` 已废弃，新机台不存在该路径）
+- 改 `instance_factory.go` 1 个文件，3 处改动；如 L3.4/L3.5 未在自身 commit 内补 `history_factory.go` 注册，本步同时补（HISTORY_DETAIL + HISTORY_REPORT 共用同一 historyProvider 实例）
 
 ## B5 验收
 

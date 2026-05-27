@@ -7,15 +7,21 @@
 
 ```
 1. 进入仓库根：cd $(git rev-parse --show-toplevel)
-2. 确认 capture 目录：tmp/<tableId>/ 存在 + 5 文件齐全
-3. 跑通用指标（§2）
-4. 推断 gametype（先 grep clientResources/apps/ 路径 + release.json + translations-help 文件名）
-5. 按 gametype 跑特化检查（§3）
-6. 综合 P0/P1/P2 判断（§4）
-7. 抽元信息（§5）
-8. 写 state.json（§6 模板）
-9. 输出报告
-10. 失败时给用户具体补救建议（§7）
+2. 定位 capture 目录（关键，目录名 != PP tableId）：
+   - 用户给的 ID 可能是 PP tableId（"gatesofolympus01"）或 capture 目录名（"2244"，hall external_code）
+   - 先试 tmp/<INPUT_ID>/ 是否存在且含 tableConfig.txt
+   - 不存在则扫 tmp/*/tableConfig.txt 反查 .tableId == INPUT_ID 的目录
+   - 找到后：capture_dir = 目录名（数字 / external_code），pp_table_id = tableConfig.tableId（真实 PP 字符串）
+   - 两者一致时（罕见，老 capture）按 input 直接当目录用
+3. 确认 6 文件齐全：tmp/<capture_dir>/{message.txt, tableConfig.txt, statisticHistory.txt, gameDetail.txt, roundDetail/, clientResources/} 都存在
+4. 跑通用指标（§2）
+5. 推断 gametype（先 grep clientResources/apps/ 路径 + release.json + translations-help 文件名）
+6. 按 gametype 跑特化检查（§3）
+7. 综合 P0/P1/P2 判断（§4）
+8. 抽元信息（§5，注意区分 capture_dir 和 pp_table_id）
+9. 写 state.json（§6 模板）
+10. 输出报告
+11. 失败时给用户具体补救建议（§7）
 ```
 
 ## 2. 17 项通用指标速查表
@@ -24,22 +30,22 @@
 
 | # | 指标 | AI 检测命令 |
 |---|---|---|
-| 1 | 3 个数据文件齐全 + 非空（内容 JSONL） | `[[ -s tmp/<tid>/message.txt && -s tmp/<tid>/tableConfig.txt && -s tmp/<tid>/statisticHistory.txt ]]` |
-| 2 | main.js 存在 | `find tmp/<tid>/clientResources/apps -maxdepth 3 -name main.js \| head -1` |
-| 3 | 上行 send 帧 ≥ 5 | `jq -s '[.[]\|select(.dir=="send")]\|length' tmp/<tid>/message.txt` |
-| 4 | 上行 lpbet ≥ 2 | `jq -s -r '.[]\|select(.dir=="send")\|.payload' tmp/<tid>/message.txt \| grep -c '<lpbet '` |
+| 1 | 3 个数据文件齐全 + 非空（内容 JSONL） | `[[ -s tmp/<capture_dir>/message.txt && -s tmp/<capture_dir>/tableConfig.txt && -s tmp/<capture_dir>/statisticHistory.txt ]]` |
+| 2 | main.js 存在 | `find tmp/<capture_dir>/clientResources/apps -maxdepth 3 -name main.js \| head -1` |
+| 3 | 上行 send 帧 ≥ 5 | `jq -s '[.[]\|select(.dir=="send")]\|length' tmp/<capture_dir>/message.txt` |
+| 4 | 上行 lpbet ≥ 2 | `jq -s -r '.[]\|select(.dir=="send")\|.payload' tmp/<capture_dir>/message.txt \| grep -c '<lpbet '` |
 | 5 | 4 关键事件齐全 | 按 gametype 查（见 §3）|
 | 6 | ≥ 2 局完整循环 | 取 betsopen/closed/result/winners 计数最小值 ≥ 2 |
 | 7 | 4 事件数量对齐 | 4 个计数应相等 |
-| 8 | tableConfig.txt ≥ 1 | `wc -l tmp/<tid>/tableConfig.txt` |
+| 8 | tableConfig.txt ≥ 1 | `wc -l tmp/<capture_dir>/tableConfig.txt` |
 
 ### 🟡 P1 应该通过（> 2 项警告 → degraded 询问用户）
 
 | # | 指标 | AI 检测 |
 |---|---|---|
-| 9 | 总帧数 ≥ 100 | `wc -l tmp/<tid>/message.txt` |
-| 10 | 时间跨度 ≥ 60s | `jq -s '(map(.ts)\|max-min)/1000' tmp/<tid>/message.txt` |
-| 11 | statisticHistory ≥ 1 | `wc -l tmp/<tid>/statisticHistory.txt` |
+| 9 | 总帧数 ≥ 100 | `wc -l tmp/<capture_dir>/message.txt` |
+| 10 | 时间跨度 ≥ 60s | `jq -s '(map(.ts)\|max-min)/1000' tmp/<capture_dir>/message.txt` |
+| 11 | statisticHistory ≥ 1 | `wc -l tmp/<capture_dir>/statisticHistory.txt` |
 | 12 | send ping ≥ 3 | `jq -s -r '.[]\|select(.dir=="send")\|.payload' ... \| grep -c '<ping '` |
 | 13 | 机台特化关键事件 | 按 gametype 查（见 §3）|
 | 14 | tableConfig 含核心限额字段 | 按 gametype 查（见 §3）|
@@ -48,9 +54,10 @@
 
 | # | 指标 | AI 检测 |
 |---|---|---|
-| 15 | gameDetail.txt ≥ 1 | `grep -c '^<' tmp/<tid>/gameDetail.txt` |
-| 16 | 罕见事件样本 | grep `canceled\|session\|decisionError` |
-| 17 | 跨段位 lpbet | grep `bc="..."` 抽不同值 ≥ 2 |
+| 15 | gameDetail.txt ≥ 1（**BuildGameDetail 数据源**） | `grep -c '^<' tmp/<capture_dir>/gameDetail.txt` |
+| 16 | roundDetail/ ≥ 1 完整对（**BuildGameReport 数据源**） | `ls tmp/<capture_dir>/roundDetail/*.html 2>/dev/null \| wc -l`（≥ 1 含基线 + Details） |
+| 17 | 罕见事件样本 | grep `canceled\|session\|decisionError` |
+| 18 | 跨段位 lpbet | grep `bc="..."` 抽不同值 ≥ 2 |
 
 ## 3. 机台特化检查清单（**AI 按 gametype 选**）
 
@@ -154,21 +161,28 @@ P0 全过 + P1 警告 > 2 → status="degraded"，向用户报告问题 → 询�
 
 ## 5. 元信息抽取（AI 用 jq）
 
+> ⚠️ **目录名 ≠ tableId**：`capture_dir`（hall external_code，数字）只用于 tmp/<capture_dir>/ 路径；
+> `tableId`（PP 内部字符串）才是 enum.TableID / 机台目录名 / instance_factory 注册键。
+> 两者必须严格区分（来源：J8）。
+
 | 字段 | 来源 + 命令 |
 |---|---|
-| `tableId` | 参数（验证 tableConfig.tableId 一致）：`jq -s '.[0].tableId' tableConfig.txt` |
-| `operatorGameId` | `jq -s -r '.[0].operatorGameId // empty' tableConfig.txt` |
-| `gameLoaderKey` | `ls -d tmp/<tid>/clientResources/apps/*/` 取非 video/feature-flags/translations-* 之外的目录名 |
-| `gameType` | 优先 release.json：`jq -r '.gametype' tmp/<tid>/clientResources/apps/<gameLoaderKey>/*/release.json`；fallback `ls tmp/<tid>/clientResources/apps/translations-help/latest/*/` 任一 zh 等语言下非 common.json 的文件名（去 .json） |
-| `limits.min/max` | `jq -s -r '.[0].params.table_bet_min_limit, .params.table_bet_max_limit' tableConfig.txt` |
-| `dealer.name` | `jq -s -r '.[]\|select(.dir=="recv")\|.payload' message.txt \| grep -oE '"dealer":\{[^}]*"value":"[^"]+"' \| head -1 \| grep -oE '"value":"[^"]+"' \| cut -d'"' -f4` |
+| `capture_dir` | §1 第 2 步定位的目录名（如 "2244"），所有 tmp/ 路径用 |
+| `tableId` | `jq -s -r '.[0].tableId' tmp/<capture_dir>/tableConfig.txt`（真实 PP tableId，如 "gatesofolympus01"） |
+| `operatorGameId` | `jq -s -r '.[0].operatorGameId // empty' tmp/<capture_dir>/tableConfig.txt`（一般 = capture_dir） |
+| `gameLoaderKey` | `ls -d tmp/<capture_dir>/clientResources/apps/*/` 取非 video/feature-flags/translations-* 之外的目录名 |
+| `gameType` | 优先 release.json：`jq -r '.gametype' tmp/<capture_dir>/clientResources/apps/<gameLoaderKey>/*/release.json`；fallback `ls tmp/<capture_dir>/clientResources/apps/translations-help/latest/*/` 任一 zh 等语言下非 common.json 的文件名（去 .json） |
+| `limits.min/max` | `jq -s -r '.[0].params.table_bet_min_limit, .params.table_bet_max_limit' tmp/<capture_dir>/tableConfig.txt` |
+| `dealer.name` | `jq -s -r '.[]\|select(.dir=="recv")\|.payload' tmp/<capture_dir>/message.txt \| grep -oE '"dealer":\{[^}]*"value":"[^"]+"' \| head -1 \| grep -oE '"value":"[^"]+"' \| cut -d'"' -f4` |
+| `dealer.location` | grep roundDetail/*.html `dealerVO.location` 字段（如 "Bucharest"）或 main.js（如有） |
 
 ## 6. state.json 写入模板
 
 ```bash
 TS=$(date -u +%Y-%m-%dT%H:%M:%SZ)
 jq -n \
-    --arg tableId "<tid>" \
+    --arg tableId "<pp_table_id>" \
+    --arg capture_dir "<capture_dir>" \
     --arg repo_root "$(git rev-parse --show-toplevel)" \
     --arg ts "$TS" \
     --arg status "done|failed|degraded" \
@@ -176,19 +190,20 @@ jq -n \
     --arg gameLoaderKey "<...>" \
     --arg gameType "<...>" \
     --arg dealer "<...>" \
+    --arg dealerLocation "<...>" \
     --arg min "<...>" \
     --arg max "<...>" \
     --argjson p0_passed "true|false" \
     --argjson p1_warnings '["#10 跨度 58s","..."]' \
     --argjson p2_status '["#15:✓","#16:missing"]' \
     '{
-        tableId: $tableId, repo_root: $repo_root,
+        tableId: $tableId, capture_dir: $capture_dir, repo_root: $repo_root,
         phase: 0, status: $status,
         lobby: {
             tableId: $tableId, operatorGameId: $operatorGameId,
             gameLoaderKey: $gameLoaderKey, gameType: $gameType,
             limits: {min: $min, max: $max},
-            dealer: {name: $dealer}
+            dealer: {name: $dealer, location: $dealerLocation}
         },
         capture_audit: {
             p0_passed: $p0_passed,
@@ -198,7 +213,7 @@ jq -n \
         codex_reviews: [], codex_decisions: [], codex_discussions: [],
         unresolved: [],
         last_updated: $ts
-    }' > tmp/<tid>/state.json
+    }' > tmp/<capture_dir>/state.json
 ```
 
 ## 7. 失败补救建议（按发现的具体问题动态生成）

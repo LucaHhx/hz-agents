@@ -41,9 +41,10 @@ git diff <base_branch>...HEAD —— 全 worktree 改动 vs base 分支
 
 【审查重点（与层间不同的部分）】
 1. **跨层一致性**：
-   - ENUM 常量 ↔ MODELS struct tag ↔ SETTLE 调用 ↔ HISTORY parser 字段
-   - bc 在 enum.go / parse / settle / payout / history 全程一致
+   - ENUM 常量 ↔ MODELS struct tag ↔ SETTLE 调用 ↔ HISTORY (history.go + report.go) 字段
+   - bc 在 enum.go / parse / settle / payout / history / report 全程一致
    - errorCode 在 enum.go / downstream_bet / check_bet 引用一致
+   - **round.Extra schema 一致**：settle_persistence 写入字段 ↔ extractExtra 读取字段（任意一边漏字段 = history/report 行为缺失）
 2. **race / 并发**：
    - mu / betsMu / cacheMu / pendingMu 锁保护范围
    - pendingWins 顺序保证（winners 后 flush）
@@ -60,7 +61,7 @@ git diff <base_branch>...HEAD —— 全 worktree 改动 vs base 分支
    - dictionary parity（F2）
    - I6 incremental / J1 全量快照去重回归测试
    - I7 partial-accept 测试
-   - history_<gametype>_test 用真 XML
+   - history_test.go（机台内）用真 gameDetail.txt XML；report_test.go 用真 roundDetail/*.html HTML
 6. **协议铁律 known-pitfalls A-J 全节**：
    - B1 tableId 字节替换
    - B2 winners pass 透传

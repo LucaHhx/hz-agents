@@ -20,7 +20,26 @@ export CODEX_COLLAB="$(dirname "$(realpath "$(find ~/.claude/skills ~/github -pa
    && -x "$CODEX_COLLAB/scripts/codex_decide.sh" \
    && -x "$CODEX_COLLAB/scripts/codex_discuss.sh" ]] || { echo "❌ codex-collab 不完整"; exit 1; }
 
-cat tmp/<tableId>/state.json 2>/dev/null  # 检查恢复点
+# capture 目录定位（关键：目录名 = hall external_code，不等于 PP tableId）
+# hall-for-live 上游不支持长 gameId 取链接，capture 工具用 hall external_code（数字）命名
+# 目录，AI 必须从 tableConfig.txt 第一条记录的 tableId 字段反查真实 PP tableId。
+# 用户输入可能是 PP tableId（如 "gatesofolympus01"）或 capture 目录名（如 "2244"）。
+INPUT_ID="<用户给的 ID>"
+CAPTURE_DIR=""
+# 路径 A：用户直接给 capture 目录名
+if [[ -d "tmp/$INPUT_ID" && -s "tmp/$INPUT_ID/tableConfig.txt" ]]; then
+    CAPTURE_DIR="$INPUT_ID"
+else
+    # 路径 B：用户给 PP tableId，扫 tmp/*/tableConfig.txt 反查
+    for d in tmp/*/; do
+        TID=$(jq -s -r '.[0].tableId // empty' "$d/tableConfig.txt" 2>/dev/null)
+        [[ "$TID" == "$INPUT_ID" ]] && { CAPTURE_DIR=$(basename "$d"); break; }
+    done
+fi
+[[ -z "$CAPTURE_DIR" ]] && { echo "❌ 找不到 capture 目录"; exit 1; }
+PP_TABLE_ID=$(jq -s -r '.[0].tableId' "tmp/$CAPTURE_DIR/tableConfig.txt")
+
+cat "tmp/$CAPTURE_DIR/state.json" 2>/dev/null  # 检查恢复点
 ```
 
 - state.json **不存在** → fresh start，进 Phase 0
@@ -36,15 +55,20 @@ cat tmp/<tableId>/state.json 2>/dev/null  # 检查恢复点
 
 ## 用户提供的数据契约（必备）
 
-`tmp/<tableId>/`：
+`tmp/<capture-dir>/`：
+
+> `<capture-dir>` = hall external_code（**数字**，如 `2244`），**不等于 PP tableId**（字符串，如 `gatesofolympus01`）。
+> hall-for-live 上游不支持长 gameId 取启动链接，fetch_client.mjs 用 hall external_code 命名 capture 目录。
+> AI 永远从 `tableConfig.txt` 第一条记录的 `tableId` 字段反查 **真实 PP tableId**（用于机台目录命名 / enum.TableID / instance_factory 注册），目录名只是 capture 路径。
 
 - `message.txt` — game WS 双向帧（每行 JSON）
-- `tableConfig.txt` — tableConfig 响应
+- `tableConfig.txt` — tableConfig 响应（**含真实 PP tableId 字段，AI 唯一权威**）
 - `statisticHistory.txt` — 历史响应
-- `gameDetail.txt` — game.jsp XML（每行一条，推荐 ≥ 1）
+- `gameDetail.txt` — `cgibin/usermanagement/audit/game.jsp` 玩家历史 XML（**BuildGameDetail 权威数据源**，每行一条，推荐 ≥ 1）
+- `roundDetail/` — `gameHistory/game.jsp?token=...` PP 报表页面 HTML 目录（**BuildGameReport 权威数据源**，每 round 一对 `{rid}.html` + `{rid}-Details-<userId>.html`，含 PP SPA 渲染完成后的 DOM + 内嵌 base64 SVG）
 - `clientResources/apps/<gameLoaderKey>/<ver>/main.js`
 
-录制工具：pp-game 仓库 `scripts/game_dev/fetch_client.mjs`（headed 模式，所有数据落 `.txt`，内容为 JSONL）。**本 skill 不主动录**。
+录制工具：pp-game 仓库 `scripts/game_dev/fetch_client.mjs`（headed 模式 + 浏览器自动点 Details 按钮，所有数据落 `.txt` / `.html`，JSONL/HTML 格式）。**本 skill 不主动录**。
 
 ## 8 Phase 概览 + 读取计划（progressive disclosure）
 
@@ -52,13 +76,13 @@ cat tmp/<tableId>/state.json 2>/dev/null  # 检查恢复点
 
 | Phase | 工作 | 执行前读 |
 |---|---|---|
-| **0** | 输入验收 + 元信息抽取 | `references/phase-0-acceptance.md` |
+| **0** | 输入验收（含 capture 目录归属校验）+ 元信息抽取 | `references/phase-0-acceptance.md` |
 | **1** | 选 base + factory 注册检测（AI 直接 bash） | 本 SKILL.md「Phase 1」节即可 |
 | **2** | 创建 worktree（调 worktree-task-flow init-worktree.sh）— 自此无人值守 | 本 SKILL.md「Phase 2」节即可 |
-| **3** | AIU DAG 实现（5 层 17 单元，每层完成立即层间 codex 审查） | `references/phase-3-aiu-overview.md`，进入某 L 时再读对应 `phase-3-aiu-LN.md` + `phase-3-layer-review.md` |
+| **3** | AIU DAG 实现（5 层 18 单元，每层完成立即层间 codex 审查；**L3 拆 BuildGameDetail / BuildGameReport 两 AIU**） | `references/phase-3-aiu-overview.md`，进入某 L 时再读对应 `phase-3-aiu-LN.md` + `phase-3-layer-review.md` |
 | **4** | 自问审查 4 题 + codex_decide 每题决策 | `references/phase-4-self-review.md` |
 | **5** | 整体循环 codex review（≤5 轮） | `references/phase-5-overall-review.md` |
-| **6** | verify 13 项（含 I9/I10 + V10-V13 生产 bug 闸门） | `references/phase-6-verify.md` |
+| **6** | verify 14 项（含 I9/I10 + V10-V13 生产 bug 闸门 + V14 赢钱反推验证） | `references/phase-6-verify.md` |
 | **7** | 经验文档归档（16 节） | `references/phase-7-experience-doc.md` |
 
 **跨 phase 共用 references**（按需 grep，不必预读）：
@@ -68,7 +92,9 @@ cat tmp/<tableId>/state.json 2>/dev/null  # 检查恢复点
 ## Phase 1 — 选 base + factory 检测（AI 直接执行）
 
 ```bash
-TABLE_ID=<tableId>; REPO_ROOT=$(git rev-parse --show-toplevel); STATE="$REPO_ROOT/tmp/$TABLE_ID/state.json"
+# CAPTURE_DIR / PP_TABLE_ID 在「触发后第一步」已经从 tableConfig 校验完成。
+# Phase 1 起所有路径用 CAPTURE_DIR，所有 enum.TableID / 注册键用 PP_TABLE_ID。
+TABLE_ID="$PP_TABLE_ID"; REPO_ROOT=$(git rev-parse --show-toplevel); STATE="$REPO_ROOT/tmp/$CAPTURE_DIR/state.json"
 BASE_BRANCH=""; WHITELIST=(live live-dev dev pre)
 [[ -n "${PP_BASE_BRANCH:-}" ]] && BASE_BRANCH="$PP_BASE_BRANCH"
 if [[ -z "$BASE_BRANCH" ]]; then
@@ -107,13 +133,15 @@ bash "$WT_SKILL/scripts/init-worktree.sh" "$BASE_BRANCH" "${GAMETYPE}-${TAIL}"
 
 ```jsonc
 {
-  "tableId": "...", "phase": 3, "status": "done|failed|skipped|degraded",
+  "tableId": "gatesofolympus01",     // 真实 PP tableId（从 tableConfig 抽，机台目录名 / enum.TableID 用）
+  "capture_dir": "2244",             // capture 目录名（hall external_code，所有 tmp/<dir>/ 路径用）
+  "phase": 3, "status": "done|failed|skipped|degraded",
   "base_branch": "live", "worktree_path": "...", "worktree_branch": "...",
   "lobby": { "gameType": "...", "gameLoaderKey": "...", "limits": {...} },
   "capture_audit": { "p0_passed": true, "p1_warnings": [...] },
   "aiu_progress": { "L1": {"done": [...], "commits": [...]}, ... },
   "codex_reviews": [], "codex_decisions": [], "codex_discussions": [],
-  "self_review_path": "tmp/<tableId>/self-review.md",
+  "self_review_path": "tmp/<capture_dir>/self-review.md",
   "unresolved": [],
   "last_updated": "ISO-8601"
 }

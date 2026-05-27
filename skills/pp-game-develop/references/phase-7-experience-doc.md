@@ -121,21 +121,24 @@ betsopen → betsclosingsoon → betsclosed → <startDealing/mwDealing> → <ja
 
 ## 9. 测试策略
 
-测试文件：
+测试文件（机台 internal 包内，**runtime/history_<gametype>_test.go 已废弃**）：
 - `dictionary_test.go` — F2 字典 parity
 - `parse_test.go` — XML 解析往返
 - `payout_test.go` — F1 4 capture 真帧样本
 - `payout_cap_test.go` — G3 三路 cap
 - `placebet_incremental_test.go` — I6 incremental
 - `validate_test.go` — 窗口/边界/联动
-- `history_<gametype>_test.go` — I10 真 XML 单测
+- `history_test.go` — V7a I10 BuildGameDetail 用真 gameDetail.txt XML（机台内，不是 runtime/）
+- `report_test.go` — V7b BuildGameReport 用真 roundDetail/*.html，断言 4 表 id / SVG / 视觉 ≥ 90% / 自包含 HTML
+- `v14_payout_reverse_test.go` — V14 赢钱反推（capture 真局 + roundDetail 玩家明细对照算 payoff）
 
-capture 5 文件作 fixture 路径：
-- `tmp/<tableId>/message.txt`
-- `tmp/<tableId>/tableConfig.txt`
-- `tmp/<tableId>/statisticHistory.txt`
-- `tmp/<tableId>/gameDetail.txt`
-- `tmp/<tableId>/clientResources/.../main.js`
+capture 文件作 fixture 路径（注意目录名是 hall external_code 即 `<capture_dir>`，非 PP tableId）：
+- `tmp/<capture_dir>/message.txt`
+- `tmp/<capture_dir>/tableConfig.txt`
+- `tmp/<capture_dir>/statisticHistory.txt`
+- `tmp/<capture_dir>/gameDetail.txt`
+- `tmp/<capture_dir>/roundDetail/<rid>.html` + `<rid>-Details-<userId>.html`
+- `tmp/<capture_dir>/clientResources/.../main.js`
 
 coverage: <X>%
 
