@@ -1,6 +1,6 @@
 ---
 name: issue
-description: 通用 GitHub issue 操作工具，基于 gh CLI 在当前 git 仓库内查询/管理 issue。触发场景：(1) /issue list 或自然语言"列出我的 issue" 列出我被分配的 open issue (2) /issue info ID 或用户单独发一个 issue 编号（如 "#60" / "60"）读详情 + 标 👀 + Project 状态切"修复中" + 基于当前仓库代码做根因分析并给修复方案报告（不动代码） (3) /issue fix ID 或自然语言"修复完成 #id / fix #id" 写修复评论 + 改 assignee 为发起人 + Project 状态切"待验收"。每个子命令执行前先 Read 对应的 references/CMD.md 拿完整规范。
+description: 通用 GitHub issue 操作工具，基于 gh CLI 在当前 git 仓库内查询/管理 issue。触发场景：(1) /issue list 或自然语言"列出我的 issue" 列出我被分配的 open issue (2) /issue info ID 或用户单独发一个 issue 编号（如 "#60" / "60"）读详情 + 标 👀 + Project 状态切"修复中" + 基于当前仓库代码做根因分析并给修复方案报告（不动代码） (3) /issue solve ID 或自然语言"修这个 issue / 帮我修 #60 / 一键修 #60" 走端到端流程 info→选方案→worktree→实现→PR→合并→fix→清理（仅 2 次 AskUserQuestion：选方案 + 合并确认） (4) /issue fix ID 或自然语言"修复完成 #id / fix #id" 写修复评论 + 改 assignee 为发起人 + Project 状态切"待验收"。每个子命令执行前先 Read 对应的 references/CMD.md 拿完整规范。
 ---
 
 # Issue Skill
@@ -31,6 +31,7 @@ gh auth status >/dev/null 2>&1 || { echo "请先 gh auth login"; exit 1; }
 |------|--------|------------------|
 | `/issue list`、"列出我的 issue / open issues assigned to me / 我的待办" | list | [references/list.md](references/list.md) |
 | `/issue info <id>`、"看下 #id / 详情 #id / issue 60"、**list 之后用户只发数字（如 "60" / "#60"）** | info | [references/info.md](references/info.md) |
+| `/issue solve <id>`、"修这个 issue / 帮我修 #N / 一键修 #N / end-to-end fix #N / 走 issue 修复流程 N" | solve | [references/solve.md](references/solve.md) |
 | `/issue fix <id>`、"修复完成 #id / fix #id / 提交 #id 修复" | fix | [references/fix.md](references/fix.md) |
 
 **路由规则**：
@@ -39,7 +40,11 @@ gh auth status >/dev/null 2>&1 || { echo "请先 gh auth login"; exit 1; }
 2. **Read 该子命令对应的 `references/<cmd>.md`**（一次只读一个）
 3. 按 references 文件里的 Step 1/2/... 执行
 
-**Project 状态切换是 info / fix 共享逻辑**，需要时再 Read [references/project-status.md](references/project-status.md)。
+**Project 状态切换是 info / fix / solve 共享逻辑**，需要时再 Read [references/project-status.md](references/project-status.md)。
+
+**solve 是 info + 实现 + PR + 合并 + fix + 清理的端到端编排**，内部直接执行各步骤（不 Skill 转
+invoke 其他 skill，避免 ping-pong）。当用户消息暗示要"修复这个 issue / 帮我修 #N"时优先走 solve；
+仅想看分析报告不动代码走 info；已经修好只补尾的（评论 + assignee + 状态）走 fix。
 
 ## 后续子命令扩展约定
 
