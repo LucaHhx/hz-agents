@@ -112,7 +112,19 @@ DefaultEuroTablePayoutMax = 500000.0  // 与 main.js `?? 5e5`
 
 **H1 history endpoint 必查**：每机台 grep main.js 列 `/api/ui/history/*` / `/cgibin/.../audit/*` / `/api/ui/statisticHistory` / `fetchRoundHistory` 等调用。
 
-**H2 b_game_rounds.Extra 落盘**：机台特殊字段（multiplier/payouts/sbmul 等）必须落 Extra（结构化 JSON），不只留 RawData。
+**H2 b_game_rounds.Extra 落盘 — 前瞻性原则**：
+
+机台所有特色协议字段必须落 Extra（结构化 JSON），不只留 RawData。判定"是否落"的标准 **不是** "当前 capture 是否触发"，而是 **"后续 BuildGameDetail / BuildGameReport 是否可能渲染"**。
+
+凡是上游下发的、与玩法 / 倍率 / 子序列 / 触发位 有关的字段都要落：
+
+- 任何机台特色帧（`gorXxx` / `bonusXxx` / `tumbleXxx` / `cascadeXxx` / `accumulatedXxx` 等）→ **全量落**
+- 子序列帧（如 bonus / tumble / cascade 每步）→ 按 **"全帧序列 [] + spinNo→末值 map"** 两份落
+  - 序列保完整可回溯（`spinEndsRaw`）；map 给 history XML 渲染直接用（`spinAccumulatedMultipliers`）
+- gameresult 三路辨识位（`winType` / `luckyWin` / `finalMultiplier`）→ 全落，普通局 `winType=0` `finalMultiplier=` 不省略
+- gorRng 三种特殊位族 → `bonusNo` / `luckyMul[]`（嵌套不展平）/ `superBoosterMul` 都落
+
+**反例**：gatesofolympus01 初版 `spinAccumulatedMultipliers` 落 string 空字符串（误判 capture 普通局空 = 永远空），bonus 局触发后无数据可吐 → 客户端 NaNx + 派彩按基础 21× 退化。**回头补 3 个 PR**（issue #220 历史 NaNx / #222 派彩少给 / #226 Bonus Game Result 网格）才完整。开发新机台 L3.3 SETTLE 时必须按本节"前瞻性"清单一次性落齐，避免后续多次补 PR。
 
 **H3 b_game_transactions 字段**：填齐 Currency（本局会话币种，**不是 user.Currency**）/ Description（H6 本地化）/ Stake / GameNetCash / MaxCapped / BoosterEnabled / SettledAt（事件时间）。
 

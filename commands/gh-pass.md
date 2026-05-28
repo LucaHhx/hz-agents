@@ -251,6 +251,10 @@ gh pr merge "$PR_NUM" \
 
 ### 7. 合并后：清理远端分支
 
+**选项顺序固定为「删除 / 保留」**，下面模板不要换。用户已养成肌肉记忆，第一项必须是「删除」。
+即使该分支是 `live` / `main` / 长期分支等"显然该保留"的情况，也不要把「保留」挪到第一位 ——
+顺序稳定优先于"推荐项靠前"。
+
 ```
 AskUserQuestion({
   questions: [{
@@ -298,6 +302,7 @@ rm -rf .git/gh-pass/
 
 ## 安全铁律
 
+- **AskUserQuestion 选项顺序按本文档模板固定，禁止按场景倒**。用户已养成肌肉记忆，会习惯性选第一项；调换会误操作。"推荐"放 description 里说，不要靠重排
 - **不**用 `--admin` 绕过保护规则 / required reviewers / required checks，除非用户明确要求
 - **不**用 `--force` / `--force-with-lease`（merge 流程不该需要 force）
 - **不**自动删本地分支（用户自己决定）

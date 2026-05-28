@@ -214,6 +214,7 @@ git log --oneline -<N>
 
 ## 安全铁律
 
+- **AskUserQuestion 选项顺序按本文档模板固定，禁止按场景倒**。用户已养成肌肉记忆，会习惯性选第一项；调换会误操作。"推荐"放 description 里说，不要靠重排
 - **严禁** `git pull` / `git merge` / `git rebase` / `git checkout <他分支>` / `git reset --hard` —— 这些会把别人的提交带回当前分支。本命令只做 add / commit / 只读 git log/diff
 - **严禁** `git add .` / `git add -A` —— 永远显式列文件
 - **严禁** `--no-verify` 绕过 hook —— hook 失败先看原因再修

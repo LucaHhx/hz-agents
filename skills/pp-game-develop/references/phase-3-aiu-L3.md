@@ -133,6 +133,26 @@
 - **statisticHistory writer**：调 `events.AppendHTTPStatHistory` 写 Redis stat_history http key
 - **fail-closed log (D)**：UpsertRound 失败 / GetRedisUserBets 失败 / SettleUsersSeamless 失败全部 `zap.Error`
 
+**Extra 字段前瞻清单（必读 known-pitfalls.md H2「Extra 落盘 — 前瞻性原则」）**：
+
+开发 L3.3 时按 L1 dict.json 列出**所有机台特色帧 / 字段**，凡是 BuildGameDetail / BuildGameReport
+可能渲染的都要落，**禁止因为当前 capture 样本未触发而省略**。判定标准是"后续 history 详情 / report
+报表是否可能用"，不是"本局 capture 是否触发"。
+
+具体落库要求：
+
+- **子序列帧**（bonus / tumble / cascade 每步）→ 按 "全帧序列 + 聚合 map" 两份落：
+  - `extra["xxxRaw"]` `[]JSONXxx` —— 全帧可回溯
+  - `extra["xxxAccumulated"]` `map[int]float64` —— history XML entries 渲染直接用
+- **gameresult 三路辨识位** → `winType` / `luckyWin` / `finalMultiplier` 都落（普通局不省略）
+- **gorRng 特殊位族** → `bonusNo` / `bonusSlotId` / `luckyMul[]`（嵌套结构不展平，含 `boostedMul` 等可选位）/ `superBoost` / `superBoosterMul` 都落
+- **触发预告 / 结束信号帧**（`xxxReady` / `xxxEnd`）→ 全帧落（即使无业务数据，作 settle 阶段
+  "本局确实跑完子序列"的强信号位）
+
+反例：gatesofolympus01 初版 `spinAccumulatedMultipliers` 当成 string 字段落空字符串
+（误判 capture 普通局空 → 永远空），bonus 局触发后无数据可吐 → 客户端 NaNx + 派彩按基础
+21× 退化（issue #220/#222/#226 三次回头补 PR 才完整）。**开发新机台必须一次性落齐前瞻清单**。
+
 **B5 验收**：build/vet/test 过 + payout_test ≥ 4 真帧样本（capture 取） + cover ≥ 25%
 
 **下游**：PAYOUT / BETSTATS / WINNERS / STATS_API（数据源）

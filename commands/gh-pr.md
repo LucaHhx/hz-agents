@@ -252,6 +252,7 @@ rm -rf .git/gh-pr/
 
 ## 安全铁律
 
+- **AskUserQuestion 选项顺序按本文档模板固定，禁止按场景倒**。用户已养成肌肉记忆，会习惯性选第一项；调换会误操作。"推荐"放 description 里说，不要靠重排
 - **严禁** push 到 `main` / `master` / `dev` / `pre` / `develop` / `release`
 - **严禁** `--force` / `--force-with-lease` —— push 被拒就停下让用户处理
 - **严禁** `git pull` / `merge` / `rebase` 把 base 分支拉回 head —— 让 reviewer 在 PR 页面解决冲突，或用户自己专门处理
