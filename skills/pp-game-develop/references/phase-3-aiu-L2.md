@@ -143,7 +143,7 @@
 
 **集成铁律 reminder（注入到每个 L2 AIU prompt）**：
 - B1 tableId 字节级替换
-- B2 winners pass 透传（默认）
+- B2 winners Model A（drop 上游 + 合并我方 + per-观众币种广播；一局只播一次、合并失败不广播）
 - B3 多事件单帧 orderKeysByPriority
 - B5 lpbet gm 动态拼接（不是固定字面量）
 - B6 ping 单/双引号兼容

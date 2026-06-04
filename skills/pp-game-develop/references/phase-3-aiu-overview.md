@@ -69,7 +69,7 @@ Layer 5 (依赖全部, 1):
 | `settle.go` | L3.3 SETTLE | 结算核心：`OnGameResult` 写 b_game_rounds / 读 Redis bets / 算派彩 / 写 txn / 调商户 |
 | `payout.go` | L4.1 PAYOUT | 纯赔率 / 派彩计算函数（保持纯函数易单测） |
 | `history.go` | L3.4 HISTORY_DETAIL | `BuildGameDetail`：PP `cgibin/.../audit/game.jsp` XML 历史详情，registry 注册 |
-| `report.go` | L3.5 HISTORY_REPORT | `BuildGameReport`：PP `gameHistory/game.jsp?token=...` 报表 HTML（含 SVG + 内联 CSS 自包含），90%+ 还原 PP 真服 |
+| `client/reports/<tableId>/index.html` | L3.5 HISTORY_REPORT | **前端自包含报表页**（非 Go）：fetch 通用 `/gameHistory/report` JSON 后渲染，90%+ 还原 PP 真服；一机台一份不共用，无共享 `_assets`。后端报表零 per-machine 代码 |
 | `archive_detect.go` | L3.1 UPSTREAM | upstream-log 归档小 helper |
 
 ### 按 gametype 的附加文件
@@ -79,7 +79,7 @@ Layer 5 (依赖全部, 1):
 | `card_history.go` / `description_en.go` | baccarat / dragontiger | 牌面累计 + betCode→人类可读 Description |
 | `side_bet_rule.go` / `side_bets_gate.go` | baccarat / dragontiger | 边注启停闸门（按 `ShoeSummary.totalGames` 自算，**不靠上游 disablesidebets** — J2） |
 | `betstats_enrich.go` | dragontiger / jackpotwheel | betstats 帧 rewrite 注入我方玩家（L4.2 BETSTATS） |
-| `winners_broadcast.go` | dragontiger / jackpotwheel / megaroulette | `CollectOurWinners` + 合并 + 按币种 rewrite（L4.3 WINNERS） |
+| `winners_broadcast.go` | 全机台（Model A 统一） | drop 上游 + `CollectOurWinners` 合并我方 + EUR 归一排序 + per-观众币种 `BroadcastToTableByCurrency`（L4.3 WINNERS；一局只播一次、合并失败不广播） |
 | `settle_block.go` / `settle_persistence.go` | dragontiger / jackpotwheel / megaroulette | 结算 fail-closed 阻断 + `b_settlement_failed` 持久化 |
 | `candy_drop*.go` | sweetbonanza | 玩家决策状态机（选球，须落 `b_game_user_actions` — H7） |
 | `models_client.go` / `*_helpers.go` | megaroulette 等 | 纯为满足 policy-pr 500 行拆分（按职责拆，仍属同一 AIU） |
@@ -88,8 +88,8 @@ Layer 5 (依赖全部, 1):
 
 - **XML 解析模板看 dragontiger / megaroulette**（`encoding/xml` struct 解析），**不要参考 baccarat / sweetbonanza** 的 `xml_util.go` regex extractAttr —— 后者是已记录的违规（`feedback_struct_only`），新机台勿传播。
 - **目录名 ≠ tableId**：megaroulette 目录是 `megaroulettelxuq` 但 `enum.TableID` 是 `1hl65ce1lxuqdrkr`。一律从 `enum.go` 读 TableID，不从目录名推断。
-- 注册：唯一改动机台目录外的文件 —— `factory/instance_factory.go`（switch case + `ImplementedTableIDs`）+ `factory/history_factory.go`（L3.4 + L3.5 同一 provider 实例双接口注册）。
-- **runtime/history_<gametype>.go 已废弃**：旧 runtime 公共 GameEntryXML + switch by gameType fallback 不再用。新机台 100% 走 registry，BuildGameDetail / BuildGameReport 全部落在机台 internal 包内。
+- 注册：机台目录外只改 `factory/instance_factory.go`（switch case + `ImplementedTableIDs`）+ `factory/history_factory.go`（L3.4 `BuildGameDetail` registry 注册）。**L3.5 报表无 Go 注册**（通用 JSON handler + 前端页）；商户报表 URL 由 merchant `/roundreport` 指向 `/reports/<tableId>/index.html`。
+- **runtime/history_<gametype>.go 已废弃**：旧 runtime 公共 GameEntryXML + switch by gameType fallback 不再用。新机台 100% 走 registry，`BuildGameDetail` 落机台 internal 包；报表走前端页（`client/reports/<tableId>/`，一机台一份不共用）+ 通用 `reportjson` JSON，**后端无 `BuildGameReport` / `report.go`**（旧 server-render HTML + `reporthtml` 已删除）。
 - `lifecycles/` 目录当前为空：`ARCHITECTURE.md` 描述的 `GameLifecycle` 层尚未拆出，6 机台全部把逻辑放机台包内。**按现有机台做**，不要照 ARCHITECTURE.md 新建 `lifecycles/<gametype>.go`。
 
 ## 调度伪代码

@@ -35,7 +35,8 @@
 **产物**：`tmp/<tableId>/dict.json`（**非代码，是分析备忘文件**）
 
 **分析输入**：
-- 全 5 capture 文件（事件名 / 字段类型全集）
+- 全 capture 文件（事件名 / 字段类型全集）
+- **`message-nobet.txt`（上游广播完整协议）+ `message.txt`（下游完整协议）对照 diff** → `message_classification` 直接产出（phase-0 §2A），非靠 uId 猜
 - main.js 补 capture 没出现的偶发事件（canceled / session / decisionError / switch / duplicated_connection 等）
 
 **实现内容**（JSON 结构）：
@@ -133,10 +134,13 @@
    → client `toUpperCase()` = "JACKPOTWHEEL" ≠ "MEGAWHEEL" → history default ERROR_TITLE。
    **必须**在 `history_parse.go:gameTypeMap` 加显式映射 `"jackpotwheel": "Megawheel"`。
 
-3. **消息三分类预判**（Phase 4 Q5 输入）：每个事件先打 A/B/C 三类标签：
-   - A 上游 → 直接转发（pass）
-   - B 上游 → server 修改后转发（rewrite，如 betstats EnrichBetstats / table B1 tableId 替换）
-   - C 上游不发 → server 自合成（synthesize，如 subscribe ack / bet echo / win 私聊 / betValidationError）
+3. **消息分类（Phase 4 Q5 输入）—— mirror-feed 机台用 message.txt vs message-nobet.txt diff 机械推导，非靠 uId 猜**（见 phase-0 §2A / SKILL.md 数据契约）：
+   - **A 直转**（pass）：message-nobet 有，server 不改字节直传（lifecycle / 结果广播）
+   - **A2 communal 演出**（pass + 缓存喂结算）：message-nobet 有的全桌一份演出帧（bonus board / dice / 开球 / barrel 等），所有玩家共享
+   - **B rewrite**：message-nobet 有但 server 改后转发（betstats EnrichBetstats / table B1 tableId 替换 / winners 注入我方下游中奖者）
+   - **C 自合成**（synthesize）：**只在 message.txt、message-nobet 没有的事件**（`comm -23` 出）= per-user 会话定向，server 收不到必须自合成：subscribe ack / bet echo / win 私聊 / 决策回执(tiDecision*) / 个人派彩(tiPlayerWin/tiMapReveal) / betValidationError。**shape 从 message.txt 取**（含无操作 auto-decision 行为）。
+   - 旧 capture 无 message-nobet → 退回 uId 启发式（带 uId / 个人会话定向 ≈ C）。
+   - ⚠️ **init 回放序列独立于此分类**：仍按上述 client 状态机反向分析取「最少+最必要」子集；message-nobet 是 init帧 + 每局广播全流，**勿整段当 init**。
 
 **B5 验收**：JSON 合法 + jq parse 过 + 关键字段非空 + `init_frame_sequence` ≥ 4 项（最少
 table/dealer/game/timer） + `client_gametype_enum` 含本机台 enum 值 + `message_classification`
@@ -286,7 +290,7 @@ table/dealer/game/timer） + `client_gametype_enum` 含本机台 enum 值 + `mes
 ## §3 结算帧
 
 ### 3.1 `{"<gametype>gameresult":{...}}`
-### 3.2 `{"winners":{...}}` (PP 全网瀑布，B2 pass 透传)
+### 3.2 `{"winners":{...}}` (PP 全网瀑布，B2 Model A：drop 上游 + 合并我方 + per-观众币种广播)
 ### 3.3 `{"win":{...}}` (我方私聊，FlushPendingWins 合成)
 - **触发时机**: winners 帧后 WinnersBroadcastDelay (~500ms)
 - **seq 必填非 0**（jackpotwheel #15）

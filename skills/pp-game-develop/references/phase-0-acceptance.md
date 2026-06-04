@@ -13,8 +13,10 @@
    - 不存在则扫 tmp/*/tableConfig.txt 反查 .tableId == INPUT_ID 的目录
    - 找到后：capture_dir = 目录名（数字 / external_code），pp_table_id = tableConfig.tableId（真实 PP 字符串）
    - 两者一致时（罕见，老 capture）按 input 直接当目录用
-3. 确认 6 文件齐全：tmp/<capture_dir>/{message.txt, tableConfig.txt, statisticHistory.txt, gameDetail.txt, roundDetail/, clientResources/} 都存在
-4. 跑通用指标（§2）
+3. 确认文件齐全：tmp/<capture_dir>/{message.txt, **message-nobet.txt**, tableConfig.txt, statisticHistory.txt, gameDetail.txt, roundDetail/, clientResources/} 都存在
+   - `message.txt` = 有头下注会话（我方↔下游完整协议）；`message-nobet.txt` = 无头 nobet 观察者（上游广播完整协议）。**两份同批局时间对齐 → diff 即得协议分类**（见 §2A + SKILL.md「message.txt vs message-nobet.txt」）。
+   - message-nobet.txt 缺失（老 capture / 单路录制）→ 退化为旧 uId 启发式分类 + 记 P1 警告，建议补双路录制。
+4. 跑通用指标（§2）+ 协议分类 diff（§2A，mirror-feed 机台）
 5. 推断 gametype（先 grep clientResources/apps/ 路径 + release.json + translations-help 文件名）
 6. 按 gametype 跑特化检查（§3）
 7. 综合 P0/P1/P2 判断（§4）
@@ -55,9 +57,31 @@
 | # | 指标 | AI 检测 |
 |---|---|---|
 | 15 | gameDetail.txt ≥ 1（**BuildGameDetail 数据源**） | `grep -c '^<' tmp/<capture_dir>/gameDetail.txt` |
-| 16 | roundDetail/ ≥ 1 完整对（**BuildGameReport 数据源**） | `ls tmp/<capture_dir>/roundDetail/*.html 2>/dev/null \| wc -l`（≥ 1 含基线 + Details） |
+| 16 | roundDetail/ ≥ 1 完整对（**报表前端页 1:1 还原基线**） | `ls tmp/<capture_dir>/roundDetail/*.html 2>/dev/null \| wc -l`（≥ 1 含基线 + Details） |
 | 17 | 罕见事件样本 | grep `canceled\|session\|decisionError` |
 | 18 | 跨段位 lpbet | grep `bc="..."` 抽不同值 ≥ 2 |
+| 19 | **message-nobet.txt 齐全 + 非空**（上游广播完整协议） | `[[ -s tmp/<capture_dir>/message-nobet.txt ]]`（缺 = P1 警告，退化旧分类） |
+
+## 2A. 协议分类 diff（message.txt vs message-nobet.txt，mirror-feed 机台）
+
+> 两份同批局时间对齐：**集合差直接产出 A/A2/B/C 分类**（取代 uId 启发式 + 事后补录）。
+> 产物喂 L1 DICT `message_classification` + L3.1 UPSTREAM 转发契约 + L3「我方必须合成」清单。
+
+```bash
+CD=<capture_dir>
+# 上游广播给我方的事件全集（= message-nobet 顶层 key）：A/A2/B 候选，HandleUpstream 契约
+jq -s -r '.[]|select(.dir=="recv")|.payload|fromjson|keys[0]' tmp/$CD/message-nobet.txt | sort -u > /tmp/nobet_events
+# 下游完整协议事件全集（= message.txt recv 顶层 key）
+jq -s -r '.[]|select(.dir=="recv")|.payload|fromjson|keys[0]' tmp/$CD/message.txt | sort -u > /tmp/bet_events
+echo "=== 上游广播（我方收到，A/A2/B）==="; cat /tmp/nobet_events
+echo "=== 只在 message.txt（per-user，C 我方必合成）==="; comm -23 /tmp/bet_events /tmp/nobet_events
+```
+
+- **comm 出的「只在 message.txt」= C 类**（per-user 会话定向：bet echo / win / 决策回执 / 个人派彩 / betValidationError）→ 生产收不到，**我方自合成**，shape 从 message.txt 取。
+- **message-nobet 全集 = A/A2/B 候选** → 再细分：A 直转（lifecycle / 结果）/ A2 communal 演出（bonus board、dice、开球等全桌一份）/ B rewrite 注入我方（winners 等）。
+- ⚠️ **init 回放 ≠ message-nobet 全集**：message-nobet 含 init 握手帧 + 每局广播全流；init 子集仍按客户端状态机反向分析取「最少+最必要」（L1 DICT，逻辑不变）。
+- ⚠️ message-nobet 若含 per-user 帧（罕见，真上游下注模型）→ 非 mirror-feed，本节不适用，按该机台真实架构处理。
+- ⚠️ **diff 是候选不是真相**：① **采样缺口** —— 某帧不在 message-nobet ≠ 不广播，可能只是没采到那种 bonus 局（message-nobet 自愈重连 + 截断重录，单份覆盖有限）→ **uId 双判据定锤**：无 uId+桌级字段=广播 / 有 uId=per-user；diff 出候选，uId + 跨多份 no-bet feed 交叉才定。② **录制天然不完整** —— capture 只是"录时恰好发生的"，**不是完整协议**；betValidationError / canceled / session / 稀有 bonus(rc8) / toasterMessage 等可能**从不出现**。**不可"没录到=不存在"**，必须结合客户端 JS chunk 协议反推 + 同供应商既有机台。capture 是事实下限，非协议上限。
 
 ## 3. 机台特化检查清单（**AI 按 gametype 选**）
 

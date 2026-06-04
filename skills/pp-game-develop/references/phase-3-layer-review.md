@@ -60,15 +60,16 @@ bash $CODEX_COLLAB/scripts/codex_review.sh \
 - settle face_value→bc 映射 + b_game_rounds.Extra 字段齐全（capture 真帧每字段都落盘，**含 luckyMul / r / seq / superBoosterMul 等机台特化数组字段**）
 - **HISTORY_DETAIL** `history.go` XML 字段名 vs `gameDetail.txt` 真 XML 逐字段对照（BuildGameDetail）
 - HISTORY_DETAIL multiplier/payout 缺数据填 "0" 不空串 (I8)
-- **HISTORY_REPORT** `report.go` HTML 骨架 vs `roundDetail/*.html` capture 视觉对照（BuildGameReport，≥ 90% 相似度 + SVG 卡片）
-- HISTORY_REPORT 自包含 HTML（不引外部 CSS / JS，所有样式内联）
+- **HISTORY_REPORT** 前端页 `client/reports/<tableId>/index.html` 渲染 vs `roundDetail/*.html` capture 视觉对照（≥ 90% 相似度 + SVG 卡片）；后端无 Go 报表代码
+- HISTORY_REPORT 自包含且不共用（一机台一份，渲染 JS + CSS 内联本页，**不引共享 `_assets`、不跨桌复用**）
+- HISTORY_REPORT 前置：L3.1 `archiveCurrentRaw` 已调（`messages` 非空）+ L3.3 `round`/`extra` 字段齐
 - CheckBet 双重 fail-closed（内存 + Redis C1）
 - CheckBet 9 段位单注 + 台限累加 + bonus 联动 (B8)
 
 **主信息源**：
 - capture message.txt 双向帧（lifecycle 时序）
 - **gameDetail.txt 真 XML**（HISTORY_DETAIL 唯一权威）
-- **roundDetail/*.html 报表 HTML + Details 弹窗**（HISTORY_REPORT 唯一权威；含 PP 内嵌 base64 SVG 卡片样例）
+- **roundDetail/*.html 报表 HTML + Details 弹窗**（HISTORY_REPORT 前端页 1:1 还原基线；含 PP 内嵌 base64 SVG 卡片样例）
 - tableConfig.txt（CHECK_BET 限额）
 - main.js（rejectBet 分支）
 - 上游：L1 + L2 全部产物
@@ -81,7 +82,7 @@ bash $CODEX_COLLAB/scripts/codex_review.sh \
 - CapUserPayout 等比缩放 (C8) + mCap=true 触发
 - betstats 9 段位 bucket key 与 main.js 实测 key 一致
 - B7 完整 envelope + unwrapEnvelope（双信封陷阱）
-- winners **pass 透传** (B2 修正版默认；不是丢弃)
+- winners **Model A** (B2：drop 上游 + 合并我方 + per-观众币种 BroadcastToTableByCurrency；一局只播一次、合并失败不广播)
 - api_stats betResultStats key 与 main.js `Object.keys(tf)` 实测一致
 - api_table_config 含 typo（如 fourty_bet_* 内部 → Forty 外部）
 - api_rtp 响应非空 body

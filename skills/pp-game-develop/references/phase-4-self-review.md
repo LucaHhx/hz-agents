@@ -67,8 +67,8 @@ PP 机台运行时所有消息（client ↔ server）分为三类，必须**逐�
 
 | 分类 | 含义 | 典型例子 |
 |---|---|---|
-| **A: 上游 → 直接转发** (pass) | PP 上游帧 server 不动字节直传给客户端 | dealer / game / timer / winners / playersCount / pong（透传） |
-| **B: 上游 → server 修改后转发** (rewrite) | PP 上游帧 server 拦截 + 改字段 / enrich 再发 | betstats（EnrichBetstats 加我方平台金额） / table（B1 tableId 字节替换） |
+| **A: 上游 → 直接转发** (pass) | PP 上游帧 server 不动字节直传给客户端 | dealer / game / timer / playersCount / pong（透传） |
+| **B: 上游 → server 修改后转发** (rewrite / drop+重广播) | PP 上游帧 server 拦截 + 改字段 / enrich / 合并后 per-观众币种重广播 | betstats（EnrichBetstats 加我方平台金额） / table（B1 tableId 字节替换） / **winners（Model A：drop 上游 + 合并我方 + per-观众币种 BroadcastToTableByCurrency）** |
 | **C: 上游不发 → server 自合成** (synthesize) | PP 上游不发，server 主动构造发给客户端 | **subscribe ack**（I5 协议铁律，1 上游 fan-out N client 必须自合成） / bet echo（accepted 落账后回） / win 帧（我方私聊） / betValidationError |
 
 **自答模板**：

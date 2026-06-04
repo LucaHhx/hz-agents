@@ -110,31 +110,34 @@ cd <worktree>/server && go test -v -run "TestBuildGameDetail" "./game/pp/interna
 
 **FAIL 处理**：gameDetail.txt 在 capture 中为 0 条（玩家未点详情）→ 构造样本（开发期可接受）；≥ 1 条但单测未用真 XML → 🔴 must-fix 立即改测试。
 
-### V7b. BuildGameReport 真 HTML 单测（语义判断，AI 跑）
+### V7b. 报表前端页视觉还原（语义判断，AI 跑）
 
-**目的**：机台内 `report_test.go` 用 `tmp/<capture_dir>/roundDetail/*.html` 真 HTML 跑 BuildGameReport，断言生成 HTML 的关键 DOM 节点 / SVG 元素 / 字段值与 capture 一致。
+**目的**：本机台前端报表页 `server/game/pp/client/reports/<tableId>/index.html` 渲染出的 DOM /
+SVG / 字段值与 `tmp/<capture_dir>/roundDetail/*.html` capture 一致（≥ 90%）。报表已无 Go 实现，
+不查 `report_test.go`。
 
 **AI 检查步骤**：
 
 ```bash
-DIR=<worktree>/server/game/pp/internal/games/<gametype>/<tableId>
-# 1. capture roundDetail 文件齐全
+PG=<worktree>/server/game/pp/client/reports/<tableId>
+# 1. capture roundDetail 文件齐全（还原基线）
 ls tmp/<capture_dir>/roundDetail/*.html
-# 2. 找 report_test.go 是否有真 HTML 视觉对齐测试
-grep -rE 'roundDetail|TestBuildGameReport|gameHeader|playerSummary|<svg' "$DIR"/report_test.go
-# 3. 跑测试
-cd <worktree>/server && go test -v -run "TestBuildGameReport" "./game/pp/internal/games/<gametype>/<tableId>/..."
+# 2. 本机台报表页存在且自包含（不引共享 _assets / 不跨桌）
+ls "$PG"/index.html
+grep -nE "_assets/|RENDERER_BY_TABLE" "$PG"/index.html && echo "🔴 禁止引用共享 _assets / 派发表" || echo "OK 自包含"
+# 3. 内联 / 同目录渲染 JS 语法过
+node --check "$PG"/index.html 2>/dev/null || node --check "$PG"/render.js 2>/dev/null || echo "内联 <script> 需手动核对"
+# 4. 视觉：浏览器开真 token URL，或本地用一份真 /gameHistory/report JSON 在 DevTools 覆写 window.fetch 后刷新
 ```
 
 **PASS 标准**：
-- 含至少 1 个用真 capture HTML 的测试
-- 断言生成 HTML 含 `<table id="gameHeader">` / `<table id="gameResult">` / `<table id="playerSummary">` / `<table id="playerDetails">` / `<div id="modal">` / `<form id="hiddenForm">` 等关键骨架节点
-- 断言 SVG 元素存在（轮盘机台必须 Game Result `<svg>` + viewBox + winNumber + 邻号；Bonus / Multipliers 也要 SVG 卡片）
-- 断言字段值对齐（玩家汇总金额 / 玩家明细每笔 Description / Payout / Status="Settled" / EUR 列计算正确）
-- 视觉相似度 ≥ 90%（PASS / FAIL 由人工目测 + 自动 DOM 节点 diff 联合判定）
-- **自包含 HTML**：grep 输出 HTML 不含 `<link rel=stylesheet href="/"`（所有 CSS 内联，0 外部依赖）
+- 本机台 `client/reports/<tableId>/index.html` 自包含：**不引共享 `_assets`、不跨桌复用**（一机台一份）。
+- 渲染出 `<table id="gameHeader">` / `gameResult` / `playerSummary` / `playerDetails` 等关键骨架节点。
+- SVG 元素存在（轮盘机台必须 Game Result `<svg>` + viewBox + winNumber + 邻号；Bonus / Multipliers 也要 SVG 卡片）。
+- 字段值对齐（玩家汇总金额 / 每笔 Description / Payout / Status="Settled" / EUR 列；EUR 缺兑率展示空不 "0"）。
+- 视觉相似度 ≥ 90%（人工目测 + 关键 DOM 节点 diff 联合判定）。
 
-**FAIL 处理**：缺关键 table id → 补 `write*Table` 函数；缺 SVG → 实现 `gor*SVG` helper；视觉相似度低 → 比照 capture 调样式 + 字段补齐。
+**FAIL 处理**：缺骨架 → 补该页渲染函数；缺 SVG → 在该页内联实现 SVG；引用了 `_assets`/跨桌 → 改为本机台自包含；视觉低 → 比照 capture 调内联样式 + 字段。
 
 ### V8. 消息流时机对照（PP capture vs server 实际行为，AI 跑）
 
@@ -321,6 +324,36 @@ cd <worktree>/server && go test -v -run "TestV14PayoutReverse" "./game/pp/intern
 - 单注差异 → check `payout.go::Calculate(bc, amount, winNumber, luckyMul)` 赔率或 luckyMul 命中逻辑
 - 全局差异（所有 bet 多 / 少同一系数）→ 三路 cap min 顺序错（G3）
 - 某 bc 差异其它正确 → 该 bc 赔率常量错（与 odds.go 期望不符）
+
+### V15. 统计面板端点 shape + gameResult 对照（H11/H12，AI 跑）
+
+**目的**：客户端统计面板（`/api/ui/stats` 或 `/api/ui/statisticHistory`）返回的 JSON shape 与 capture
+`statisticHistory.txt` 逐字段对齐；特别防 ①走错端点 fall through 轮盘 shape ②`gameResult` 落 rc 码而非展示值。
+
+```bash
+# 1. 从 capture 确认本机台走哪个端点（_endpoint 首字段，脚本已标注）
+head -1 tmp/<tid>/statisticHistory.txt | jq -r '._endpoint'   # /api/ui/stats 或 /api/ui/statisticHistory
+
+# 2. 启动 worktree game-pp，curl 同一端点（tableId 用 b_tables.code，如 pp<originalId>）
+curl -s 'http://127.0.0.1:9689<_endpoint>?tableId=<tableCode>&noOfGames=500' -o /tmp/srv_stats.json
+
+# 3. 顶层 key 集对照（server ⊇ capture，且不得退化成轮盘 hotColdStats/winningBetStats）
+jq -r 'keys[]' /tmp/srv_stats.json
+head -1 tmp/<tid>/statisticHistory.txt | jq -r 'del(._endpoint)|keys[]'
+
+# 4. gameResult 展示值抽样（不得是纯 rc 数字码）
+jq -r '.<historyArrayKey>[0:5][].gameResult' /tmp/srv_stats.json
+```
+
+**PASS 标准**：
+- 顶层 key 与 capture 一致（走 /stats 的机台**不能**出现 `data.hotColdStats` / `winningBetStats` —— 那是 fall through 轮盘默认分支的信号）
+- `gameResult` 为展示值（面值 / bonus 名 / "N Color"），非 rc 数字码（H11）
+- 实例启动后 `numberOfGames`/history 长度接近 500（回填生效；本地无 PP 会话则容忍稀疏，记 unresolved 留待线上验）
+
+**FAIL 处理**：
+- 退化成轮盘 shape → api_stats.go 缺 gametype 分支 / game_type case 大小写（H12）
+- gameResult 是 rc 码 → SETTLE appendStatHistory 用了 `evt.RC` 而非 resultDesc（H11）
+- 历史恒 <500 且非本地会话问题 → 漏接 `OnStatisticHistoryHTTP` / `StatHistoryHTTPEndpoint`（H12）
 
 ## 失败决策树
 

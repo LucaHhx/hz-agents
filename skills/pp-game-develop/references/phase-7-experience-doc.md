@@ -62,7 +62,7 @@ betsopen → betsclosingsoon → betsclosed → <startDealing/mwDealing> → <ja
 | betsopen | pass + 业务 | MarkBetsOpen + UpsertRoundStartedAt | ... |
 | betsclosed | pass + 业务 | MarkBetsClosed + SubmitBets | ... |
 | <gametype>gameresult | pass + 业务 | OnGameResult + 结算 | 结算锚 |
-| winners | pass 透传 | flushPendingWins | known-pitfalls B2 |
+| winners | drop + 重广播 | 合并我方 + per-观众币种 BroadcastToTableByCurrency + flushPendingWins | known-pitfalls B2（Model A；一局只播一次、合并失败不广播） |
 | bet/bets/win/winningBetCodes/betSpotWin/command/pong | drop | 自合成 | 客户端 main.js 0 命中（B4） |
 | switch | drop + 业务 | ctx.Reconnect | B10 |
 | seat | drop | Inactivity 我方自管 | known-pitfalls J5 |
@@ -129,7 +129,7 @@ betsopen → betsclosingsoon → betsclosed → <startDealing/mwDealing> → <ja
 - `placebet_incremental_test.go` — I6 incremental
 - `validate_test.go` — 窗口/边界/联动
 - `history_test.go` — V7a I10 BuildGameDetail 用真 gameDetail.txt XML（机台内，不是 runtime/）
-- `report_test.go` — V7b BuildGameReport 用真 roundDetail/*.html，断言 4 表 id / SVG / 视觉 ≥ 90% / 自包含 HTML
+- `client/reports/<tableId>/index.html` — V7b 报表前端页（非 Go，无 report_test.go）：自包含一机台一份，渲染对照真 roundDetail/*.html，4 表 id / SVG / 视觉 ≥ 90%
 - `v14_payout_reverse_test.go` — V14 赢钱反推（capture 真局 + roundDetail 玩家明细对照算 payoff）
 
 capture 文件作 fixture 路径（注意目录名是 hall external_code 即 `<capture_dir>`，非 PP tableId）：

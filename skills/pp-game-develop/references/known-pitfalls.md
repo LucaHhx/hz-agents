@@ -14,7 +14,14 @@
 
 **B1 tableId 字节级替换（必须）**：`HandleUpstream` 入口 `bytes.ReplaceAll(raw, ctx.PPTableID, ctx.TableID)`。不替换 → 客户端 subscribe channel 校验失败 → isTableSubscribed 永远 false → 10s 断连。
 
-**B2 winners pass 透传（默认）**：上游 winner[] 是真实玩家社交瀑布（含其他渠道/商户），**不是测试视角**。**完全丢弃** → 客户端 winnersCount=N 但 winner=[] 矛盾 + 丢失社交体验。资金安全独立：winner[] 仅展示，实际派彩走我方私聊 win 帧。
+**B1.1 B1 必须单点执行，绝不可叠加（非幂等！线上踩过双 pp）**：`ctx.TableID = table.Code = "pp"+OriginalId`，`ctx.PPTableID = table.OriginalId`——**TableID 把 PPTableID 完整包含为子串**，所以 `ReplaceAll(raw, PPTableID, TableID)` **不是幂等的**：第二遍会把已替换出的 `pptreasureadvgt001` 里那截 `treasureadvgt001` 再替一次 → `pppptreasureadvgt001`（双 pp）→ 客户端房间不匹配，**整桌所有帧（含 winners）被丢**。**铁律：B1 只在一处做**（推荐 `HandleUpstream` 入口；单测直调也安全）。**禁止** instance.handleGameMessage 与 HandleUpstream 同时各做一遍（曾在 TI/moneytime/megasicbo 双做，注释误称"幂等兜底"）。排查现象：客户端收到的帧 `table` 字段比 b_tables.code 多一截 `pp`。
+
+**B2 winners Model A 统一（drop 上游 + 合并我方 + per-观众币种广播）**：上游 winner[] 是真实玩家社交瀑布（含其他渠道/商户）。**不再 pass 透传**（旧默认已废弃：透传会让多币种观众看到混币种原值）。统一 drop 上游帧 → 合并我方下游中奖者（B2 上游 ppc 条目全保留、按 userId 去重）→ EUR 归一排序截断 → 按 `events.TableCurrencySet` 每观众会话币种 `BroadcastToTableByCurrency`。两条铁律：① **一局只广播一次**（rendezvous / 同步点单点 + take-once/guard，不加二次兜底）；② **合并失败（DB 不可用 / CollectOurWinners 出错）→ 整局不广播**（零中奖不算失败）。winners 早于 gameresult 的机台（megasicbo）须 stash 上游帧、等 settle rendezvous 再合并广播。资金安全独立：winner[] 仅展示，实际派彩走我方私聊 win 帧。
+
+**B2.1 winners 合并后必须 EUR 归一排序 + 截断 100（两个症状）**：
+① **混币种裸值排序**：合并后 winner[] 含多币种（USD/EUR/IDR/VND…），直接 `SortByWinDesc` 按裸 win 值排序 → 高面额币种（IDR/VND）小赢家挤掉 USD/EUR 大赢家、topWin 失真。
+② **我方大奖沉榜底（TI 线上事故）**：我方注入条目是 **append 在 winner[] 末尾** 的，**不排序**则玩家中了全场最大奖也排在 108 条的最后一条，客户端按序渲染 → 看着像"没上榜"（`topWin` 已对但列表顺序错）。
+**修法统一**：`handlers.SortTruncateByEUR(msg, events.WinnersListMaxLen)`（折 EUR 作排序键、缺兑率退化裸值、不改原币种，先排序再截断到 100）替代 `SortByWinDesc + TruncateToTopWinners`。自建 builder（TI 等带 mul/tiMapKeys）须自己写等价的 `sortTruncateWinnersByEUR`，且**放在 `recalcWinnersAggregate` 之后**（聚合按"我方在末尾"切片定位 oursAdded）。来源：winners Model A 改造 + TI 线上排查。
 
 **B3 多事件单帧 orderKeysByPriority**：Go map 遍历不保证顺序。显式排序：`gameresult > winners > betsclosed > betsclosingsoon > betsopen > 其他`。单帧多 key 时按 verdict 单独保留/丢弃。
 
@@ -114,7 +121,7 @@ DefaultEuroTablePayoutMax = 500000.0  // 与 main.js `?? 5e5`
 
 **H2 b_game_rounds.Extra 落盘 — 前瞻性原则**：
 
-机台所有特色协议字段必须落 Extra（结构化 JSON），不只留 RawData。判定"是否落"的标准 **不是** "当前 capture 是否触发"，而是 **"后续 BuildGameDetail / BuildGameReport 是否可能渲染"**。
+机台所有特色协议字段必须落 Extra（结构化 JSON），不只留 RawData。判定"是否落"的标准 **不是** "当前 capture 是否触发"，而是 **"后续 BuildGameDetail（XML）/ 报表前端页（经 `reportjson.extra` 透传）是否可能渲染"**。
 
 凡是上游下发的、与玩法 / 倍率 / 子序列 / 触发位 有关的字段都要落：
 
@@ -141,6 +148,17 @@ DefaultEuroTablePayoutMax = 500000.0  // 与 main.js `?? 5e5`
 **H9 roulette 必须输出全量默认 `<rouletteDetails>` 节点**：客户端解析 `g ?? u`，server 不输出节点会走空分支报错。
 
 **H10 开发期通过代码分析验证，不抓样本**：单测构造假 round 走 parser → 断言输出。capture 有 gameDetail.txt 时改为真 XML 单测。
+
+**H11 statisticHistory record 的 `gameResult` 必须是展示值，不是 rc 码**：
+SETTLE 的 `appendStatHistory` 写 Redis stat_history 时，`gameResult` 必须落**客户端展示值**——固定段=面值字符串（"1"/"2"/"5"/"10"）、bonus 段=bonus 名（"John Silver's Loot"）、roulette=`"22 Black"`，对齐 capture `tmp/<tid>/statisticHistory.txt` 的 `gameResult` 实证值；**禁止**落 raw rc 数字码（"5".."8"）。客户端"最近使用"strip 用 `gameResult` 给 bonus 局取图标，落 rc 码取不到 → **空白圆圈**。
+- 现成 helper：用 settle 的 `resultDesc(rc)` 同源映射（face value / bonus 名），不要直接 `rec.GameResult = evt.RC`。
+- 来源（本仓库实证）：treasureisland 初版 `GameResult: evt.RC` → bonus 局图标全空白，改 `settleResultDesc(evt.RC)` 修复。
+
+**H12 统计端点选择 + 启动回填（两个独立必做项，缺一面板就坏）**：
+- **端点**：从 capture `statisticHistory.txt` 每行 `_endpoint` 字段判断客户端走 `/api/ui/statisticHistory`（通用 `history[]`）还是 `/api/ui/stats`（WheelGames 族 `betSpotPercentage`/`winningBetOccurrenceStat`/`<gametype>GameStatisticHistory`）。走 /stats 必须在 api_stats.go 加 gametype 分支，否则 fall through 轮盘默认 0-36 shape → 面板空白。详见 L4.4 ①。
+- **game_type 大小写**：`resolveStatsGameType` 已 ToLower；switch case 写全小写即可，DB 录入大小写无所谓。来源：treasureisland DB `game_type="TreasureIsland"` ≠ 小写 case → 走轮盘分支、面板空白。
+- **回填**：/stats 族机台 Processor 必须实现 `OnStatisticHistoryHTTP` + `StatHistoryHTTPEndpoint()→("/api/ui/stats","noOfGames")`，否则只有开机后逐局攒、面板不足 500。两端点读同一 Redis key，回填记录与 settle 自落记录须**字段同构**（H11 同约定）。详见 L4.4 ②。
+- 来源（本仓库实证）：treasureisland 漏接回填 → `numberOfGames` 长期 <500；回填 fetcher 原硬编码 `/api/ui/statisticHistory`，对只调 /stats 的机台打错端点。
 
 ## I. 协议保真度（防"抄既有机台模板"）
 
@@ -242,9 +260,17 @@ hall-for-live 上游不支持长 PP gameId 直接取启动链接，`scripts/game
 - 不区分两者的常见 bug：机台目录名误用数字（破坏 PP 协议）/ enum.TableID 误填数字（运行时桌台路由失败）/ 老 capture 路径冲突。
 来源：scripts/game_dev/fetch_client.mjs 改造引入（hall round_detail_failed 排查时发现路径差异）。
 
-**J9 BuildGameDetail 与 BuildGameReport 是两个独立接口**
-旧 fallback 模式 `server/game/pp/runtime/history_<gametype>.go` 已废弃。两个接口现在机台内 internal 包独立实现：
-- `history.go::BuildGameDetail` —— PP `cgibin/usermanagement/audit/game.jsp` XML 历史详情（客户端"我的历史"按钮）；数据源：`tmp/<capture_dir>/gameDetail.txt`
-- `report.go::BuildGameReport` —— PP `gameHistory/game.jsp?token=...` 报表 HTML（商户后台 / 玩家"局详情"按钮）；数据源：`tmp/<capture_dir>/roundDetail/*.html`；要求 ≥ 90% 视觉还原 + SVG 卡片 + 内联 CSS 自包含
-两者数据源 / 产物 / 单测分离；同一 `historyProvider` struct 实现双接口，`factory/history_factory.go` 一次性注册即可。
-来源：jackpotwheel 后引入 registry + gatesofolympus01 实践 90% 视觉对齐时确立。
+**J9 历史详情（Go XML）与商户报表（前端页）是两套独立机制**
+旧 fallback 模式 `server/game/pp/runtime/history_<gametype>.go` 已废弃；旧 `BuildGameReport`（Go server-render HTML）+ `report.go` + `reporthtml` 已删除（report 重构）。
+- **历史详情**：`history.go::BuildGameDetail` —— PP `cgibin/usermanagement/audit/game.jsp` XML（客户端"我的历史"）；数据源 `tmp/<capture_dir>/gameDetail.txt`；机台 internal 包实现，`factory/history_factory.go` 注册 `DetailProvider`。
+- **商户报表**：后端只出通用 JSON（`/gameHistory/report` + `reportjson.Report`，**所有机台共用、无 per-machine Go 代码**）；前端每机台一份**自包含**页 `client/reports/<tableId>/index.html`（fetch JSON 渲染，≥ 90% 还原 `roundDetail/*.html`，SVG / 样式内联本页）。
+  - 🔴 **目录铁律**：一机台一份、**不共用**；**禁止共享 `_assets/` bundle / `RENDERER_BY_TABLE` 派发**（旧共享模式弃用）。即便同 gameType 多桌也各写各的。
+  - 前置：L3.1 `HandleUpstream` 调 `archiveCurrentRaw` 落 `b_game_rounds.messages`（报表 `messages` 源）；L3.3 SETTLE 落 `round`/`extra`。
+来源：jackpotwheel 后引入 registry + report 重构（PR #272）确立 JSON + 前端页 + 一机台一份。
+
+**J10 bet/bets 确认帧永远在 betsclosed 后批量发，绝不 lpbet 期间逐发**
+症状：客户端只能下一个位置——收到 `bet` 确认帧即把该位置定格，无法继续放筹码。
+真实 PP 时序（capture 实测）：`lpbet` 全程只回 `command status:success` ack；`bet`/`bets` 确认帧只在 `betsclosed`（窗口关闭）后 ≈1.2~1.4s **批量下发最终快照**（最后一帧 lpbet 的下注集，per-user 私聊）。
+🔴 **关键反例（treasureadvgt001 踩过）**：mirror-feed 机台无商户 /bet ack 步骤，AIU 误推"下注落库成功即权威 → 立即 echo"。这是**理由偷换**——即时 echo 的危害**与商户 ack 无关**，而是客户端定格。所以**无论有无商户 ack，bet echo 都在 betsclosed 后**。
+正确实现：lpbet handler 只 `MarkBetAccepted` + 覆盖 Redis 快照 + `command` ack（**不 echo bet**）；`onBetsClosed` 里 `scanUserBets` 取最终快照 → 逐用户 `events.SendToUser` 批量 echo `{"bet":{amount,betcode,seq}}`（amount 用最短 string `'f',-1`：1000→"1000"、0.1→"0.1"）。
+来源：treasureadvgt001 上线前用户发现"只能下一个位置"，对照 capture 时序定位（lpbet 期间 0 个 bet echo，全在 betsclosed 后 batch）。

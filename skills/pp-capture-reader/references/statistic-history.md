@@ -1,11 +1,28 @@
 # statisticHistory.txt — 最近局历史
 
-`fetch_client.mjs` 抓 PP `statisticHistory` 接口，每行一条 JSON 响应。客户端用这条数据画路单 / 历史小图。
+`fetch_client.mjs` 抓 PP 统计接口，每行一条 JSON 响应。客户端用这条数据画路单 / 历史小图。
 
-## Schema（roulette 系实测）
+## ⚠️ 两个端点，看 `_endpoint` 首字段区分
+
+statisticHistory.txt 同时承接**两个互斥上游端点**（按机台不同走其一），脚本给每行注入 `_endpoint` 首字段标注来源。**读之前先看它**，决定后续解析 shape + 服务端实现方式：
+
+| `_endpoint` | 顶层形态 | 谁走 |
+|---|---|---|
+| `/api/ui/statisticHistory` | `{numberOfGames, history[]}`（下方 Schema） | roulette / sweetbonanza 等通用历史机台 |
+| `/api/ui/stats` | `betSpotPercentage` / `winningBetOccurrenceStat` / `tiGameStatisticHistories` / `moneyTimeGameStatisticHistory` 等（**无 `history[]`**） | WheelGames 族（jackpotwheel/moneytime/treasureisland） |
+
+```bash
+# 本机台走哪个端点
+jq -r '._endpoint' statisticHistory.txt | sort -u
+```
+
+判断本机台走哪个端点直接决定服务端：走 statisticHistory 不写 handler（通用透传）；走 /stats 必须加 api_stats.go gametype 分支 + 启动回填 hook（详见 pp-game-develop L4.4）。老 capture（脚本改造前）无 `_endpoint`，按顶层 key 是否有 `history[]` 判断。
+
+## Schema（`/api/ui/statisticHistory` 变体，roulette 系实测）
 
 ```jsonc
 {
+  "_endpoint": "/api/ui/statisticHistory", // 脚本注入的来源端点标注（首字段）
   "errorCode": "0",
   "description": "Success",
   "history": [

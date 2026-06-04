@@ -61,14 +61,29 @@ cat "tmp/$CAPTURE_DIR/state.json" 2>/dev/null  # 检查恢复点
 > hall-for-live 上游不支持长 gameId 取启动链接，fetch_client.mjs 用 hall external_code 命名 capture 目录。
 > AI 永远从 `tableConfig.txt` 第一条记录的 `tableId` 字段反查 **真实 PP tableId**（用于机台目录命名 / enum.TableID / instance_factory 注册），目录名只是 capture 路径。
 
-- `message.txt` — game WS 双向帧（每行 JSON）
+- `message.txt` — **有头下注会话**的 game WS 双向帧（每行 JSON）= **我方 ↔ 下游用户的完整协议**（下游视角全集：广播帧 + per-user 帧 bet echo / win / 决策回执 tiDecision* / 个人派彩 tiPlayerWin / tiMapReveal 等。我方**需自合成**的帧的真实 shape 都在这；录"下注但不操作"时 per-user 帧还带 auto 建议 + `autoDec:true` → 无操作 auto-decision 默认行为）
+- `message-nobet.txt` — **无头 nobet 影子账号（不下注）**会话的 game WS 帧 = **上游广播给我方的完整协议**（mirror-feed 我方不向上游下注，生产真正收到的就是这一份；含 init 握手帧 + **每一局**全桌广播。与 message.txt 同机台、同批局、时间对齐）
 - `tableConfig.txt` — tableConfig 响应（**含真实 PP tableId 字段，AI 唯一权威**）
 - `statisticHistory.txt` — 历史响应
 - `gameDetail.txt` — `cgibin/usermanagement/audit/game.jsp` 玩家历史 XML（**BuildGameDetail 权威数据源**，每行一条，推荐 ≥ 1）
-- `roundDetail/` — `gameHistory/game.jsp?token=...` PP 报表页面 HTML 目录（**BuildGameReport 权威数据源**，每 round 一对 `{rid}.html` + `{rid}-Details-<userId>.html`，含 PP SPA 渲染完成后的 DOM + 内嵌 base64 SVG）
+- `roundDetail/` — `gameHistory/game.jsp?token=...` PP 报表页面 HTML 目录（**报表前端页 1:1 还原的权威基线**，每 round 一对 `{rid}.html` + `{rid}-Details-<userId>.html`，含 PP SPA 渲染完成后的 DOM + 内嵌 base64 SVG；report 重构后由 `client/reports/<tableId>/` 前端页复刻它，后端不再 render HTML）
 - `clientResources/apps/<gameLoaderKey>/<ver>/main.js`
 
-录制工具：pp-game 仓库 `scripts/game_dev/fetch_client.mjs`（headed 模式 + 浏览器自动点 Details 按钮，所有数据落 `.txt` / `.html`，JSONL/HTML 格式）。**本 skill 不主动录**。
+### message.txt vs message-nobet.txt —— 协议分类权威（mirror-feed 机台核心）
+
+两份同机台、同批局、时间对齐，**对照即得协议分类，零猜测**（取代旧 uId 启发式 / 事后单独补录对照）：
+
+- **`message-nobet` 有的事件** = 上游广播给我方 → 我方 mirror-feed 生产**能收到**。`HandleUpstream` 解析/转发/缓存的契约**以 message-nobet 为准**。分 A 直转 / A2 communal 演出（bonus board / dice / 开球等）/ B rewrite 注入我方（如 winners）。
+- **`message.txt` 有、`message-nobet` 没有的事件（按顶层 key diff）** = per-user 会话定向 → 我方生产**收不到、必须自合成（C 类）**：bet echo / win / tiDecision / tiDecisionInc / tiMapReveal / tiPlayerWin / betValidationError 等。**shape 从 message.txt 取**（含 auto-decision 行为）。
+  - 🔴 **C 类帧不止验 shape，必须验时序（铁律）**：每个自合成帧相对生命周期帧（betsopen/betsclosed/`<gametype>`gameresult/winners）的**发送时机**要对照 capture（看 message.txt 里该帧的 ts 落在哪些帧之间），与真实 PP 一致。错时序的典型恶果：bet echo 下注期发 → 客户端定格、只能下一个位置（J10）；win 早于 winners → 帧序错乱；tiDecisionInc 漏发/迟发 → 客户端无法进入操作。**只对内容不对时机 = bug**。
+- ⚠️ **init 回放序列 ≠ message-nobet 全集**：message-nobet 是 init 握手帧 + 每局广播的**全流**；init 回放仍按客户端状态机反向分析取「最少 + 最必要 + 尽量自合成」子集（见 phase-3-aiu-L1 DICT，逻辑不变）。**不可把 message-nobet 整段塞进 init**。
+- ⚠️ **mirror-feed 判定**：message-nobet 只发 `<ping>`、整流无 per-user 帧 → 实锤"我方不向上游下注，下游对我方下注、我方本地结算"（同 jackpotwheel）。若某机台 message-nobet 反而含 per-user（罕见，真上游下注模型），则非 mirror-feed，分类规则不适用。
+
+> **⚠️ diff 是候选不是真相 —— 双判据 + 客户端代码兜底（铁律）**：
+> 1. **采样缺口**：某帧不在 message-nobet **≠ 不广播**，可能只是没采到那种 bonus 局 / 边角触发（message-nobet 自愈重连 + `flags:'w'` 截断重录，单份覆盖有限。treasureisland 实例：某份重录后只剩 Bingo+BBM，Marbles/CFT 演出帧误入 C 列，实为广播）。→ **uId 双判据定锤**：无 uId + 桌级字段(tableId)=广播(A/A2/B)；有 uId / 个人会话定向=per-user(C)。**diff 出候选，uId + 跨多份 no-bet feed 交叉才能定**。
+> 2. **录制天然不完整，必须结合客户端代码**：capture 只是"录时恰好发生的"，**不是完整协议**。特殊 / 稀有帧（错误 betValidationError、取消 canceled、会话 session、稀有 bonus 如 rc8 CFT 录几小时都不出、桌级自动消息 toasterMessage 整份仅 1 条易漏）可能**从不出现**在任何 capture。**不可"没录到=不存在"** —— 必须结合客户端 JS chunk 协议反推（事件名/字段/渲染组件）+ 同供应商既有机台沉淀。**capture 是事实下限，非协议上限**。
+
+录制工具：pp-game 仓库 `scripts/game_dev/fetch_client.mjs`（**双路会话**：有头下注 → message.txt；无头 nobet 影子账号 → message-nobet.txt；浏览器自动点 Details，数据落 `.txt` / `.html`）。**本 skill 不主动录**。
 
 ## 8 Phase 概览 + 读取计划（progressive disclosure）
 
@@ -79,7 +94,7 @@ cat "tmp/$CAPTURE_DIR/state.json" 2>/dev/null  # 检查恢复点
 | **0** | 输入验收（含 capture 目录归属校验）+ 元信息抽取 | `references/phase-0-acceptance.md` |
 | **1** | 选 base + factory 注册检测（AI 直接 bash） | 本 SKILL.md「Phase 1」节即可 |
 | **2** | 创建 worktree（调 worktree-task-flow init-worktree.sh）— 自此无人值守 | 本 SKILL.md「Phase 2」节即可 |
-| **3** | AIU DAG 实现（5 层 18 单元，每层完成立即层间 codex 审查；**L3 拆 BuildGameDetail / BuildGameReport 两 AIU**） | `references/phase-3-aiu-overview.md`，进入某 L 时再读对应 `phase-3-aiu-LN.md` + `phase-3-layer-review.md` |
+| **3** | AIU DAG 实现（5 层 18 单元，每层完成立即层间 codex 审查；**L3.4 BuildGameDetail（Go XML）/ L3.5 报表前端页（client/reports/<tableId>/，自包含一机台一份，后端零代码）**） | `references/phase-3-aiu-overview.md`，进入某 L 时再读对应 `phase-3-aiu-LN.md` + `phase-3-layer-review.md` |
 | **4** | 自问审查 4 题 + codex_decide 每题决策 | `references/phase-4-self-review.md` |
 | **5** | 整体循环 codex review（≤5 轮） | `references/phase-5-overall-review.md` |
 | **6** | verify 14 项（含 I9/I10 + V10-V13 生产 bug 闸门 + V14 赢钱反推验证） | `references/phase-6-verify.md` |

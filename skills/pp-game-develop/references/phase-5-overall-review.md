@@ -41,10 +41,10 @@ git diff <base_branch>...HEAD —— 全 worktree 改动 vs base 分支
 
 【审查重点（与层间不同的部分）】
 1. **跨层一致性**：
-   - ENUM 常量 ↔ MODELS struct tag ↔ SETTLE 调用 ↔ HISTORY (history.go + report.go) 字段
-   - bc 在 enum.go / parse / settle / payout / history / report 全程一致
+   - ENUM 常量 ↔ MODELS struct tag ↔ SETTLE 调用 ↔ HISTORY (history.go XML) 字段；报表字段经 `reportjson.extra` 透传到前端页
+   - bc 在 enum.go / parse / settle / payout / history 全程一致
    - errorCode 在 enum.go / downstream_bet / check_bet 引用一致
-   - **round.Extra schema 一致**：settle_persistence 写入字段 ↔ extractExtra 读取字段（任意一边漏字段 = history/report 行为缺失）
+   - **round.Extra schema 一致**：settle_persistence 写入字段 ↔ extractExtra（XML）/ 前端报表页读取字段（任意一边漏字段 = history/报表 行为缺失）
 2. **race / 并发**：
    - mu / betsMu / cacheMu / pendingMu 锁保护范围
    - pendingWins 顺序保证（winners 后 flush）
@@ -61,10 +61,10 @@ git diff <base_branch>...HEAD —— 全 worktree 改动 vs base 分支
    - dictionary parity（F2）
    - I6 incremental / J1 全量快照去重回归测试
    - I7 partial-accept 测试
-   - history_test.go（机台内）用真 gameDetail.txt XML；report_test.go 用真 roundDetail/*.html HTML
+   - history_test.go（机台内）用真 gameDetail.txt XML；报表无 Go 单测——前端页 `client/reports/<tableId>/index.html` 对照真 roundDetail/*.html 视觉验收（V7b）
 6. **协议铁律 known-pitfalls A-J 全节**：
    - B1 tableId 字节替换
-   - B2 winners pass 透传
+   - B2 winners Model A（drop 上游 + 合并我方 + per-观众币种广播；一局只播一次、合并失败不广播）
    - B3 多事件单帧顺序
    - C1/C7/C9 Redis fail-closed
    - C8 payout cap

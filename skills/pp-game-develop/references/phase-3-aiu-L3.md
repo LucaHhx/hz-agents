@@ -1,8 +1,8 @@
 # Layer 3 AIU — 依赖 L2（6 并行）
 
 > 进入 L3 前确保 L2 全部完成 + 层间审查通过。
-> L3 是业务核心：上游 lifecycle / 下游下注 / 结算 / **历史 XML（BuildGameDetail）** / **报表 HTML（BuildGameReport）** / 投注校验。
-> HISTORY 拆两 AIU：DETAIL 走 PP `cgibin/.../audit/game.jsp` XML 数据源，REPORT 走 PP `gameHistory/game.jsp?token=...` HTML 报表数据源。
+> L3 是业务核心：上游 lifecycle / 下游下注 / 结算 / **历史 XML（BuildGameDetail，Go）** / **报表前端页（client/reports/<tableId>/，非 Go）** / 投注校验。
+> HISTORY 拆两 AIU：DETAIL 走 PP `cgibin/.../audit/game.jsp` XML（后端 Go 实现）；REPORT 走通用 JSON 接口 `/gameHistory/report` + **每机台自包含前端页**（后端无 per-machine 报表代码，见 L3.5）。
 
 ## L3.1 — UPSTREAM
 
@@ -14,7 +14,7 @@
 **分析输入**：
 - L2 MODELS / PROCESSOR
 - L1 ENUM 事件名 / DICT 全集
-- `tmp/<tid>/message.txt` recv 帧时序（lifecycle 顺序）
+- **`tmp/<tid>/message-nobet.txt` recv 帧时序（mirror-feed 机台：这才是我方生产真正收到的上游广播契约，HandleUpstream 解析/转发以它为准）**；`message.txt` 仅作下游完整协议对照（per-user 帧来源）
 - 协议决策表参考（known-pitfalls B 节 + 既有机台经验）
 - **方法论必读**：`<repo>/docs/integration-experience/common/upstream-frame-handling.md`
   —— 按"用途/作用"归类上游帧（跨机台 key 变体对应）+ verdict / 缓存 init 回放 /
@@ -22,6 +22,10 @@
 
 **实现内容**：
 - **tableId 字节替换 (B1)**：`HandleUpstream` 入口 `bytes.ReplaceAll(raw, ctx.PPTableID, ctx.TableID)`
+- **报表 messages 录制（L3.5 前置，必做）**：`HandleUpstream` 在 dispatch **之后**（`ctx.State.CurrentGameID`
+  已更新时）调 `archiveCurrentRaw(ctx, raw)` 把整局上游帧喂给 recorder，经 fanout 落
+  `b_game_rounds.messages`（商户报表 `messages` 数据源）。覆盖所有 return 分支（非 JSON 早退也要调）；
+  `ctx.Recorder == nil` 内部跳过（回放实例）。**漏调 = 报表 messages 永远空**（megasicbo / moneytime 曾漏）。
 - **orderKeysByPriority (B3)**：单帧多 key 按 gameresult > winners > betsclosed > betsclosingsoon > betsopen > 其他
 - **verdict 分流**：每事件 pass / drop / rewrite（按 capture 实证 + L1 DICT + 既有机台默认）。⚠️ 上游 `seat` 一律 **drop**（J5）；缓存 / 回放按帧时效语义二分（J2）—— `disablesidebets` / `timer` 等时效状态帧不缓存；`<statistic>` / `<ShoeSummary>` 等每局重发的全量快照帧必须缓存并在新连接回放；`<statisticLA>` 增量帧不缓存
 - **init cache + server 自合成 init —— 严格遵守"最少 + 最必要 + 尽量自合成"**：
@@ -99,7 +103,11 @@
 - ping/subscribe/command 路由（subscribe 是我方合成，不是上游来）
 - lpbet/placebet/pbet 解析（按 L2 BETPROTO 判定的协议形态）
 - **协议形态按 L2.2 BETPROTO 判定**：batch / 全量快照 → 按 bc 唯一直接覆盖 Redis（**不 merge**）；incremental (I6) → `loadExistingBets` + `mergeBets` + 同 bc 累加。⚠️ `lpbet` 几乎必为快照，`ck` 不可作去重键、同帧重复 bc fail-closed（J1）
-- **partial-accept (I7)**：accepted 落库 + bet echo（B5/I5）；rejected 各发 betValidationError
+- **partial-accept (I7)**：accepted 落库 + rejected 各发 betValidationError。
+- 🔴 **bet 确认帧时序铁律（J10，历史反复踩坑，违反即拒收）**：`bet`/`bets` 确认帧**永远在 `betsclosed`（窗口关闭）后批量下发最终快照**，**绝不**在 `lpbet` 期间逐帧 echo。
+  - **lpbet 期间唯一回应 = `command status:success` ack**（客户端靠它知道"收到、继续放筹码"）。
+  - ⚠️ **mirror-feed 无商户 /bet ack 步骤 ≠ 可即时 echo**："落库成功即权威 → 立即 echo" 是**错误推理**（treasureadvgt001 踩过）。即时 echo 的真正危害**与商户 ack 无关**：客户端收到 `bet` 确认会**把该位置定格 → 用户只能下一个位置**。所以无论有无商户 ack，bet echo 都在 betsclosed 后。
+  - 实现：lpbet handler 只 `MarkBetAccepted` + 覆盖 Redis 快照 + command ack；`onBetsClosed` 里 `scanUserBets` 取最终快照 → 逐用户 `events.SendToUser` 批量 echo。capture 实测 betsclosed→bet echo ≈1.2~1.4s。
 - **betValidationError 7 字段全填 (B9)**：betCode / code / extendedErrorCode / optExtErrorCode / optExtErrorMsg / category / severity
 - ⚠️ extendedErrorCode 仅 InvalidToken 等踢下线场景填 9018（**I3 dragontiger 教训**），普通错误必须留空
 - **error code 必须客户端真识别 (J4)**：拒单 `code` 必须命中客户端 main.js `betValidationError` / `rejectBet` switch 真有 toast 的分支（被禁 betCode 用 `20602` BET_NOT_ALLOWED，**不要用** `1028` / `1059` / `1060`，否则落 default 弹"请联系客服"通用错误）；拒单后**不要追发** `command status=error`
@@ -135,9 +143,9 @@
 
 **Extra 字段前瞻清单（必读 known-pitfalls.md H2「Extra 落盘 — 前瞻性原则」）**：
 
-开发 L3.3 时按 L1 dict.json 列出**所有机台特色帧 / 字段**，凡是 BuildGameDetail / BuildGameReport
-可能渲染的都要落，**禁止因为当前 capture 样本未触发而省略**。判定标准是"后续 history 详情 / report
-报表是否可能用"，不是"本局 capture 是否触发"。
+开发 L3.3 时按 L1 dict.json 列出**所有机台特色帧 / 字段**，凡是 BuildGameDetail（XML）/ 报表前端页
+（经 `reportjson.extra` 透传）可能渲染的都要落，**禁止因为当前 capture 样本未触发而省略**。判定标准是
+"后续 history 详情 / report 报表是否可能用"，不是"本局 capture 是否触发"。
 
 具体落库要求：
 
@@ -168,8 +176,8 @@
 > 机台保留旧 fallback 路径，不强制迁移。
 >
 > **L3.4 唯一职责**：实现 `BuildGameDetail` 接口（PP `cgibin/usermanagement/audit/game.jsp` XML
-> 历史详情；玩家点客户端"我的历史"按钮触发）。报表 HTML（`gameHistory/game.jsp?token=...`）由
-> 独立的 **L3.5 HISTORY_REPORT** 负责，两者数据源 / 产物 / 单测全分离。
+> 历史详情；玩家点客户端"我的历史"按钮触发）。商户报表由 **L3.5 HISTORY_REPORT** 的前端页负责
+> （通用 JSON 接口 + 每机台自包含页），与本 XML 路径数据源 / 产物 / 验收完全分离。
 
 **产物**：
 - `server/game/pp/internal/games/<gametype>/<tableId>/history.go`（**新建，机台内部**）
@@ -285,23 +293,61 @@ type <gametype>Account struct {
 
 ---
 
-## L3.5 — HISTORY_REPORT（BuildGameReport / 报表 HTML）
+## L3.5 — HISTORY_REPORT（商户报表前端页）
 
-> **L3.5 唯一职责**：实现 `BuildGameReport` 接口（PP `gameHistory/game.jsp?token=...` HTML 报表
-> 页面；商户后台 / 玩家"局详情"按钮触发）。
+> **架构改进（report 重构后引入，废弃旧 server-render HTML）**：报表**不再由后端渲染 HTML**。
+> 后端只暴露**通用** JSON 接口 `GET /gameHistory/report?token=...`（handler 通用、返回
+> `reportjson.Report`，**所有机台共用，无 per-machine Go 代码**）；商户 `/roundreport` 返回的 URL
+> 指向**静态前端页** `/reports/<tableId>/index.html?token=...`，页面 fetch JSON 后自渲染。
+> 旧 `BuildGameReport` 接口 + 各机台 `report.go` + `reporthtml` HTML 渲染**已全部删除**。
 >
-> **核心 KPI**：HTML 与 PP 真服 capture 视觉相似度 **≥ 90%**。不仅字段对齐，**HTML 骨架 / 标签 ID /
-> class / 内嵌 SVG 都要按 PP 真服样式实现**。
+> **L3.5 唯一职责**：为本机台写一份**自包含前端报表页**
+> `server/game/pp/client/reports/<tableId>/index.html`，1:1 复刻 PP 真服报表视觉。
+>
+> **核心 KPI**：与 PP 真服 capture（`roundDetail/*.html`）视觉相似度 **≥ 90%**（HTML 骨架 / 标签
+> ID / class / 内嵌 SVG 都按真服实现），只是渲染方从 Go 改为**页面内联 JS**。
+>
+> 🔴 **目录约定（铁律，report 重构后定）**：
+> - **一个机台一份，不共用**。每张桌（tableId）一个独立文件夹 `client/reports/<tableId>/`；
+>   **即便同 gameType 多桌也各写各的**，不抽公共 renderer、不跨桌共享逻辑。
+> - **全部逻辑写在该机台文件夹内**（HTML + 渲染 JS + CSS 同处，自包含、离线可读）。
+>   **禁止再用共享 `_assets/` 公共 bundle / `RENDERER_BY_TABLE` 派发**（该共享模式已弃用）。
+>   单页内联自己的渲染脚本与样式；改一桌不影响别桌。
+
+**前置依赖（L3.1 / L3.3 必须已满足，否则报表数据为空）**：
+- **L3.1 UPSTREAM**：`HandleUpstream` 末尾必须调 `archiveCurrentRaw(ctx, raw)`（dispatch 之后、
+  `ctx.State.CurrentGameID` 已更新时），把整局上游广播帧喂给 recorder → 经 fanout 落
+  `b_game_rounds.messages`（报表 `messages` 字段数据源；与归档 recorder 共用同一 AppendFrame 链路）。
+  **新机台漏调 = 报表 `messages` 永远空**（megasicbo / moneytime 曾漏，回头补）。
+- **L3.3 SETTLE**：结果结构化落 `round.Result / ResultCode / Multiplier / BonusType / CardData /
+  Extra`（报表 `round` / `extra` 字段数据源，前瞻清单同 Extra 落盘原则）。
 
 **产物**：
-- `server/game/pp/internal/games/<gametype>/<tableId>/report.go`（**新建，独立于 history.go**；含 BuildGameReport 方法 + buildGorReportHTML 入口 + write*Table 函数 + SVG 卡片 helper + round.Extra 反序列化 helper + 内联 CSS 常量）
-- 共用 history.go 已注册的 historyreg provider（同一 historyProvider struct 实现 BuildGameDetail + BuildGameReport 两个接口）
-- 注意：旧 `history_helpers.go` 拆分模式**不再使用**，所有 round.Extra 反序列化 helper 合并到 report.go（policy-pr 500 行内容纳得下，避免 helper 文件碎片化）
+- `server/game/pp/client/reports/<tableId>/index.html` —— 自包含报表页：内联 `<style>` 样式 +
+  内联 `<script>` 渲染逻辑（取 query `token` → `fetch('/gameHistory/report?token=...')` →
+  用返回 JSON 渲染 1:1 DOM）。**不引共享 JS/CSS**（PP 真服 `/css/admin.css` 这类可选外链按需）。
+- **后端零产物**：通用 handler + `reportjson.Report` 已存在，新机台不写任何 Go 报表代码。
 
-**分析输入**：
+**报表 JSON 契约（前端 fetch 到的 `reportjson.Report` 对象）**：
+```jsonc
+{ "gameType","tableId",
+  "header":{ "startedAt","settledAt","gameId","roundId","tableName","dealer" },   // 时间 RFC3339 UTC
+  "round":{ "result","resultCode","multiplier","bonusType","variant",
+            "cardData":{ "seats":[{ "place","cards":[],"score","name" }] } | null },
+  "player":{ "nickname","userId","login","casino","currency","currencySymbol",
+             "totalBet","totalPayoff","totalBetEur","totalPayoffEur" },           // EUR null=缺兑率→展示空
+  "extra":{ /* settle 落的机台特色字段，按 gameType（轮盘 winNumber / 骰宝 sicboRng / 宝藏岛 cftMap…） */ },
+  "messages":[ { "ts","payload" } ],                                              // 整局上游广播帧原文
+  "userActions":[ { "actionType","sequence","occurredAt","walletResult","data" } ],
+  "bets":[ { "id","description","betCode","status","currency","betAmount","payout","netCash",
+             "betEur","payoffEur","maxCapped","boosterEnabled","settledAt" } ] }
+```
+渲染主用 `round`/`extra`/`bets`/`player`/`header`；`messages` 是整局原始帧（需更细节时解析它）。
+
+**分析输入（1:1 还原基线，与旧 server-render 时相同，现由 JS 复刻）**：
 - **`tmp/<capture_dir>/roundDetail/<rid>.html`** —— PP SPA 渲染完成后的基线 DOM（含 gameHeader / gameResult / playerSummary 三张表 + Bonus/Multipliers/Game Result SVG 行）
-- **`tmp/<capture_dir>/roundDetail/<rid>-Details-<userId>.html`** —— 点 Details 按钮后的 modal 内容（含玩家逐笔下注 7 列：Bet Desc / Status / Bet currency / Bet / Payoff / Bet EUR / Payoff EUR）
-- 既有实现参考：`roulette/gatesofolympus01/report_html.go`（首个完整 90%+ 还原 + SVG 嵌入范例）
+- **`tmp/<capture_dir>/roundDetail/<rid>-Details-<userId>.html`** —— 点 Details 按钮后的 modal 内容（玩家逐笔下注 7 列：Bet Desc / Status / Bet currency / Bet / Payoff / Bet EUR / Payoff EUR）
+- 既有实现参考：`server/game/pp/client/reports/<已上线机台>/index.html`（重构 PR #272 起的自包含页范例）
 
 **roundDetail HTML 字段抽取 step-by-step**：
 ```bash
@@ -323,32 +369,36 @@ grep -oE '<link[^>]*href="[^"]+"' tmp/<capture_dir>/roundDetail/<rid>.html
 grep -oE 'data:image/svg[^"]+' tmp/<capture_dir>/roundDetail/<rid>.html | head -3
 ```
 
-**HTML 骨架（必须复刻；自包含 0 外部依赖，CSS 全内联）**：
+**前端页骨架（必须复刻；自包含、渲染 JS + CSS 全内联在本机台 index.html 内）**：
 
-> 不引外部 `/css/admin.css` / `/audit/game.css` / `/script/style/modal.css`。pp-game 客户端不一定
-> 能 fetch 到这些 PP 真服资源，且离线打开 HTML（如调试 / 商户后台下载）也要可读。所有视觉关键
-> 样式（表格 border / .firstCell label / .money 右对齐 / .goo-game-final 限宽 160px /
-> .goo-game-bonus-numbers inline-flex / SVG margin）全部 **内联到 `<style>` 块**。
+> 报表页是静态文件，由 JS 在浏览器渲染。视觉关键样式（表格 border / .firstCell label /
+> .money 右对齐 / .goo-game-final 限宽 160px / .goo-game-bonus-numbers inline-flex / SVG margin）
+> 全部 **内联到本页 `<style>`**；渲染逻辑全部 **内联到本页 `<script>`**（或同目录 `<tableId>/render.js`，
+> 仍只属本机台、不跨桌共享）。**不引共享 `_assets/`**；PP 真服 `/css/admin.css` 这类可选外链按需。
 
 ```html
 <!DOCTYPE html><html><head>
 <meta http-equiv="Content-Type" content="text/html; charset=utf-8">
 <title>Game Details</title>
-<style>/* 内联 PP 真服样式关键子集，自包含 */</style>
+<style>/* 本机台报表样式（PP 真服关键子集），内联自包含 */</style>
 </head><body>
-<div id="loader" class="loaderBG" style="display: none;"><div><div class="loader"></div></div></div>
-<center><div id="dataTable">
-  <table id="gameHeader">...Game started/Table name/GameId/RoundId/Dealer name...</table>
-  <table id="gameResult">
-    <tr><td class="firstCell">Bonus Number</td><td colspan="7">{bonus SVG / 文本}</td></tr>
-    <tr><td class="firstCell">Multipliers</td><td colspan="7">{multipliers SVG 卡片组}</td></tr>
-    <tr><td class="firstCell">Game Result</td><td colspan="7">{轮盘 SVG 三号码弧形}</td></tr>
-  </table>
-  <table id="playerSummary">...10 列汇总（Nick name/User id/.../EUR/Action[Details]）...</table>
-  <table id="playerDetails">...modal 内容静态展开 7 列...</table>
-</div></center>
-<div id="modal" class="modal" style="display: none;"><div class="modal-content"><table id="modalTable"></table></div></div>
-<form action="game.jsp" method="post" id="hiddenForm">...</form>
+<div id="ppreport-root">Loading…</div>
+<script>
+// 1) 取 query token  2) fetch('/gameHistory/report?token='+token)  3) 用返回 JSON 渲染下方 DOM
+// 渲染目标（与 PP 真服 roundDetail 同骨架）：
+//   <div id="loader" class="loaderBG" style="display:none">...</div>
+//   <center><div id="dataTable">
+//     <table id="gameHeader">...Game started/Table name/GameId/RoundId/Dealer name...</table>
+//     <table id="gameResult">
+//       <tr><td class="firstCell">Bonus Number</td><td colspan="7">{bonus SVG / 文本}</td></tr>
+//       <tr><td class="firstCell">Multipliers</td><td colspan="7">{multipliers SVG 卡片组}</td></tr>
+//       <tr><td class="firstCell">Game Result</td><td colspan="7">{轮盘 SVG 三号码弧形}</td></tr>
+//     </table>
+//     <table id="playerSummary">...10 列汇总（Nick name/User id/.../EUR/Action[Details]）...</table>
+//     <table id="playerDetails">...逐笔下注 7 列...</table>
+//   </div></center>
+// token 严格一次性：建议先按页面就绪再 fetch；失败/刷新需重新申请链接（产品语义）。
+</script>
 </body></html>
 ```
 
@@ -383,31 +433,30 @@ PP 真服 capture 样例（gatesofolympus01 winNumber=16）：
 - 非轮盘机台（jackpotwheel / sweetbonanza）SVG 模板从 capture roundDetail HTML 内嵌 base64 提取，**不照搬轮盘模板**
 
 **Multipliers 行**（gatesofolympus 等含 luckyMul）：
-- 数据源：`round.Extra["luckyMul"]` `[]GorLuckyMul{Mul, Slot, SlotId, IsBoosted}`（settle_persistence 已落，**L3.3 SETTLE 必须存**）
+- 数据源：`report.extra.luckyMul`（= `round.Extra["luckyMul"]` 透传，`[{mul,slot,slotId,isBoosted,boostedMul}]`，**L3.3 SETTLE 必须落齐**）
 - 文本格式：`x{mul} {slot}` 多组用空格分隔（如 `"x50 3 x100 6 x100 7 x50 18"`）
 - SVG 卡片组：每倍率一个矩形 + "x{mul}" 上 + "{slot}" 下（capture 实证；未做 SVG 时纯文本可接受降级，但视觉相似度 < 90%）
 
-**Player Summary 表**（10 列；EUR 用 `configCache.CurrencyRates.Convert(amount, currency, "EUR")`，缺兑率留空不强行 0）：
+**Player Summary 表**（10 列；EUR 用 `report.player.totalBetEur/totalPayoffEur`，缺兑率为 `null` → 展示空，不强行 0）：
 ```
 Nick name | User id | Login | Casino | Native currency | Total bet amount | Total payoff | Total bet amount EUR | Total payoff EUR | Action
 ```
-Action 列：`<input type="button" value="Details" onclick="game.getPlayerDetails('{uuid}')">`（pp-game 没 ajax 后端，按钮静态存在用于视觉对齐）
+Action 列：`<input type="button" value="Details">`（静态页无 ajax 后端，按钮仅用于视觉对齐；如需绑事件用 `addEventListener`，勿把 `userId` 拼进 inline `onclick` JS 串）
 
-**Player Details 表**（7 列，PP 真服 modal 内容；pp-game 静态展开直接渲染不依赖 ajax）：
+**Player Details 表**（7 列，PP 真服 modal 内容；静态页直接展开渲染，数据来自 `report.bets`）：
 ```
 Bet Desc | Status | Bet currency | Bet | Payoff | Bet EUR | Payoff EUR
 ```
-Status 列固定 `"Settled"`（pp-game 写盘的 txns 都已结算）。
+Status 列固定 `"Settled"`（写盘的 txns 都已结算；= `report.bets[].status`）。
 
 **B5 验收**：
-- build/vet/test 过
-- report.go + report_test.go，**测试用真 roundDetail/*.html capture 做 fixture 视觉对齐断言**（关键 selector / 字段值 / SVG 元素都在）
-- 与 capture 视觉相似度 ≥ 90%（人工目测 + 自动 diff 关键 DOM 节点）
-- 轮盘机台必含 SVG（Game Result 行不允许纯文本兜底）
-- EUR 列缺兑率时留空（PP 真服 capture 实证），不返 "0"
-- **自包含 HTML 输出**：不引任何外部 CSS / JS，所有视觉样式内联（离线打开也可读）
+- `node --check`（本机台 index.html 内联 JS 拆出校验，或同目录 `<tableId>/render.js`）语法过。
+- 浏览器用真 token URL 打开，或本地用一份真 `/gameHistory/report` JSON mock fetch（DevTools 覆写 `window.fetch`）做视觉对照 `roundDetail/*.html` capture ≥ 90%（关键 selector / 字段值 / SVG 元素都在）。
+- 轮盘机台必含 SVG（Game Result 行不允许纯文本兜底）；EUR 缺兑率留空，不返 "0"。
+- **自包含 + 不共用**：只动 `client/reports/<tableId>/`，不引共享 `_assets`、不跨桌复用；该机台文件夹独立可删可改不影响别桌。
+- 前置已满足：`messages` 非空（L3.1 archiveCurrentRaw 已调）、`round`/`extra` 字段齐（L3.3 SETTLE 已落）。
 
-**下游**：API 层 `GameRoundReport` handler 调（与 BuildGameDetail 共用同一 historyProvider）
+**下游**：商户 `/roundreport` 返回 `/reports/<tableId>/index.html?token=...`，浏览器打开即由本页 JS fetch `/gameHistory/report` 渲染（后端通用 handler，无机台特化）
 
 ---
 

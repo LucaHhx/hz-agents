@@ -249,30 +249,48 @@ gh pr merge "$PR_NUM" \
 - **不**用 `--auto`（等队列里慢慢轮的话用户自己挂 auto-merge）
 - **不**用 `--delete-branch`（删分支单独问，见 Step 7）
 
-### 7. 合并后：清理远端分支
+### 7. 合并后：清理远端分支 + 对应本地 worktree
 
 **选项顺序固定为「删除 / 保留」**，下面模板不要换。用户已养成肌肉记忆，第一项必须是「删除」。
 即使该分支是 `live` / `main` / 长期分支等"显然该保留"的情况，也不要把「保留」挪到第一位 ——
 顺序稳定优先于"推荐项靠前"。
 
+> head 分支常是 `worktree-task-flow` / `pp-game-develop` 建的隔离 worktree（签出在 `.worktrees/<name>`）。
+> 合并后远端分支 + 本地 worktree + 本地分支都成了死物，「删除」一次清干净。
+
 ```
 AskUserQuestion({
   questions: [{
-    question: "合并完成，是否删除远端 head 分支 <HEAD_BR>？",
+    question: "合并完成，是否删除远端 head 分支 <HEAD_BR>（+ 对应本地 worktree/分支）？",
     header: "删分支",
     multiSelect: false,
     options: [
-      { label: "删除", description: "gh pr <N> 已 merged，分支无用了，干净点" },
-      { label: "保留", description: "保留远端分支，自己之后处理" }
+      { label: "删除", description: "gh pr <N> 已 merged：删远端分支 + 移除对应本地 worktree + 本地分支，干净点" },
+      { label: "保留", description: "远端分支 / worktree / 本地分支都保留，自己之后处理" }
     ]
   }]
 })
 ```
 
-- 删除 → `gh api -X DELETE "repos/{owner}/{repo}/git/refs/heads/$HEAD_BR"`（或 `git push origin --delete $HEAD_BR`）
-- 保留 → 跳过
+- 保留 → 跳过（什么都不动）
+- 删除 → 依次执行：
+  1. **删远端**：`git push origin --delete "$HEAD_BR"`（或 `gh api -X DELETE "repos/{owner}/{repo}/git/refs/heads/$HEAD_BR"`）
+  2. **清对应本地 worktree**（若 head 分支有 worktree 签出）：
+     ```bash
+     # git worktree list --porcelain 里找 head 分支对应的 worktree 路径
+     WT_PATH=$(git worktree list --porcelain | awk -v b="refs/heads/$HEAD_BR" '
+       /^worktree /{p=substr($0,10)} /^branch /{if($2==b) print p}')
+     CUR=$(git rev-parse --show-toplevel)
+     if [ -n "$WT_PATH" ] && [ "$WT_PATH" != "$CUR" ]; then
+       git worktree remove "$WT_PATH"   # 工作区脏 / 加锁会拒绝（非 0），见下
+     fi
+     ```
+  3. **删本地分支**：worktree 移除成功后 `git branch -D "$HEAD_BR"`（squash merge 后本地视角未 merged，故 `-D` 强删；分支已合入远端，安全）。
 
-**本地分支不动**（用户自己决定何时清理）。
+**安全护栏（铁律）**：
+- `WT_PATH == CUR`（当前所在 / 主 worktree）→ **绝不移除**，跳过 worktree + 本地分支清理（只删远端），告知用户。
+- `git worktree remove` 默认拒绝**脏工作区 / 加锁** worktree → **不擅自 `--force`**；残留就如实告知用户"有未提交改动/锁，手动 `git worktree remove --force <path>` 后再 `git branch -D`"。
+- head 分支无对应 worktree（普通分支 PR）→ 跳过第 2 步，本地分支按需 `git branch -D`（删失败不强求，告知即可）。
 
 ### 8. 输出最终报告
 
@@ -289,6 +307,8 @@ title: <title> (#<N>)
 body: <LINES> 行 / <BYTES> bytes
 
 远端 head 分支 <HEAD_BR>：<已删除 / 已保留>
+本地 worktree <WT_PATH>：<已移除 / 无 / 跳过(当前 worktree) / 残留(脏，需手动 --force)>
+本地分支 <HEAD_BR>：<已删除 / 已保留>
 
 对比一下：默认 squash 拼接通常 500+ 行 / 30KB+，本次精简到 <LINES> 行 body / <BYTES> bytes
 （git log 总长 < 10 行）。
@@ -305,7 +325,8 @@ rm -rf .git/gh-pass/
 - **AskUserQuestion 选项顺序按本文档模板固定，禁止按场景倒**。用户已养成肌肉记忆，会习惯性选第一项；调换会误操作。"推荐"放 description 里说，不要靠重排
 - **不**用 `--admin` 绕过保护规则 / required reviewers / required checks，除非用户明确要求
 - **不**用 `--force` / `--force-with-lease`（merge 流程不该需要 force）
-- **不**自动删本地分支（用户自己决定）
+- 本地 worktree / 分支清理**仅在 Step 7 用户明确选「删除」时**做，且只针对 head 分支；绝不动当前 / 主 worktree（`WT_PATH==CUR` 跳过）
+- `git worktree remove` **不擅自 `--force`**：脏工作区 / 锁 → 如实告知用户手动处理，不替用户丢未提交改动
 - **不**碰当前 working tree 的分支（保持原状）
 - **不**做 `git pull` / `merge` / `rebase` 把别人的提交带回本地（合并是远端动作）
 - gh 未登录 → 停下提示
