@@ -1,0 +1,716 @@
+{
+  "version": "1.0.0",
+  "project": {
+    "name": "pp-game-develop",
+    "languages": [
+      "markdown"
+    ],
+    "frameworks": [
+      "Claude Code Skill"
+    ],
+    "description": "Claude Code Skill defining the PP (Pragmatic Play) game-machine integration v2 workflow: an 8-phase, mostly-autonomous pipeline that turns user-provided capture data into a working machine integration in the pp-game repo, using an AIU DAG implementation and a three-layer codex-collab review defense.",
+    "analyzedAt": "2026-06-04T04:02:33Z",
+    "gitCommitHash": "1cd010909e7e7271d504f601f3638146be754187"
+  },
+  "nodes": [
+    {
+      "id": "document:references/codex-collab.md",
+      "type": "document",
+      "name": "codex-collab.md",
+      "filePath": "references/codex-collab.md",
+      "summary": "跨 Phase 共用的 codex-collab 三模式调度参考，定义 review（代码审查）、decide（结构化决策）、discuss（多轮对话）三种模式的触发点矩阵、prompt 模板与 state.json 跟踪规则。",
+      "tags": [
+        "documentation",
+        "codex-collab",
+        "code-review",
+        "decision-making",
+        "cross-phase"
+      ],
+      "complexity": "complex",
+      "languageNotes": "包含全流程触发点矩阵与选型决策树，被所有 phase 文档引用。"
+    },
+    {
+      "id": "document:references/known-pitfalls.md",
+      "type": "document",
+      "name": "known-pitfalls.md",
+      "filePath": "references/known-pitfalls.md",
+      "summary": "协议铁律精华版，按 A–J 十大类（信息源边界、协议处理、资金 fail-closed、静默错误、序列化、测试、客户端一致性、记录展示、协议保真度、生产 bug 复盘）汇总跨 Phase 必须遵守的硬约束。",
+      "tags": [
+        "documentation",
+        "pitfalls",
+        "protocol-rules",
+        "best-practices",
+        "cross-phase"
+      ],
+      "complexity": "complex",
+      "languageNotes": "实证驱动的铁律清单，被各 phase 文档作为约束源引用。"
+    },
+    {
+      "id": "document:references/phase-0-acceptance.md",
+      "type": "document",
+      "name": "phase-0-acceptance.md",
+      "filePath": "references/phase-0-acceptance.md",
+      "summary": "Phase 0 用户输入验收 AI 自检指南，含 17 项 P0/P1/P2 通用指标速查表、按 gametype 的机台特化检查清单、协议分类 diff 与 state.json 写入模板。",
+      "tags": [
+        "documentation",
+        "phase-0",
+        "acceptance",
+        "validation",
+        "checklist"
+      ],
+      "complexity": "complex"
+    },
+    {
+      "id": "document:references/phase-3-aiu-L1.md",
+      "type": "document",
+      "name": "phase-3-aiu-L1.md",
+      "filePath": "references/phase-3-aiu-L1.md",
+      "summary": "Phase 3 AIU DAG 第一层（无依赖，3 并行）实现文档，覆盖 ENUM、DICT、ERRCODE 及 CLIENT_FRAME_EFFECTS 四个 AIU 与对应 prompt 模板。",
+      "tags": [
+        "documentation",
+        "phase-3",
+        "aiu-layer",
+        "enum-dict-errcode",
+        "implementation"
+      ],
+      "complexity": "complex"
+    },
+    {
+      "id": "document:references/phase-3-aiu-L2.md",
+      "type": "document",
+      "name": "phase-3-aiu-L2.md",
+      "filePath": "references/phase-3-aiu-L2.md",
+      "summary": "Phase 3 AIU DAG 第二层（依赖 L1，5 并行）实现文档，覆盖 MODELS、BETPROTO、RULES、PROCESSOR、INSTANCE 五个 AIU 与 prompt 模板。",
+      "tags": [
+        "documentation",
+        "phase-3",
+        "aiu-layer",
+        "models-protocol",
+        "implementation"
+      ],
+      "complexity": "moderate"
+    },
+    {
+      "id": "document:references/phase-3-aiu-L3.md",
+      "type": "document",
+      "name": "phase-3-aiu-L3.md",
+      "filePath": "references/phase-3-aiu-L3.md",
+      "summary": "Phase 3 AIU DAG 第三层（依赖 L2，6 并行）实现文档，覆盖 UPSTREAM、DOWNSTREAM_BET、SETTLE、HISTORY_DETAIL、HISTORY_REPORT、CHECK_BET 六个业务生命周期 AIU。",
+      "tags": [
+        "documentation",
+        "phase-3",
+        "aiu-layer",
+        "business-lifecycle",
+        "implementation"
+      ],
+      "complexity": "complex"
+    },
+    {
+      "id": "document:references/phase-3-aiu-L4.md",
+      "type": "document",
+      "name": "phase-3-aiu-L4.md",
+      "filePath": "references/phase-3-aiu-L4.md",
+      "summary": "Phase 3 AIU DAG 第四层（依赖 L3，6 并行）实现文档，覆盖 PAYOUT、BETSTATS、WINNERS 及 STATS_API、TABLECONFIG_API、RTP_API 三个派生产物与 API 端点。",
+      "tags": [
+        "documentation",
+        "phase-3",
+        "aiu-layer",
+        "api-endpoints",
+        "implementation"
+      ],
+      "complexity": "complex"
+    },
+    {
+      "id": "document:references/phase-3-aiu-L5.md",
+      "type": "document",
+      "name": "phase-3-aiu-L5.md",
+      "filePath": "references/phase-3-aiu-L5.md",
+      "summary": "Phase 3 AIU DAG 第五层（依赖全部，1 AIU）实现文档，覆盖 FACTORY 注册的三处改动（import、ImplementedTableIDs map、NewGameInstance switch case）与 B5 验收。",
+      "tags": [
+        "documentation",
+        "phase-3",
+        "aiu-layer",
+        "factory-registration",
+        "implementation"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "document:references/phase-3-aiu-overview.md",
+      "type": "document",
+      "name": "phase-3-aiu-overview.md",
+      "filePath": "references/phase-3-aiu-overview.md",
+      "summary": "Phase 3 AIU DAG 实现概览，定义 Analysis-Implementation Unit 概念、5 层 DAG 调度结构、机台文件布局参照、调度伪代码、失败回滚策略与各层详情索引。",
+      "tags": [
+        "documentation",
+        "phase-3",
+        "overview",
+        "aiu-dag",
+        "orchestration"
+      ],
+      "complexity": "moderate",
+      "languageNotes": "L1–L5 分层文档的父级总览，含调度伪代码与各层索引。"
+    },
+    {
+      "id": "document:references/phase-3-layer-review.md",
+      "type": "document",
+      "name": "phase-3-layer-review.md",
+      "filePath": "references/phase-3-layer-review.md",
+      "summary": "Phase 3 层间 codex 审查指南，定义每层（L1–L5）审查重点、通用 codex review prompt 结构、finding 自主分流 fix 决策与退出条件。",
+      "tags": [
+        "documentation",
+        "phase-3",
+        "code-review",
+        "layer-review",
+        "codex-collab"
+      ],
+      "complexity": "moderate"
+    },
+    {
+      "id": "document:references/phase-4-self-review.md",
+      "type": "document",
+      "name": "phase-4-self-review.md",
+      "filePath": "references/phase-4-self-review.md",
+      "summary": "Phase 4 自问审查指南，含固定 5 题（winners 一致性、初始化消息清单、非下注操作窗口、下注窗口管理、消息格式三分类）及 codex_decide 调用模板与 self-review.md 落盘格式。",
+      "tags": [
+        "documentation",
+        "phase-4",
+        "self-review",
+        "codex-decide",
+        "checklist"
+      ],
+      "complexity": "moderate"
+    },
+    {
+      "id": "document:references/phase-5-overall-review.md",
+      "type": "document",
+      "name": "phase-5-overall-review.md",
+      "filePath": "references/phase-5-overall-review.md",
+      "summary": "Phase 5 整体循环 codex review 指南，说明与层间审查的差异、全量 review 调用模板、审查重点与 fix 决策。",
+      "tags": [
+        "documentation",
+        "phase-5",
+        "code-review",
+        "overall-review",
+        "codex-collab"
+      ],
+      "complexity": "moderate"
+    },
+    {
+      "id": "document:references/phase-6-verify.md",
+      "type": "document",
+      "name": "phase-6-verify.md",
+      "filePath": "references/phase-6-verify.md",
+      "summary": "Phase 6 verify 全量验收 AI 自检指南，含 15 项验收（go build/vet/test-race/cover、policy-pr、双向协议矩阵、BuildGameDetail XML 单测、赢钱反推、统计面板对照等）与失败决策树。",
+      "tags": [
+        "documentation",
+        "phase-6",
+        "verification",
+        "acceptance",
+        "checklist"
+      ],
+      "complexity": "complex"
+    },
+    {
+      "id": "document:references/phase-7-experience-doc.md",
+      "type": "document",
+      "name": "phase-7-experience-doc.md",
+      "filePath": "references/phase-7-experience-doc.md",
+      "summary": "Phase 7 经验文档归档指南，定义 16 节全必填经验文档模板、commit 与索引更新流程及最终流程结束摘要输出。",
+      "tags": [
+        "documentation",
+        "phase-7",
+        "experience-doc",
+        "archival",
+        "template"
+      ],
+      "complexity": "moderate"
+    },
+    {
+      "id": "document:SKILL.md",
+      "type": "document",
+      "name": "SKILL.md",
+      "filePath": "SKILL.md",
+      "summary": "Entry-point skill manifest for the pp-game-develop v2 workflow that orchestrates an 8-phase, mostly-autonomous PP (Pragmatic Play) game-machine integration pipeline. Defines the trigger bootstrap (capture-dir resolution, real PP tableId reverse-lookup), user-interaction iron rules (Phase 2+ fully unattended via codex-collab), the data contract for user-supplied capture packages, the message.txt vs message-nobet.txt protocol-classification authority, and a progressive-disclosure reading table pointing to each per-phase reference doc.",
+      "tags": [
+        "entry-point",
+        "documentation",
+        "workflow",
+        "orchestrator",
+        "skill-manifest"
+      ],
+      "complexity": "moderate",
+      "languageNotes": "Skill manifest with YAML frontmatter (name/description) followed by Markdown body; embeds bash bootstrap snippets and a progressive-disclosure phase→reference reading table rather than inlining all reference content."
+    }
+  ],
+  "edges": [
+    {
+      "source": "document:references/phase-3-aiu-overview.md",
+      "target": "document:references/phase-3-aiu-L1.md",
+      "type": "related",
+      "direction": "forward",
+      "weight": 0.5
+    },
+    {
+      "source": "document:references/phase-3-aiu-overview.md",
+      "target": "document:references/phase-3-aiu-L2.md",
+      "type": "related",
+      "direction": "forward",
+      "weight": 0.5
+    },
+    {
+      "source": "document:references/phase-3-aiu-overview.md",
+      "target": "document:references/phase-3-aiu-L3.md",
+      "type": "related",
+      "direction": "forward",
+      "weight": 0.5
+    },
+    {
+      "source": "document:references/phase-3-aiu-overview.md",
+      "target": "document:references/phase-3-aiu-L4.md",
+      "type": "related",
+      "direction": "forward",
+      "weight": 0.5
+    },
+    {
+      "source": "document:references/phase-3-aiu-overview.md",
+      "target": "document:references/phase-3-aiu-L5.md",
+      "type": "related",
+      "direction": "forward",
+      "weight": 0.5
+    },
+    {
+      "source": "document:references/phase-3-aiu-overview.md",
+      "target": "document:references/codex-collab.md",
+      "type": "related",
+      "direction": "forward",
+      "weight": 0.5
+    },
+    {
+      "source": "document:references/phase-3-aiu-L2.md",
+      "target": "document:references/phase-3-aiu-L1.md",
+      "type": "depends_on",
+      "direction": "forward",
+      "weight": 0.6
+    },
+    {
+      "source": "document:references/phase-3-aiu-L3.md",
+      "target": "document:references/phase-3-aiu-L2.md",
+      "type": "depends_on",
+      "direction": "forward",
+      "weight": 0.6
+    },
+    {
+      "source": "document:references/phase-3-aiu-L4.md",
+      "target": "document:references/phase-3-aiu-L3.md",
+      "type": "depends_on",
+      "direction": "forward",
+      "weight": 0.6
+    },
+    {
+      "source": "document:references/phase-3-aiu-L5.md",
+      "target": "document:references/phase-3-aiu-L4.md",
+      "type": "depends_on",
+      "direction": "forward",
+      "weight": 0.6
+    },
+    {
+      "source": "document:references/phase-3-layer-review.md",
+      "target": "document:references/phase-3-aiu-L1.md",
+      "type": "documents",
+      "direction": "forward",
+      "weight": 0.5
+    },
+    {
+      "source": "document:references/phase-3-layer-review.md",
+      "target": "document:references/phase-3-aiu-L2.md",
+      "type": "documents",
+      "direction": "forward",
+      "weight": 0.5
+    },
+    {
+      "source": "document:references/phase-3-layer-review.md",
+      "target": "document:references/phase-3-aiu-L3.md",
+      "type": "documents",
+      "direction": "forward",
+      "weight": 0.5
+    },
+    {
+      "source": "document:references/phase-3-layer-review.md",
+      "target": "document:references/phase-3-aiu-L4.md",
+      "type": "documents",
+      "direction": "forward",
+      "weight": 0.5
+    },
+    {
+      "source": "document:references/phase-3-layer-review.md",
+      "target": "document:references/phase-3-aiu-L5.md",
+      "type": "documents",
+      "direction": "forward",
+      "weight": 0.5
+    },
+    {
+      "source": "document:references/phase-3-layer-review.md",
+      "target": "document:references/codex-collab.md",
+      "type": "related",
+      "direction": "forward",
+      "weight": 0.5
+    },
+    {
+      "source": "document:references/phase-4-self-review.md",
+      "target": "document:references/codex-collab.md",
+      "type": "related",
+      "direction": "forward",
+      "weight": 0.5
+    },
+    {
+      "source": "document:references/phase-5-overall-review.md",
+      "target": "document:references/codex-collab.md",
+      "type": "related",
+      "direction": "forward",
+      "weight": 0.5
+    },
+    {
+      "source": "document:references/phase-5-overall-review.md",
+      "target": "document:references/phase-3-layer-review.md",
+      "type": "related",
+      "direction": "forward",
+      "weight": 0.5
+    },
+    {
+      "source": "document:references/phase-3-aiu-overview.md",
+      "target": "document:references/phase-0-acceptance.md",
+      "type": "depends_on",
+      "direction": "forward",
+      "weight": 0.6
+    },
+    {
+      "source": "document:references/phase-4-self-review.md",
+      "target": "document:references/phase-3-aiu-overview.md",
+      "type": "depends_on",
+      "direction": "forward",
+      "weight": 0.6
+    },
+    {
+      "source": "document:references/phase-5-overall-review.md",
+      "target": "document:references/phase-4-self-review.md",
+      "type": "depends_on",
+      "direction": "forward",
+      "weight": 0.6
+    },
+    {
+      "source": "document:references/phase-6-verify.md",
+      "target": "document:references/phase-5-overall-review.md",
+      "type": "depends_on",
+      "direction": "forward",
+      "weight": 0.6
+    },
+    {
+      "source": "document:references/phase-7-experience-doc.md",
+      "target": "document:references/phase-6-verify.md",
+      "type": "depends_on",
+      "direction": "forward",
+      "weight": 0.6
+    },
+    {
+      "source": "document:references/phase-0-acceptance.md",
+      "target": "document:references/known-pitfalls.md",
+      "type": "related",
+      "direction": "forward",
+      "weight": 0.5
+    },
+    {
+      "source": "document:references/phase-3-aiu-L1.md",
+      "target": "document:references/known-pitfalls.md",
+      "type": "related",
+      "direction": "forward",
+      "weight": 0.5
+    },
+    {
+      "source": "document:references/phase-3-aiu-L2.md",
+      "target": "document:references/known-pitfalls.md",
+      "type": "related",
+      "direction": "forward",
+      "weight": 0.5
+    },
+    {
+      "source": "document:references/phase-3-aiu-L3.md",
+      "target": "document:references/known-pitfalls.md",
+      "type": "related",
+      "direction": "forward",
+      "weight": 0.5
+    },
+    {
+      "source": "document:references/phase-3-aiu-L4.md",
+      "target": "document:references/known-pitfalls.md",
+      "type": "related",
+      "direction": "forward",
+      "weight": 0.5
+    },
+    {
+      "source": "document:references/phase-3-aiu-L5.md",
+      "target": "document:references/known-pitfalls.md",
+      "type": "related",
+      "direction": "forward",
+      "weight": 0.5
+    },
+    {
+      "source": "document:references/phase-4-self-review.md",
+      "target": "document:references/known-pitfalls.md",
+      "type": "related",
+      "direction": "forward",
+      "weight": 0.5
+    },
+    {
+      "source": "document:references/phase-6-verify.md",
+      "target": "document:references/known-pitfalls.md",
+      "type": "related",
+      "direction": "forward",
+      "weight": 0.5
+    },
+    {
+      "source": "document:SKILL.md",
+      "target": "document:references/phase-0-acceptance.md",
+      "type": "documents",
+      "direction": "forward",
+      "weight": 0.5
+    },
+    {
+      "source": "document:SKILL.md",
+      "target": "document:references/phase-3-aiu-overview.md",
+      "type": "documents",
+      "direction": "forward",
+      "weight": 0.5
+    },
+    {
+      "source": "document:SKILL.md",
+      "target": "document:references/phase-3-aiu-L1.md",
+      "type": "documents",
+      "direction": "forward",
+      "weight": 0.5
+    },
+    {
+      "source": "document:SKILL.md",
+      "target": "document:references/phase-3-aiu-L2.md",
+      "type": "documents",
+      "direction": "forward",
+      "weight": 0.5
+    },
+    {
+      "source": "document:SKILL.md",
+      "target": "document:references/phase-3-aiu-L3.md",
+      "type": "documents",
+      "direction": "forward",
+      "weight": 0.5
+    },
+    {
+      "source": "document:SKILL.md",
+      "target": "document:references/phase-3-aiu-L4.md",
+      "type": "documents",
+      "direction": "forward",
+      "weight": 0.5
+    },
+    {
+      "source": "document:SKILL.md",
+      "target": "document:references/phase-3-aiu-L5.md",
+      "type": "documents",
+      "direction": "forward",
+      "weight": 0.5
+    },
+    {
+      "source": "document:SKILL.md",
+      "target": "document:references/phase-3-layer-review.md",
+      "type": "documents",
+      "direction": "forward",
+      "weight": 0.5
+    },
+    {
+      "source": "document:SKILL.md",
+      "target": "document:references/phase-4-self-review.md",
+      "type": "documents",
+      "direction": "forward",
+      "weight": 0.5
+    },
+    {
+      "source": "document:SKILL.md",
+      "target": "document:references/phase-5-overall-review.md",
+      "type": "documents",
+      "direction": "forward",
+      "weight": 0.5
+    },
+    {
+      "source": "document:SKILL.md",
+      "target": "document:references/phase-6-verify.md",
+      "type": "documents",
+      "direction": "forward",
+      "weight": 0.5
+    },
+    {
+      "source": "document:SKILL.md",
+      "target": "document:references/phase-7-experience-doc.md",
+      "type": "documents",
+      "direction": "forward",
+      "weight": 0.5
+    },
+    {
+      "source": "document:SKILL.md",
+      "target": "document:references/codex-collab.md",
+      "type": "documents",
+      "direction": "forward",
+      "weight": 0.5
+    },
+    {
+      "source": "document:SKILL.md",
+      "target": "document:references/known-pitfalls.md",
+      "type": "documents",
+      "direction": "forward",
+      "weight": 0.5
+    }
+  ],
+  "layers": [
+    {
+      "id": "layer:orchestration-entry",
+      "name": "Orchestration & Entry",
+      "description": "The skill manifest that orchestrates the entire 8-phase PP integration workflow: trigger detection, capture-directory resolution, user-interaction boundaries, the phase reading-plan (progressive disclosure), and state.json schema.",
+      "nodeIds": [
+        "document:SKILL.md"
+      ]
+    },
+    {
+      "id": "layer:intake-acceptance",
+      "name": "Phase 0 — Intake & Acceptance",
+      "description": "User-input acceptance and metadata extraction. Validates the capture data package (5-file contract), checks capture-directory ownership, and runs the P0/P1/P2 self-check before any implementation begins.",
+      "nodeIds": [
+        "document:references/phase-0-acceptance.md"
+      ]
+    },
+    {
+      "id": "layer:aiu-implementation",
+      "name": "Phase 3 — AIU DAG Implementation",
+      "description": "The core implementation engine: the Analysis-Implementation-Unit DAG (5 layers / 18 units) plus the per-layer codex review that gates each layer. L1 (enum/dict/errcode) → L2 (models/protocol) → L3 (business lifecycle) → L4 (api endpoints) → L5 (factory registration).",
+      "nodeIds": [
+        "document:references/phase-3-aiu-overview.md",
+        "document:references/phase-3-aiu-L1.md",
+        "document:references/phase-3-aiu-L2.md",
+        "document:references/phase-3-aiu-L3.md",
+        "document:references/phase-3-aiu-L4.md",
+        "document:references/phase-3-aiu-L5.md",
+        "document:references/phase-3-layer-review.md"
+      ]
+    },
+    {
+      "id": "layer:review-gates",
+      "name": "Phase 4–5 — Review Gates",
+      "description": "Post-implementation review defenses: the fixed 5-question self-review with per-question codex_decide (Phase 4), and the bounded overall-loop codex review (Phase 5, ≤5 rounds).",
+      "nodeIds": [
+        "document:references/phase-4-self-review.md",
+        "document:references/phase-5-overall-review.md"
+      ]
+    },
+    {
+      "id": "layer:verification-archival",
+      "name": "Phase 6–7 — Verification & Archival",
+      "description": "Final acceptance and knowledge capture: the 14/15-item verify gate (build/vet/test-race/coverage + production-bug gates + win-reversal validation) and the 16-section experience-document archival.",
+      "nodeIds": [
+        "document:references/phase-6-verify.md",
+        "document:references/phase-7-experience-doc.md"
+      ]
+    },
+    {
+      "id": "layer:cross-phase-references",
+      "name": "Cross-Phase References",
+      "description": "Shared references consulted across every phase: the codex-collab three-mode dispatch (review / decide / discuss) that is the sole decision channel from Phase 2 onward, and the known-pitfalls A–J protocol ironclad rules.",
+      "nodeIds": [
+        "document:references/codex-collab.md",
+        "document:references/known-pitfalls.md"
+      ]
+    }
+  ],
+  "tour": [
+    {
+      "order": 1,
+      "title": "Start here — the skill manifest",
+      "description": "SKILL.md is the entry point. It defines when the workflow triggers, how to resolve the capture directory (directory name = hall external_code, NOT the real PP tableId — reverse-looked-up from tableConfig.txt), the hard user-interaction boundary (Phase 0/1 may ask the user; Phase 2+ is fully unattended), the 8-phase overview with its progressive-disclosure reading plan, and the state.json schema that drives resumption.",
+      "nodeIds": [
+        "document:SKILL.md"
+      ]
+    },
+    {
+      "order": 2,
+      "title": "Phase 0 — Accept the capture data",
+      "description": "Before any code is written, Phase 0 validates the user-provided 5-file capture package and the data contract (message.txt vs message-nobet.txt protocol classification, tableConfig/gameDetail/roundDetail). The acceptance checklist (P0/P1/P2 + per-gametype checks) decides whether to proceed or reject.",
+      "nodeIds": [
+        "document:references/phase-0-acceptance.md"
+      ]
+    },
+    {
+      "order": 3,
+      "title": "The cross-phase decision channel — codex-collab",
+      "description": "From Phase 2 onward the workflow is unattended: every uncertainty goes to codex-collab instead of the user. This reference defines the three modes — review (read-only code audit), decide (structured decision), discuss (multi-turn exploration) — with prompt templates and state tracking. Read this before following the implementation phases.",
+      "nodeIds": [
+        "document:references/codex-collab.md"
+      ]
+    },
+    {
+      "order": 4,
+      "title": "Phase 3 — The AIU DAG, top down",
+      "description": "The heart of the workflow. The overview introduces the Analysis-Implementation-Unit concept and the 5-layer DAG schedule (18 units), where each layer is implemented in parallel then immediately gated by an inter-layer codex review.",
+      "nodeIds": [
+        "document:references/phase-3-aiu-overview.md"
+      ]
+    },
+    {
+      "order": 5,
+      "title": "Phase 3 — Walk the five layers",
+      "description": "Follow the dependency chain: L1 (enum/dict/errcode/client-frame, no deps) → L2 (models/betproto/rules/processor) → L3 (upstream/downstream-bet/settle business lifecycle, including BuildGameDetail Go XML and the self-contained report front-end page) → L4 (payout/betstats/winners/stats API endpoints) → L5 (factory registration). Each LN doc is read only when entering that layer.",
+      "nodeIds": [
+        "document:references/phase-3-aiu-L1.md",
+        "document:references/phase-3-aiu-L2.md",
+        "document:references/phase-3-aiu-L3.md",
+        "document:references/phase-3-aiu-L4.md",
+        "document:references/phase-3-aiu-L5.md"
+      ]
+    },
+    {
+      "order": 6,
+      "title": "Phase 3 — The per-layer review gate",
+      "description": "What turns each AIU layer from 'written' to 'accepted': the layer-review reference defines per-layer codex audit focus, the common review prompt structure, and how findings are triaged. This is the first of three review defenses.",
+      "nodeIds": [
+        "document:references/phase-3-layer-review.md"
+      ]
+    },
+    {
+      "order": 7,
+      "title": "Phase 4–5 — Two more review defenses",
+      "description": "After implementation: Phase 4 runs a fixed 5-question self-review (winners consistency, init message list, no-bet operation window, bet-window management, message-format three-way classification) each resolved via codex_decide; Phase 5 runs the bounded overall-loop codex review (≤5 rounds).",
+      "nodeIds": [
+        "document:references/phase-4-self-review.md",
+        "document:references/phase-5-overall-review.md"
+      ]
+    },
+    {
+      "order": 8,
+      "title": "Phase 6 — The verification gate",
+      "description": "The acceptance gate before archival: ~14 verify items spanning go build/vet/test-race/coverage, policy checks, the V10–V13 production-bug gates, and V14 win-reversal validation. This is where protocol fidelity is proven against the capture.",
+      "nodeIds": [
+        "document:references/phase-6-verify.md"
+      ]
+    },
+    {
+      "order": 9,
+      "title": "Protocol ironclad rules — known-pitfalls",
+      "description": "The distilled A–J protocol laws referenced throughout implementation and verification (information-source boundaries, protocol handling, fail-closed money handling, no silent errors, serialization, testing, client consistency, history display, and J = production-bug post-mortems). Grep this whenever a protocol decision is ambiguous.",
+      "nodeIds": [
+        "document:references/known-pitfalls.md"
+      ]
+    },
+    {
+      "order": 10,
+      "title": "Phase 7 — Capture the experience",
+      "description": "The workflow ends by archiving a 16-section experience document, committing it, and emitting the final summary (commits / coverage / codex-call counts / unresolved items). This closes the loop so the next machine integration starts from accumulated knowledge.",
+      "nodeIds": [
+        "document:references/phase-7-experience-doc.md"
+      ]
+    }
+  ]
+}

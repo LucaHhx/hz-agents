@@ -47,15 +47,18 @@ server 在 sendInit 路径合成哪些帧？每帧必要性（main.js 哪个分�
 - 每个操作窗口期：开启帧 / 关闭帧 / 兜底
 - 限制必要性 / 不限制后果
 
-### Q4. 下注窗口期管理
+### Q4. 下注窗口期管理 + 资金链路闭环（/bet→/result）
 
 betsopen 开启机制（MarkBetsOpen + Redis TTL 30s）/ betsclosed 关闭（DEL Redis）/ 双重 fail-closed（内存 + Redis C1）/ 空 lpbet 撤单防御（C3）/ 跨机台时序差异？
+🔴 **资金铁律（J11，必答）**：`onBetsClosed` 是否 `go handlers.SubmitBets(...,p.OnMerchantBetResult)` 向下游商户 `/bet` 扣本金？`MarkBetAccepted` 是否**只**在 `OnMerchantBetResult` accepted 分支（**绝不**在 lpbet/finishLpbet）？—— 漏调 SubmitBets = settle 只 /result 派彩 = 无扣款给钱（treasureadvgt001 P0）。"mirror-feed 不向 PP 上游下注" **不**等于"不向下游商户 /bet"。
 
 **自答模板**：
 - 开启 handler 文件:行
 - 关闭 handler 文件:行
 - 双重 fail-closed ✅/❌
 - C3 撤单防御 ✅/❌
+- **SubmitBets(OnMerchantBetResult) 在 onBetsClosed ✅/❌（文件:行）**
+- **MarkBetAccepted 仅在 OnMerchantBetResult、lpbet 路径无 ✅/❌**
 - 跨机台对比
 
 ### Q5. 消息格式三分类决策（每个事件分类必须有 capture 实证）

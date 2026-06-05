@@ -1,0 +1,157 @@
+{
+  "version": "1.0.0",
+  "gitCommitHash": "1cd010909e7e7271d504f601f3638146be754187",
+  "generatedAt": "2026-06-04T04:03:04.819Z",
+  "files": {
+    "SKILL.md": {
+      "filePath": "SKILL.md",
+      "contentHash": "5ad5a742ccc45d734c30b6e4a7f342880b9fdd00c249c0ee0dfcf49cd514d4db",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 180,
+      "hasStructuralAnalysis": true
+    },
+    "references/codex-collab.md": {
+      "filePath": "references/codex-collab.md",
+      "contentHash": "01d36600572dee71d15b6041a6c68c8d47aafdb415e8936f4d31c522688492f8",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 248,
+      "hasStructuralAnalysis": true
+    },
+    "references/known-pitfalls.md": {
+      "filePath": "references/known-pitfalls.md",
+      "contentHash": "7a84d5025a71facd2aeedc3bc0034d2ca0b08eccd2c6838c057fdf62df8a43a0",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 292,
+      "hasStructuralAnalysis": true
+    },
+    "references/phase-0-acceptance.md": {
+      "filePath": "references/phase-0-acceptance.md",
+      "contentHash": "657c08b2b0ed4f9ec79b9ddfd71c01571a5d19b270939edc2e29fdccb3824cc8",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 254,
+      "hasStructuralAnalysis": true
+    },
+    "references/phase-3-aiu-L1.md": {
+      "filePath": "references/phase-3-aiu-L1.md",
+      "contentHash": "7c5c804b3642b9e43235cceb4c173a269f5ab0b13a957fe14573c274a9bcc5eb",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 341,
+      "hasStructuralAnalysis": true
+    },
+    "references/phase-3-aiu-L2.md": {
+      "filePath": "references/phase-3-aiu-L2.md",
+      "contentHash": "bfc850b5a140c018141d230aa92ac4277c7abb44023f4a54752f67c933033016",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 155,
+      "hasStructuralAnalysis": true
+    },
+    "references/phase-3-aiu-L3.md": {
+      "filePath": "references/phase-3-aiu-L3.md",
+      "contentHash": "ab7349812f85303a6a39fb4e3f3a96486c68d1bb3f3e5f0fcd949c65069e1044",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 499,
+      "hasStructuralAnalysis": true
+    },
+    "references/phase-3-aiu-L4.md": {
+      "filePath": "references/phase-3-aiu-L4.md",
+      "contentHash": "ca8f863cdd474913b3e98e1e5a5e53e630cc66e6bc0ce220932f5bc57845de0d",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 210,
+      "hasStructuralAnalysis": true
+    },
+    "references/phase-3-aiu-L5.md": {
+      "filePath": "references/phase-3-aiu-L5.md",
+      "contentHash": "9e6d2d68f8ffcdc65a92ca6a7b67c27af91df0d972d8af595f30569a41574638",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 97,
+      "hasStructuralAnalysis": true
+    },
+    "references/phase-3-aiu-overview.md": {
+      "filePath": "references/phase-3-aiu-overview.md",
+      "contentHash": "b2056ffc6973bf8df14f0d3325233e99a6e6fa7d4eeb15f817d48b4d71832c1a",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 172,
+      "hasStructuralAnalysis": true
+    },
+    "references/phase-3-layer-review.md": {
+      "filePath": "references/phase-3-layer-review.md",
+      "contentHash": "1cd10de29ffb17fa63ff2da2a2ae3919fd24291c4dfc3cb6b74b4f6e18de488e",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 183,
+      "hasStructuralAnalysis": true
+    },
+    "references/phase-4-self-review.md": {
+      "filePath": "references/phase-4-self-review.md",
+      "contentHash": "5f320f9608da4db19eb9fc3e9472e01d763626c435741eafabd9edf2ecfe234f",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 219,
+      "hasStructuralAnalysis": true
+    },
+    "references/phase-5-overall-review.md": {
+      "filePath": "references/phase-5-overall-review.md",
+      "contentHash": "546adb41c79eb35c9b4ac9c072ec7df32d677690994977a42f1000539882bb69",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 132,
+      "hasStructuralAnalysis": true
+    },
+    "references/phase-6-verify.md": {
+      "filePath": "references/phase-6-verify.md",
+      "contentHash": "0bf2c0540c32d07f576f524d58ed65248cf6e70b1b448e25985cbaf80fc475a3",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 455,
+      "hasStructuralAnalysis": true
+    },
+    "references/phase-7-experience-doc.md": {
+      "filePath": "references/phase-7-experience-doc.md",
+      "contentHash": "62e0a81ef0e36d443b7e82c38db4d30b895c48c3025a7ad761a319e03ea04696",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 290,
+      "hasStructuralAnalysis": true
+    }
+  }
+}

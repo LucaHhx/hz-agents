@@ -66,8 +66,14 @@
     必须传 `p.OnMerchantBetResult`，**不是 nil** — 否则注单永远不 MarkBetAccepted 导致
     settle 阻断；jackpotwheel 历史 P0 教训）
   - `on<gametype>GameResult` → 结算锚（调 SETTLE 接口）
-  - `onCanceled` → DEL Redis 下注窗口
-  - `onSwitch` → ctx.Reconnect（B10：wsAddress + httpAddress 都必须 string）
+  - 🔴 **`onSwitch`（控制帧，必做，最易漏）** → 解析 `switch` 帧 `{wsAddress, httpAddress}`，
+    B10（两者都非空 + `ctx.Reconnect != nil`）才 `ctx.Reconnect(wsAddress, recvFmt)`，verdict=drop
+    不透传客户端。**PP 负载均衡随时下发 switch 让你改连另一台 gs；漏处理 → 重连同一台正在
+    drain 的服务器 → `aliveMs:1` 关闭死循环 → 整桌游戏帧全断**（treasureisland / dragontiger
+    都踩过，见 known-pitfalls B10）。dispatch 必须把 `switch` 列入已知事件（别落 unresolved/未知
+    分支被 drop 掉而不触发 Reconnect）。
+  - 🔴 **`onCanceled`（控制帧，必做）** → DEL Redis 下注窗口 + `OnRoundCancelled` 退款；
+    同样别漏（漏了作废局不关窗/不退款）。
   - `onDealer` → 解析 `dealer.value` 写入 Processor.dealerName 缓存（settle 落
     b_game_rounds.dealer_name 用；漏存导致 history XML `<seat><name>` 缺失）
   - `onSeat` → **drop**（J5：上游 `seat` 按 PP 代理账号广播、含其它会话的 idle/timeout，
@@ -105,9 +111,10 @@
 - **协议形态按 L2.2 BETPROTO 判定**：batch / 全量快照 → 按 bc 唯一直接覆盖 Redis（**不 merge**）；incremental (I6) → `loadExistingBets` + `mergeBets` + 同 bc 累加。⚠️ `lpbet` 几乎必为快照，`ck` 不可作去重键、同帧重复 bc fail-closed（J1）
 - **partial-accept (I7)**：accepted 落库 + rejected 各发 betValidationError。
 - 🔴 **bet 确认帧时序铁律（J10，历史反复踩坑，违反即拒收）**：`bet`/`bets` 确认帧**永远在 `betsclosed`（窗口关闭）后批量下发最终快照**，**绝不**在 `lpbet` 期间逐帧 echo。
-  - **lpbet 期间唯一回应 = `command status:success` ack**（客户端靠它知道"收到、继续放筹码"）。
-  - ⚠️ **mirror-feed 无商户 /bet ack 步骤 ≠ 可即时 echo**："落库成功即权威 → 立即 echo" 是**错误推理**（treasureadvgt001 踩过）。即时 echo 的真正危害**与商户 ack 无关**：客户端收到 `bet` 确认会**把该位置定格 → 用户只能下一个位置**。所以无论有无商户 ack，bet echo 都在 betsclosed 后。
-  - 实现：lpbet handler 只 `MarkBetAccepted` + 覆盖 Redis 快照 + command ack；`onBetsClosed` 里 `scanUserBets` 取最终快照 → 逐用户 `events.SendToUser` 批量 echo。capture 实测 betsclosed→bet echo ≈1.2~1.4s。
+  - **lpbet 期间唯一回应 = `command status:success` ack**（客户端靠它知道"收到、继续放筹码"）。即时 echo 会**把该位置定格 → 用户只能下一个位置**（危害与有无商户 ack 无关，纯客户端行为）。
+  - 🔴 **资金安全（J11，与时序正交，违反即资金漏洞，treasureadvgt001 P0 踩过）**：`onBetsClosed` **必须** `go handlers.SubmitBets(ctx.TableID, gameID, p.OnMerchantBetResult)` 向**下游商户** `/bet` 扣本金；**`MarkBetAccepted` 只能在 `OnMerchantBetResult` accepted 分支标，绝不在 lpbet/finishLpbet 标**。
+    - ⚠️ **"mirror-feed 无商户 /bet ack 步骤" 是错误前提**：`SubmitBets` 扣的是**下游商户**本金，与我方是否向 **PP 上游**下注**完全无关**。漏调 SubmitBets → settle 只 `/result` 派彩 = **无扣款给玩家加钱**（输局白嫖、赢局多给本金）。
+  - 实现（与 jackpotwheel 同，非 treasureisland 旧错误版）：lpbet handler 只覆盖 Redis 快照 + command ack（**不 MarkBetAccepted、不 echo**）；`onBetsClosed` 异步 `SubmitBets` → 商户 `/bet` → `OnMerchantBetResult` accepted 分支 `MarkBetAccepted` + `echoBetsAfterMerchantAck`（逐用户 `events.SendToUser` echo `{"bet":...}`，amount 最短 string `'f',-1`）；拒单分支 betValidationError + DEL bet key。MarkBetAccepted/echo 在 betsclosed 后、商户 /bet 落账后发，时序天然满足 J10。capture 实测 betsclosed→bet echo ≈1.2~1.4s。
 - **betValidationError 7 字段全填 (B9)**：betCode / code / extendedErrorCode / optExtErrorCode / optExtErrorMsg / category / severity
 - ⚠️ extendedErrorCode 仅 InvalidToken 等踢下线场景填 9018（**I3 dragontiger 教训**），普通错误必须留空
 - **error code 必须客户端真识别 (J4)**：拒单 `code` 必须命中客户端 main.js `betValidationError` / `rejectBet` switch 真有 toast 的分支（被禁 betCode 用 `20602` BET_NOT_ALLOWED，**不要用** `1028` / `1059` / `1060`，否则落 default 弹"请联系客服"通用错误）；拒单后**不要追发** `command status=error`

@@ -97,7 +97,7 @@ cat "tmp/$CAPTURE_DIR/state.json" 2>/dev/null  # 检查恢复点
 | **3** | AIU DAG 实现（5 层 18 单元，每层完成立即层间 codex 审查；**L3.4 BuildGameDetail（Go XML）/ L3.5 报表前端页（client/reports/<tableId>/，自包含一机台一份，后端零代码）**） | `references/phase-3-aiu-overview.md`，进入某 L 时再读对应 `phase-3-aiu-LN.md` + `phase-3-layer-review.md` |
 | **4** | 自问审查 4 题 + codex_decide 每题决策 | `references/phase-4-self-review.md` |
 | **5** | 整体循环 codex review（≤5 轮） | `references/phase-5-overall-review.md` |
-| **6** | verify 14 项（含 I9/I10 + V10-V13 生产 bug 闸门 + V14 赢钱反推验证） | `references/phase-6-verify.md` |
+| **6** | verify 全量（含 I9/I10 + V10-V13 生产 bug 闸门 + V14 赢钱反推 + **V16 资金安全 /bet→/result wiring 闸门**） | `references/phase-6-verify.md` |
 | **7** | 经验文档归档（16 节） | `references/phase-7-experience-doc.md` |
 
 **跨 phase 共用 references**（按需 grep，不必预读）：

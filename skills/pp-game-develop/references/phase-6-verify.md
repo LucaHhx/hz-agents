@@ -1,7 +1,7 @@
 # Phase 6 — verify 全量验收（AI 自检指南）
 
 > 触发：Phase 5 整体 codex review fix 完成。
-> 14 项验收（5 确定性 + I9/I10a/I10b/V8/V9 语义判断 + V10-V13 生产 bug 复盘闸门 + V14 赢钱反推验证）。
+> 验收清单（5 确定性 + I9/I10a/I10b/V8/V9 语义判断 + V10-V13 生产 bug 复盘闸门 + V14 赢钱反推验证 + V15 统计面板 + **V16 资金安全 /bet→/result wiring 闸门**）。
 > 阶段：❌ 禁止向用户提问；失败首次 Claude 自修；≥2 次走 codex_decide 根因分类。
 
 ## AI 执行步骤
@@ -249,23 +249,34 @@ grep -rnoE 'ErrCode[A-Za-z]+|"[0-9]{4,5}"' "$DIR"/enum.go
 
 **FAIL 处理**：换成客户端识别的 code（被禁 betCode 用 `20602` BET_NOT_ALLOWED）。
 
-### V12. seat drop + 帧时效分类审查（J2 / J5，AI 跑）
+### V12. 控制帧审查：switch/canceled 必处理 + seat drop + 帧时效（B10 / J2 / J5，AI 跑）
 
-**目的**：上游 `seat` 一律 drop；`upstream_cache` 只缓存"每局重发的全量快照帧"，不缓存时效状态帧。
+**目的**：① `switch`（源站切换）必须有 `onSwitch → ctx.Reconnect`（漏 = 重连死循环、游戏帧全断，
+treasureisland/dragontiger 踩过）；② `canceled` 必须关窗+退款；③ 上游 `seat` 一律 drop；
+④ `upstream_cache` 只缓存"每局重发的全量快照帧"，不缓存时效状态帧。
 
 **AI 检查步骤**：
 
 ```bash
 DIR=<worktree>/server/game/pp/internal/games/<gametype>/<tableId>
-# 1. seat 必须 drop
+# 1. switch 必须被处理（已知事件集 + onSwitch/handleSwitch + ctx.Reconnect），不能落 unresolved/未知 drop
+grep -nE 'switch|Switch|Reconnect' "$DIR"/*.go | grep -viE '_test|switch (key|tag|action|key |\{)'
+#   期望同时看到：事件枚举里有 "switch"、dispatch 有 case、handler 调 ctx.Reconnect
+# 2. canceled 同类控制帧也要处理（关 Redis 窗口 + OnRoundCancelled 退款）
+grep -nE 'cancel|Cancel' "$DIR"/upstream_dispatch.go "$DIR"/upstream_handlers.go
+# 3. seat 必须 drop
 grep -nE 'seat|Seat' "$DIR"/upstream_dispatch.go
-# 2. 缓存集合不得含 disablesidebets / timer / seat 等时效状态帧
+# 4. 缓存集合不得含 disablesidebets / timer / seat 等时效状态帧
 grep -nE 'cache|Cache' "$DIR"/upstream_cache.go
 ```
 
-**PASS 标准**：`seat` → drop；`upstream_cache` 缓存集合仅含 init 类（table / dealer）+ 每局重发的全量快照帧（走势 `<statistic>` / `<ShoeSummary>`）；时效状态帧（`disablesidebets` / `timer`）不在缓存集。
+**PASS 标准**：`switch` 在已知事件集且有 `onSwitch/handleSwitch` 调 `ctx.Reconnect(wsAddress, recvFmt)`
+（B10：wsAddress+httpAddress 都非空才切）；`canceled` 关窗+退款；`seat` → drop；`upstream_cache`
+仅含 init 类 + 每局全量快照帧，时效状态帧（`disablesidebets` / `timer`）不在缓存集。
 
-**FAIL 处理**：seat 透传 → 改 drop；缓存了时效状态帧 → 移除，状态改后端按权威数据自算。
+**FAIL 处理**：缺 `onSwitch`/`switch` 未登记 → 照 megasicbo/jackpotwheel/moneytime（JSON）或 megaroulette
+（XML）补上，否则 PP 一下发 switch 整桌就死循环；缺 canceled → 补关窗+退款；seat 透传 → 改 drop；
+缓存了时效状态帧 → 移除。
 
 ### V13. DB-config 前置 + post-merge live-launch checklist（清单交付，AI 填）
 
@@ -355,6 +366,37 @@ jq -r '.<historyArrayKey>[0:5][].gameResult' /tmp/srv_stats.json
 - gameResult 是 rc 码 → SETTLE appendStatHistory 用了 `evt.RC` 而非 resultDesc（H11）
 - 历史恒 <500 且非本地会话问题 → 漏接 `OnStatisticHistoryHTTP` / `StatHistoryHTTPEndpoint`（H12）
 
+### V16. 资金安全：/result 必须先有 /bet 扣款（wiring 静态审查，AI 跑）
+
+**目的**：seamless wallet 每次 `/result` 派彩前必须有成功 `/bet` 扣本金。漏调 `SubmitBets` → 无扣款派彩（凭空给钱，treasureadvgt001 P0 复盘，见 known-pitfalls J11）。V14 只验派彩金额对不对，**验不出本金有没有扣**——本闸门专查 wiring。
+
+**AI 检查步骤**：
+
+```bash
+DIR=<worktree>/server/game/pp/internal/games/<gametype>/<tableId>
+# 1. onBetsClosed 必须异步 SubmitBets 且第 3 参 = p.OnMerchantBetResult（非 nil）
+grep -nE 'handlers\.SubmitBets\([^)]*OnMerchantBetResult' "$DIR"/upstream_handlers.go \
+  || echo "❌ FAIL: onBetsClosed 未调 SubmitBets(OnMerchantBetResult)"
+# 2. lpbet/finishLpbet 路径禁止直接 MarkBetAccepted（acceptance 只能在商户 /bet 落账后）
+grep -nE 'MarkBetAccepted' "$DIR"/downstream_bet.go \
+  && echo "❌ FAIL: lpbet 路径不得 MarkBetAccepted（应在 OnMerchantBetResult）" \
+  || echo "OK: downstream_bet 无 MarkBetAccepted"
+# 3. OnMerchantBetResult accepted 分支必须 MarkBetAccepted + echo
+grep -nE 'func .*OnMerchantBetResult' "$DIR"/upstream_handlers.go \
+  && grep -nE 'MarkBetAccepted|echoBetsAfterMerchantAck' "$DIR"/upstream_handlers.go \
+  || echo "❌ FAIL: 缺 OnMerchantBetResult accepted 标记/echo"
+```
+
+**PASS 标准**：
+- onBetsClosed `go handlers.SubmitBets(ctx.TableID, gameID, p.OnMerchantBetResult)`（非 nil handler）
+- lpbet/finishLpbet **无** `MarkBetAccepted`（acceptance 仅在商户 /bet 落账后）
+- `OnMerchantBetResult` accepted 分支 `MarkBetAccepted` + echo；拒单分支 betValidationError + DEL bet key
+
+**FAIL 处理**：
+- 缺 SubmitBets → onBetsClosed 加 `go handlers.SubmitBets(ctx.TableID, gameID, p.OnMerchantBetResult)`
+- lpbet 有 MarkBetAccepted → 移到 OnMerchantBetResult accepted 分支
+- 注：通用闸门 `SettleUsersSeamless::hasSuccessfulBetDebit` 运行时兜底拦截（无 bet 流水 fail-closed），但 wiring 必须正确，不能依赖兜底让 settle 阻断。
+
 ## 失败决策树
 
 ```
@@ -400,7 +442,8 @@ jq -r '.<historyArrayKey>[0:5][].gameResult' /tmp/srv_stats.json
     "V11_errcode_client_recognized": "PASS — 拒单 code 全命中客户端 switch / 普通拒单 extendedErrorCode 空",
     "V12_seat_drop_frame_timeliness": "PASS — seat drop / 缓存集仅全量快照帧",
     "V13_db_config_live_launch": "DELIVERED — 经验文档 §12 填实 DB 前置 + post-merge 必查清单",
-    "V14_payout_reverse_check": "PASS — N round 反推一致 / 含 megawin + 普通 + 全输 三局型"
+    "V14_payout_reverse_check": "PASS — N round 反推一致 / 含 megawin + 普通 + 全输 三局型",
+    "V16_bet_debit_before_result": "PASS — onBetsClosed SubmitBets(OnMerchantBetResult) / lpbet 无 MarkBetAccepted / OnMerchantBetResult accepted 标记+echo"
   },
   "verify_failures": [
     // {"item": "V4_cover", "round": 1, "value": "18%", "fixed_by": "添加 payout_test", "round_2": "27%"}

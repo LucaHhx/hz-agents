@@ -39,6 +39,15 @@
 
 **B10 switch 帧必须含 wsAddress + httpAddress**：main.js `e&&"string"==typeof e.httpAddress&&"string"==typeof e.wsAddress` 才触发 setGameServer。两个字段都是 string 才生效。
 
+> 🔴 **历史指证：漏 `onSwitch` → 重连死循环 → 游戏帧全断（treasureisland / dragontiger 都踩过）**
+> 症状（HAR/日志）：`unresolved upstream event, drop {event:"switch"}` → `PP WS 关闭 {code:1000, aliveMs:1}` → reconnecting → 循环不停，客户端收不到任何游戏帧。
+> 根因：PP 负载均衡随时下发 `switch` 让客户端改连另一台 gs 服务器（服务端决定，跟我方代码无关）。机台**没把 `switch` 列入已知事件 / 没实现 `onSwitch`** → 当未知帧 drop → 不触发 `ctx.Reconnect` → 一直重连那台正在 drain 的旧服务器 → `aliveMs:1` 秒关死循环。
+> 修复（每个新机台必做，照已实现机台抄）：
+>   1. 事件枚举加 `switch`（JSON 机台 `EvtSwitch/TagSwitch`），并登进已知事件集（AllRecvEvents / dispatch switch case），**不能落 unresolved**。
+>   2. `onSwitch/handleSwitch`：解析 `{wsAddress, httpAddress}`，B10（两者非空 + `ctx.Reconnect!=nil`）才 `ctx.Reconnect(wsAddress, recvFmt)`，verdict=drop。
+>   3. 顺带检查 `canceled` 同类控制帧是否也漏（漏了作废局不关窗/不退款）。
+> 参考实现：megasicbo / jackpotwheel / moneytime（JSON `onSwitch`）、megaroulette（XML `<switch>` handleSwitch）。
+
 **B11 FreeChip 等未实现路径必须 fail-closed**：`<bet bcode="..." bettype="FB" ...>` 等 FreeChip 子节点，server 未实现 → 显式发 betValidationError 拒绝（如 5000 FreeChipUnknownError）+ command err；**禁止**静默跳过。
 
 ## C. 资金路径 fail-closed
@@ -271,6 +280,26 @@ hall-for-live 上游不支持长 PP gameId 直接取启动链接，`scripts/game
 **J10 bet/bets 确认帧永远在 betsclosed 后批量发，绝不 lpbet 期间逐发**
 症状：客户端只能下一个位置——收到 `bet` 确认帧即把该位置定格，无法继续放筹码。
 真实 PP 时序（capture 实测）：`lpbet` 全程只回 `command status:success` ack；`bet`/`bets` 确认帧只在 `betsclosed`（窗口关闭）后 ≈1.2~1.4s **批量下发最终快照**（最后一帧 lpbet 的下注集，per-user 私聊）。
-🔴 **关键反例（treasureadvgt001 踩过）**：mirror-feed 机台无商户 /bet ack 步骤，AIU 误推"下注落库成功即权威 → 立即 echo"。这是**理由偷换**——即时 echo 的危害**与商户 ack 无关**，而是客户端定格。所以**无论有无商户 ack，bet echo 都在 betsclosed 后**。
-正确实现：lpbet handler 只 `MarkBetAccepted` + 覆盖 Redis 快照 + `command` ack（**不 echo bet**）；`onBetsClosed` 里 `scanUserBets` 取最终快照 → 逐用户 `events.SendToUser` 批量 echo `{"bet":{amount,betcode,seq}}`（amount 用最短 string `'f',-1`：1000→"1000"、0.1→"0.1"）。
+🔴 **关键反例（treasureadvgt001 踩过）**：AIU 误推"下注落库成功即权威 → 立即 echo"。这是**理由偷换**——即时 echo 的危害**与商户 ack 无关**，而是客户端定格。所以 bet echo 永远在 betsclosed 后。
+正确实现（与 jackpotwheel 同）：lpbet handler 只覆盖 Redis 快照 + `command` ack（**不 echo bet、不 MarkBetAccepted**）；`onBetsClosed` 异步 `SubmitBets(...,p.OnMerchantBetResult)` → 商户 /bet → `OnMerchantBetResult` accepted 分支 `MarkBetAccepted` + `echoBetsAfterMerchantAck` 逐用户 `events.SendToUser` echo `{"bet":{amount,betcode,seq}}`（amount 用最短 string `'f',-1`：1000→"1000"、0.1→"0.1"）。**echo 在 betsclosed 之后、商户 /bet 落账后发，时序天然满足。**
 来源：treasureadvgt001 上线前用户发现"只能下一个位置"，对照 capture 时序定位（lpbet 期间 0 个 bet echo，全在 betsclosed 后 batch）。
+
+**J11 每次 `/result` 派彩前必须有成功的 `/bet` 扣款（seamless wallet 资金铁律，违反即资金漏洞）**
+症状：`b_wallet_transactions` 只有 `type=result` 行、无 `type=bet` 行 → 玩家从没被扣本金却照常派彩（输局白嫖、赢局多给一份本金 = 凭空给钱）。V14 只验派彩金额对不对，**验不出本金有没有扣**。
+根因（treasureadvgt001 踩过）：`onBetsClosed` 漏调 `handlers.SubmitBets`、在 lpbet 直接 `MarkBetAccepted`，settle 只调 `/result`（金额=含本金毛派彩）。错误注释把"不向 PP **上游**下注"混淆成"不向**下游商户** /bet 扣款"——`SubmitBets` 扣的是下游商户本金，与是否向 PP 上游下注无关（**所有 mirror-feed 机台同样必须 SubmitBets**）。
+铁律：① `onBetsClosed` 必须 `go handlers.SubmitBets(tableID, gameID, p.OnMerchantBetResult)`；② `MarkBetAccepted` 只在 `OnMerchantBetResult` accepted 分支标，禁止 lpbet/finishLpbet 直接标；③ 通用闸门 `handlers.SettleUsersSeamless::hasSuccessfulBetDebit`——`/result` 前查无本局该用户成功 `bet` 流水即 fail-closed（`ErrMissingBetDebit`，保留 Redis bet key 待人工），漏调 SubmitBets 的机台会在结算时被拦（玩家不被超付，但 settle 阻断 → 必须修 wiring，不能靠闸门兜底跑）。verify 见 phase-6 V16。
+来源：treasureadvgt001 上线前用户发现"只有 result 无 bet"，溯源 onBetsClosed 漏 SubmitBets；修复同时给 SettleUsersSeamless 加通用 bet-debit 闸门（pp-game 06-merchant-protocols.md 2026-06-04 指证）。
+
+**J12 写 `b_game_rounds` 的「显示/上游字符串」列宽必须 ≥ 协议族最长值，否则超长一条让整局丢库**
+症状：某一类 bonus（名字最长的那个）开奖后 `b_game_rounds` 行 `extra`/`raw_data`/`messages` **三样全空**，且该 `result_code` 全表 0 行；error.log 报 `Error 1406 (22001): Data too long for column 'bonus_type'`。
+根因（treasureadvgt001 踩过）：`bonus_type varchar(20)`/`result varchar(50)` 装不下 `"Captain Flint's Treasure"`(24 字符)；`persistRound → UpsertRoundWithDealer` 的 UPDATE **整条回滚**（不是只截断该列）→ extra/raw_data 没落、`settled_at` 没写 → `messagelog.persistMessages` 的 `WHERE result<>'' OR cancel_reason<>''` 不命中 → messages 也丢。其余短名 bonus(16–18 字符) < 20 侥幸不暴露 → **只有最长的那个 bonus 必丢数据**，极具迷惑性（看着像"某 bonus 不落库"）。
+铁律：① round 表里凡承载「bonus 名 / 开奖摘要 / 上游显示串」的列（`bonus_type`/`result` 等），`size` 必须 ≥ 该 gametype 所有 bonus 名最长值（直接放宽到 `varchar(200)` 一劳永逸），model `gorm:size:` + 数据库 `ALTER TABLE … MODIFY` 双改；② 排查"某局数据缺失"先查 `error.log` 的 `Data too long` / `Error 1406`，再 `SELECT … WHERE game_id=…`（注意预占行 `variant` 为 NULL，别用 `variant=` 过滤把它滤掉）。一条超长字符串=**整条 round 写失败**，连带 extra/raw/messages 全丢。
+来源：treasureadvgt001 上线后用户发现"中 Captain Flint's Treasure 必丢数据"，溯源列宽溢出（pp-game 2026-06-04 指证 + 经验文档第 10 节）。
+
+**J13 互动 bonus 决策窗口锚 `tiDecisionInc` 开窗时点（板面动画之后），不是 bonus 触发帧**
+症状：玩家反馈互动 bonus（逐格选择）"能操作的时间比真实 PP 少很多"，点了的格子很多没生效。
+真实 PP 时序（capture 实测，CFT rc8 + BBM rc7 **完全一致**）：`tiBonus(+0s) → 板面动画 init/booster/anim 26s → tiDecisionInc 开窗(+26s) → 玩家选 14s → finalMap 关窗(+40s) → tiGr 结算(BBM +47s / CFT +80s)`。
+根因（treasureadvgt001 踩过）：`onBonusTrigger(tiBonus,+0s)` 即 ①立刻发 tiDecisionInc ②设 auto-decision deadline=`now+15s` → 服务端 +15s 就封盘，比 PP 真正开窗 +26s **还早 11s**，玩家 +26s 后点的 pdec 全落在已 sealed 记录后被拒。
+铁律：① tiDecisionInc **延迟「板面动画时长」（实测 26s，CFT/BBM 同）后**发，对齐 PP 开窗；② deadline = `tiBonus + (板面动画 + 选择窗口)` = +40s（PP finalMap 关窗）；③ 延迟开窗的闭包**捕获 tableID 而非 ctx**（同 FlushPendingWins/armAutoDecision，避免持过期 ctx）。seal 时机：pdec 玩家走 `armAutoDecision` 定时器在 deadline 封盘，全程未操作玩家走 settle(tiGr) `autoGenInteractivePicks` 兜底。
+**附带**：CFT 是**树形向下**结构（每行选第 N 列 → 下一行只能落 N-1/N/N+1，邻列约束），auto-decision 补全**禁止 col=1 死填**（断树/跳列）；保留真人已选行后从其最后一行列继续 ±1 下潜（`cftAutoPicks(gameID,userID,existing)` 统一"没选/部分选"两场景）。
+来源：treasureadvgt001 上线后用户指证"中 CFT 自动选位乱选 + 窗口时间少"（pp-game 2026-06-04 + 经验文档第 10/11 节）。
