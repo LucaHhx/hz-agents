@@ -49,7 +49,7 @@
 
 | 类别 | 帧（roulette / game show 范例） | 分发 | 来源 |
 |---|---|---|---|
-| 公共桌态 A | `winnersList`/`recentResults`(roulette)·`spinHistory`(gs)/`bettingStats`(gs，可 enrich 我方计数)/`appInfo`/`dealer` | `gameRoom.BroadcastJSON` 一对多 | 上游一会话拉 → 直转/改写广播 |
+| 公共桌态 A | 纯直转：`recentResults`(roulette)/`spinHistory`(gs)/`appInfo`/`dealer`。🔴 `winnersList`/`bettingStats`(gs) 名为公共帧但**须先合并我方再播**（winnersList 注我方中奖者按 payout 重排、bettingStats 叠我方计数，见 B8/B11） | `gameRoom.BroadcastJSON` 一对多 | 上游一会话拉 → 直转 / 合并我方后广播 |
 | **A2 communal 演出**（game show） | `wheelSpinning`/`wheelStopping`/`wheelResult`/`bonus` 全桌开奖动画 | `BroadcastJSON` 直转、不缓存 | 上游广播 → 直转 |
 | **per-user（EVO 大头）** | roulette `tableState.betState`(剥离+回填)/`win`；game show `<gt>.bets.state`(剥离+回填) + `balanceUpdated` | `events.SendToUser` / `BroadcastToTablePerUser` 定向 | **我方本地合成（余额=商户钱包，按连接寻址）** |
 
@@ -58,7 +58,7 @@
 ### 3.1 为什么需要
 真 EVO 是 **per-player 连接**：每个玩家一条会话，服务端只把**该玩家自己**的注/余额/Rebet 推给他。我方是 **一条上游会话广播给多个下游**（代理账号模型）。若把上游帧整帧广播 → 所有下游收到代理账号的 per-session 数据（别人的注显示在自己板面、Rebet 变成代理的注、余额串账）。**修法：广播前剥离会话私有字段，下发时按连接 userId 还原本人数据。**
 
-> 🔴 **per-user 锚帧名随族而异**（机制照抄、帧名/字段从 capture 取）：roulette 在 `tableState.betState.{bets,lastGameChips,history}`；game show(IceFishing) 在 **`<gt>.bets.state.{status,chips,acceptedBets,rejectedBets,repeat,history}`**（一帧合并了 roulette 的 betState + 受理回执 `betsAccepted` + 派彩 `win` 三职能，`chips`≈bets、`repeat`≈lastGameChips、`acceptedBets[code].payout` 是 Settled 派彩）。**找 per-user 帧靠计数悬殊+per-session 字段，不靠 type 集合差**（game show 集合差为空，见 phase-0 §2A）。
+> 🔴 **per-user 锚帧名随族而异**（机制照抄、帧名/字段从 capture 取）：roulette 在 `tableState.betState.{bets,lastGameChips,history}`；game show(IceFishing) 在 **`<gt>.bets.state.{status,chips,acceptedBets,rejectedBets,repeat,history}`**（一帧合并了 roulette 的 betState + 受理回执 `betsAccepted` + 派彩 `win` 三职能，`chips`≈bets、`repeat`≈lastGameChips、`acceptedBets[code].payout` 是 Settled 派彩）。但不要把这些 type 当规则；新族必须比较 message/message-nobet 的同名帧 shape。若结果/终局/状态帧同时含公共字段和个人下注/派彩子对象，它就是 **混合帧**：公共字段可沿用上游，个人字段按连接注入，无注连接保留公共 shape。**找 per-user 帧靠计数悬殊+per-session 字段+shape diff，不靠 type 集合差**（game show 集合差为空，见 phase-0 §2A）。
 
 ### 3.2 会话私有下注态 剥离 + 回填（`roulettecore/per_user_betstate.go`；roulette=`tableState.betState`，game show=`<gt>.bets.state`，新族照抄机制换锚帧名）
 roulette 的 `tableState.betState.{bets, lastGameChips, history}` 是会话私有（game show 同理换帧名/字段名）。三个函数：
@@ -69,6 +69,14 @@ roulette 的 `tableState.betState.{bets, lastGameChips, history}` 是会话私�
 
 ### 3.3 🔴 快照时序铁律（最易错）
 `broadcastTableStatePerUser` 的 `betsByUser` 由调用方在**「触发结算清 Redis 之前」**用 `userBetsSnapshot(tableID, gameID)`（:101）抓取。因为 GAME_RESOLVED 帧在 `handleTableState` 内触发结算清注，**若 per-user 下发时现查 Redis 会读空、丢失本局注**（真 EVO 的 GAME_RESOLVED 是带注的）。新族结算锚帧同理：**先 snapshot 再清，不可颠倒**。
+
+### 3.3.1 混合帧改写规则（公共结果 + 个人字段）
+部分族的终局/结果/状态帧不是纯公共帧：同一帧里既有全桌开奖结果，也可能在有下注会话夹带本人的下注快照、受理结果或派彩。实现规则：
+- `DecodeUpstream` 仍把它列为 handle（驱动结算/状态机），但转发不能裸广播原帧。
+- 结算或状态处理必须产出 `map[userID]私有状态`，然后用 `BroadcastToTablePerUser` 构造每条连接的 payload。
+- 有私有状态的用户注入该用户字段；无注、匿名、结算失败或没有证据的连接返回原始公共帧，保持 nobet shape。
+- 对 standalone per-user 注态帧仍可继续 `SendToUser`，但若 capture 证明终局帧也夹带同一状态，两个 wire contract 都要补齐。
+- 单测要覆盖 JSON wire：未中项也要保留协议要求的显式 0/false 字段，不能被 `omitempty` 吞掉。
 
 ### 3.4 lastGameChips rebet（`userLastGameChips`，:125）
 查该用户在本桌最近一局的下注（betCode→amount，从 `b_game_transactions` 按 `table_code+user_id` 倒序取最近 gameId 的全部行），供客户端 Rebet。DB 不可用/无记录一律返 nil（best-effort，不阻断 init）。

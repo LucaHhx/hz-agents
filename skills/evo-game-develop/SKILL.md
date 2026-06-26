@@ -79,13 +79,25 @@ cat "tmp-evo/$CAPTURE_DIR/state.json" 2>/dev/null  # 检查恢复点
 
 两份同机台、同批局、时间对齐，**对照得分类**。EVO 信封一帧一事件，但 🔴 **`payload` 是 JSON 字符串**——解析一律 `jq '.payload|fromjson|.type'` 且先 `select(.dir=="recv" or .dir=="send")` 排除无 payload 的 `ws` 帧。帧名前缀随族而异（roulette=`roulette.*`，IceFishing=`icefishing.*`）。按 `type` 分**四类处置**：
 
-- **A 直转/广播**：公共桌态（roulette `winnersList`/`recentResults`；game show `<gt>.winnersList`/`<gt>.spinHistory`/`<gt>.bettingStats`(投注热度聚合，我方可叠加自家计数 enrich)）+ `appInfo`/`dealer`。
+- **A 直转/广播**：纯公共展示（roulette `recentResults`；game show `<gt>.spinHistory`）+ `appInfo`/`dealer`。🔴 **`winnersList`/`bettingStats` 名为公共帧但不在此列**——必须**先合并我方数据再广播**（winnersList 注入我方本局中奖者按 payout 重排、bettingStats 叠加我方计数），裸直转会漏我方 seamless 玩家上榜/计数（IceFishing000001 实测被用户指证，见 known-pitfalls B8/B11）。
 - **A2 communal 演出帧**（game show 常有，roulette 无）：全桌一份开奖动画（`<gt>.wheelSpinning`/`wheelStopping`/`wheelResult`/`bonus`，含 `<segment>Multipliers`/`sector`）→ **直转广播、不剥不改写、不缓存**（迟到的演出帧客户端自丢）。与结算锚帧区分：演出帧只驱动客户端动画、不碰资金。
-- **B per-user 改写**：会话私有态剥离后按下游连接回填（roulette `tableState.betState`；game show **`<gt>.bets.state`**(chips/acceptedBets/repeat/history)）+ `balanceUpdated`(drop 上游渠道余额 → 商户余额重发)。
+- **B per-user 改写**：会话私有态剥离后按下游连接回填。判定对象不是固定 type 名，而是**任一同名帧内的个人字段**：下注快照、上局 repeat、受理/拒单、派彩、个人余额等。若一个结果/终局帧在有下注会话出现个人下注/派彩子对象，而 nobet 同名帧没有该子对象，则该帧是 **公共开奖 + per-user 私有字段混合帧**：公共字段可广播，私有字段必须按连接注入；无注连接保持 nobet shape。
 - **handle 业务**：驱动状态机/结算（开窗 `betsOpen`、关窗 `betsClosed`、结算锚 roulette `tableState{GAME_RESOLVED}`+`winSpots` / game show `<gt>.gameResolved`）。
 - **C 自合成**（message.txt 有 + 上游不主动给）：下注回执（roulette `betAction` echo/`betsAccepted`；game show `<gt>.placeChips` echo/`<gt>.bets`）、个人 `win`、`betValidationError`、`fetchBalance` 应答、`subscribe` ack。**shape 从 message.txt 取**。
 
-🔴 **找 per-user 帧的判据（铁律，最易错）**：**不能只靠 type 集合差（`comm -23`）**——那只对「per-user 帧从不广播」的 roulette 类成立；**game show 所有 type 两份 feed 都有，集合差为空** → 必改用 **①两份计数悬殊（IceFishing `<gt>.bets` 146 vs 50、`balanceUpdated` 98 vs 1）+ ②per-session 字段实证（影子会话该帧 chips/acceptedBets/balance 恒空/默认）**。
+🔴 **找 per-user 帧的判据（铁律，最易错）**：**不能只靠 type 集合差（`comm -23`）**——那只对「per-user 帧从不广播」的族成立；同名帧也可能一边是公共空壳、一边夹带个人字段。每个 type 必须做三层 diff：①计数差；②`args` key-set / 嵌套 key-set 差；③字段值域差（影子会话个人字段恒空/默认，有下注会话出现筹码、受理、派彩、余额）。只要同名帧含个人字段，就不能裸广播。
+
+#### 消息分类判定方法（不要写死 type）
+
+对每个 `recv` / `send` type 生成一张 `message_classification` 表，逐项写 capture 证据：
+
+| 判定问题 | 归类 |
+|---|---|
+| 是否改变下注窗口、当前局号、开奖结果、取消/退款、结算倍率，或后续资金处理依赖它？ | **handle**。处理业务副作用；若同帧还含个人字段，再叠加 B per-user 改写。 |
+| 同名帧在 message 有个人字段、message-nobet 无或为空；或计数明显随下注增加；或字段语义是本人注单/余额/派彩/受理/拒单/rebet？ | **B per-user 改写/drop+重发**。不能裸广播；按连接 userId 构造。 |
+| 是否只驱动全桌动画、走势、荷官、桌信息、公共倍率展示，且两份 feed shape/值域一致，无个人字段？ | **A/A2 直转**。演出帧通常不缓存；init/走势类按需缓存。 |
+| 是否是上游不会给我方、但客户端下注/初始化/设置/余额流程必须收到的回执？ | **C 自合成**。shape 从 message.txt 的 send/recv 样本取。 |
+| 是否是上游渠道账号余额、订阅 ack、心跳、影子账号恢复标记、连接踢出等不应给下游的代理会话数据？ | **drop**。需要时由我方按下游连接自合成等价帧。 |
 
 🔴 **per-user 帧时序 + 余额来源（铁律）**：① 余额用**商户钱包**（drop 上游渠道 USD `balanceUpdated`，**按下游连接寻址 per-connection 重发**——`balanceUpdated` 不一定带 playerId，IceFishing 只含 `balance/balances[]/currencyCode/tableId`，靠 ws 连接定向），客户端 ~6s 收不到即重连；② 下发帧 `tableId` 用**裸 EVO tableId**（PPTableID），填 code 客户端判「未收到」；③ 结算 per-user 帧在**结算锚帧触发清 Redis 之前**抓 `userBetsSnapshot`；④ `currencyMult` 进制——所有金额按币种乘系数。
 

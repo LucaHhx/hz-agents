@@ -31,7 +31,14 @@
 
 **B7 subscribe channel = `table-<裸 EVO tableId>`**：channel 不匹配 → 客户端丢全部桌态帧。一上游 fan-out 多下游，subscribe 必须 server 自合成（C 类）。
 
-**B8 winnersList 多币种按观众币种广播**：roulette 等纯展示直转或 `BroadcastToTableByCurrency`（多币种观众各看本币）。新族社交瀑布需注入我方中奖者：drop 上游 → 合并我方 → EUR 归一排序截断 100 → per-观众币种广播（一局只播一次、合并失败不广播）。⚠️ winnersList 易被 winSpots 广播扰乱时序。
+**B8 winnersList 名为公共帧但绝不能裸直转——必须先合并我方下游中奖者再广播**（IceFishing000001 实测漏合并被用户指证：本人净中 10000 该在榜上排第二，因直转上游榜而不见自己）。上游 winnersList 只含别家赌场真实玩家（我方下注本地拦截、从不发上游 → 上游榜结构上**永不含我方玩家**）。修法（镜像 PP moneytime/jackpotwheel，icefishing `winners_broadcast.go`）：
+- **拦截不直转**：`HandleUpstream` 收该帧 → 解码 → 合并 → 重 marshal **替换**原帧 `return true, merged`（1 进 1 出、**只广播一次**、不新增广播调用）；合并失败 `return false,nil`。
+- **合并我方中奖者**：`handlers.CollectOurWinners(tableID, gameID)`（PP 既有能力 6，查 b_game_transactions is_win）→ `[]WinnerInfo{ScreenName(=会话 Nickname), NetWin(**含本金**，与个人 bets.payout 同口径)}` → 追加 winners 数组、按 payout 降序、**截断回上游原 len**（上游空则留我方全部）。
+- **聚合字段透传**：`winnersCount`/`bettorsCount`/`totalAmount` 全场口径（远大于我方量级、币种为上游展示币种）→ **透传上游原值不动**，只插 winners 数组。
+- **合并铁律（用户指证）**：先合并再广播；合并失败（DB nil / CollectOurWinners err / 解码失败）→ **整局不广播 winners**（宁缺勿错）；我方零中奖不算失败 → 原样透传上游帧。
+- **EVO 条目只有 `screenName`、无 userId**（与 PP moneytime 含 userId 不同）→ **无需按 userId 去重**（上游全别家玩家、结构上不撞），直接追加排序截断。
+- **时序**：依赖 winnersList 在 `gameResolved` 结算落库**之后**到达（CollectOurWinners 才查得到本局）；偶发乱序（先到）→ 退化为不含我方（不影响资金）。⚠️ winnersList 易被结算锚帧（roulette winSpots）广播扰乱时序。
+- **多币种**：icefishing 单份广播即可（payout 用玩家本币 NetWin）；PP moneytime 的 EUR 归一 + per-观众币种 `BroadcastToTableByCurrency` 是该族增强，EVO 现未做、按需评估。
 
 **B9 betValidationError code 必须客户端真识别**：拒单 code 命中 bundle 的 toast 分支；普通拒单 `extendedErrorCode` 留空（仅会话失效填）；拒单后不追发错误命令（否则落 default 通用错误弹窗）。
 
@@ -40,6 +47,10 @@
 **B11 game show `bettingStats` 须按需 enrich，「EVO 无 betstats」是 roulette 过拟合**：game show 高频广播 `<gt>.bettingStats`（IceFishing 428 帧最高频，args=`{gameId,bettors,watchers}`）。直转会让在桌人数只反映上游侧、漏我方 seamless 玩家。**新族必须先 grep `bettingStats`/`stats` 帧**：需计入我方则 drop 上游 → 合并我方本局有注用户数到 `bettors`、连接数到 `watchers` → 广播。🔴 **是聚合计数、非 per-player**——只能加我方聚合计数，**不能从中取/注单个玩家注**（与 winnersList 不同）。
 
 **B12 `restore.begin`/`restore.end` 重连恢复包（game show，per-connection 状态重放）**：(re)connect/subscribe 后上游用 `<gt>.restore.begin`…`restore.end`（args `{version}`）包住一批桌态帧重放当前快照。下游连接接入时**我方伪服务端须自合成等价 restore 包**（begin → 公共桌态 + 本连接 per-user 注帧 + 余额 + 走势 → end），否则刚接入客户端无初始态、黑屏/空板。**勿把 restore.begin/end 当未知帧 drop、勿原样转发上游 restore（含他人/影子态）**。roulette 无此帧。
+
+**B13 公共结果帧可能夹带个人结算字段，不能只按 type 判直转**：EVO 一些族会把全桌开奖结果和本会话下注/派彩状态放在同一帧。message-nobet 的同名帧可能只有公共字段；message.txt 的同名帧在玩家下注后才出现个人子对象。判断方法必须是 `type count + args key-set + 嵌套 key-set + 字段值域` 四项对照：凡出现本人注单、受理/拒单、派彩、余额、rebet 等字段，该帧就是 **handle/B 混合帧**，必须 `BroadcastToTablePerUser` 注入本用户状态；无注连接保留公共 shape。禁止因为该帧也包含开奖结果/动画字段就裸广播。
+
+**B14 bonus 子游戏公开帧可能缺 per-session 选择字段，结算要找权威终局倍率**：bonus 演出/结果帧可能在 nobet mirror-feed 只给公共倍率表，不给本会话选择点；有下注会话则可能多出自动选择/个人选择字段。分析时要比较同名帧 shape，并确认结算倍率来源。若终局/结算锚帧有最终 `totalMultiplier`，而 bonus 子帧缺少可用个人选择倍率，资金结算必须 fallback 到终局倍率；数字段仍按本族 odds/slot multiplier 公式，不能统一套 `totalMultiplier`。
 
 ## C. 资金路径 fail-closed（同 PP，EVO 照守）
 

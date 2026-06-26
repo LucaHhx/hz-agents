@@ -84,7 +84,36 @@ echo "=== 只在 message.txt 的 type（roulette 类 per-user）==="; comm -23 <
 echo "=== 计数悬殊帧（per-user 候选）：手动比上两份计数，如 bets 146 vs 50、balanceUpdated 98 vs 1 ==="
 ```
 
-🔴 **方法选择**：先跑方法①，若 `comm -23` 输出**为空**（game show 典型，所有 type 两份都有）→ 改方法②：**计数悬殊 + per-session 字段实证**（影子会话该帧的 `chips/acceptedBets/balance` 恒空/默认）。**别因集合差为空就判「无 per-user 帧」。**
+🔴 **方法选择**：先跑方法①，若 `comm -23` 输出**为空**（game show 典型，所有 type 两份都有）→ 改方法②：**计数悬殊 + per-session 字段实证**（影子会话该帧的个人字段恒空/默认）。**别因集合差为空就判「无 per-user 帧」。**
+
+🔴 **必须补跑 shape diff（防漏“公共帧夹带个人字段”）**：type 集合与计数只能找候选，最终分类要比较每个同名 type 的 `args` key-set、嵌套 key-set、字段值域。尤其结果/终局类帧：若有下注会话的同名帧出现下注快照、受理/拒单、派彩、余额、rebet 等个人子对象，而 nobet 同名帧没有或为空，则该帧不是纯公共广播，而是 **handle + B per-user 改写**。
+
+```bash
+# 每个 type 的 args 顶层 shape：找同名帧字段差异
+node - "$CD" <<'NODE'
+const fs=require('fs'); const CD=process.argv[2];
+function rows(f){return fs.readFileSync(`tmp-evo/${CD}/${f}`,'utf8').trim().split(/\n+/).filter(Boolean)
+  .map((l,i)=>{const r=JSON.parse(l); if(r.dir!=='recv'||!r.payload) return null;
+    const p=JSON.parse(r.payload); return {line:i+1,type:p.type||'(root)',args:p.args||{}};}).filter(Boolean)}
+function shapes(rs){const m=new Map(); for(const r of rs){const s=Object.keys(r.args).sort().join(',');
+  if(!m.has(r.type)) m.set(r.type,new Map()); m.get(r.type).set(s,(m.get(r.type).get(s)||0)+1)} return m}
+const a=shapes(rows('message.txt')), b=shapes(rows('message-nobet.txt'));
+for (const t of [...new Set([...a.keys(),...b.keys()])].sort()) {
+  const sa=[...(a.get(t)||new Map()).keys()].sort(), sb=[...(b.get(t)||new Map()).keys()].sort();
+  if (JSON.stringify(sa)!==JSON.stringify(sb)) console.log(`${t}\n  message: ${sa.join(' | ')}\n  nobet:   ${sb.join(' | ')}`);
+}
+NODE
+```
+
+shape diff 后逐个 type 填判定依据：
+
+| 证据 | 说明 | 归类倾向 |
+|---|---|---|
+| 字段会改变下注窗口/局状态/开奖/取消/倍率 | 业务状态机或资金结算依赖 | handle |
+| 字段只在下注会话出现，或 nobet 恒空/默认 | 个人注单、个人余额、受理、拒单、派彩、rebet | B per-user 或 C 自合成 |
+| 两份 feed shape/值域一致，且只影响动画/走势/公共展示 | 全桌公共信息 | A/A2 直转 |
+| message.txt 有客户端必须收到的回执，上游 mirror-feed 不会提供 | server 要模拟 EVO 服务端 | C 自合成 |
+| 上游代理会话私有、不能代表下游用户 | 渠道余额、订阅 ack、心跳、恢复标记等 | drop 或本地重发 |
 
 EVO 实测分类——**roulette 范例（方法论照搬、type 名/shape 必从本族 capture 重取，禁照抄帧名）**：
 
@@ -92,7 +121,7 @@ EVO 实测分类——**roulette 范例（方法论照搬、type 名/shape 必�
 |---|---|---|---|
 | `tableState`(5 态) | 两份 | **handle + B per-user**（betState 剥离回填） | 离散事件 `<gt>.betsOpen/betsClosed/.../gameResolved`(handle) + `<gt>.bets`(B per-user，state.{chips,acceptedBets,repeat,history}) |
 | `winSpots` | 两份 | handle 触发派彩 | `<gt>.gameResolved`(结算锚 handle，result+倍率盘) |
-| `winnersList` | 两份 | **A 直转/合并我方** | `<gt>.winnersList`(同) |
+| `winnersList` | 两份 | **合并我方中奖者后广播**（非纯直转，B8） | `<gt>.winnersList`(同) |
 | `recentResults` | 两份 | A 直转（走势） | `<gt>.spinHistory`(同) |
 | （无演出帧） | — | — | **A2 communal 演出**：`<gt>.wheelSpinning/wheelStopping/wheelResult/bonus`(全桌动画直转不缓存) |
 | （无 betstats） | — | — | **A 直转/enrich**：`<gt>.bettingStats{bettors,watchers}`(最高频聚合计数，可加我方聚合) |
@@ -102,7 +131,7 @@ EVO 实测分类——**roulette 范例（方法论照搬、type 名/shape 必�
 | `betsAccepted`/`betActionResponse` | 仅 message.txt | **C 自合成** | **无独立受理帧**——受理结果就在 `<gt>.bets.state.{acceptedBets,rejectedBets}` |
 | `fetchBalance`/`metrics.ping` | 仅 message.txt | C 自合成应答 | 同 + `settings.update`(筹码偏好) |
 
-- ⚠️ **影子账号"只看不动" → message-nobet 的 per-user 帧只剩公共空壳**（per-session 字段为空），但**同名帧仍会广播**——这是 mirror-feed 实锤，也是方法①对 game show 失效的原因。
+- ⚠️ **影子账号"只看不动" → message-nobet 的 per-user 字段只剩公共空壳或完全缺失**，但**同名帧仍可能广播**——这是 mirror-feed 实锤，也是方法①对 game show 失效的原因。
 - ⚠️ **diff 是候选不是真相**：① 帧频悬殊是判 per-user 的判据（方法②），但**不能拿 message.txt 帧频推断广播频率**（广播频率只看 nobet）；② capture 天然不完整，稀有帧（`canceled`/`gameCancelled`/`betValidationError`/`restore`/特殊货币/大奖）可能从不出现 → 结合 `clientResources/frontend/evo/mini/js/` 反推 + roulette 既有实现，**不可"没录到=不存在"**。
 
 ## 3. 机台特化检查清单（**AI 按 gametype 选**）

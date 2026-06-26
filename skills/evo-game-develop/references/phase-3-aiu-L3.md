@@ -18,7 +18,7 @@
 - **`DecodeUpstream(raw) → DispatchResult{Type, Disposition, Args, Err}`**：解强类型 `Envelope` 拿 Type → switch → 反序列化对应 `ArgsXxx` + 标 `DispBroadcast`/`DispHandle`/`DispDrop`/`DispUnknown`。**业务关键帧（tableState/winSpots）解析失败必报错，不静默吞。**
   - **无 type 的 root-key 帧**（EVO init 期 `subscribe`/`dealer`/`time`）：按顶层 key 识别（`dealer`→缓存+广播、`subscribe`→drop、`time`→drop）。⚠️ **旧实现一律 Err 丢弃 → dealer 永不缓存 → 客户端无荷官名**（roulettecore 已修，新族照抄）。
 - **处置分流（按 §2A 四类 + message_classification，**帧名按本族 DICT**）**：
-  - **DispBroadcast（A）**：`winnersList`/`recentResults`(roulette)·`spinHistory`(gs)/`bettingStats`(gs 投注热度聚合)/`appInfo`/`dealer` 直转广播
+  - **DispBroadcast（A）**：`recentResults`(roulette)·`spinHistory`(gs)/`appInfo`/`dealer` 直转广播。🔴 `winnersList`/`bettingStats`(gs) **不归 DispBroadcast 裸直转**——拦截后合并我方数据（winnersList 注本局中奖者 / bettingStats 叠聚合计数）再广播（见 §3.3 / L4 WINNERS / B8·B11）
   - **DispBroadcast（A2 communal 演出，game show）**：`<gt>.wheelSpinning/wheelStopping/wheelResult/bonus` 全桌开奖动画**直转、不缓存**（迟到帧客户端自丢；只驱动动画不碰资金，与结算锚 `gameResolved` 区分）
   - **DispHandle**：开窗/关窗/结算锚（roulette `tableState`(5 态)/`winSpots`；game show `<gt>.betsOpen/betsClosed/gameResolved`）
   - **DispDrop**：`balanceUpdated`（drop→商户余额重发，🔴 **无 playerId 按连接寻址**）/ roulette `betsAccepted`/`betActionResponse` + `metrics.pong`/`settings.data`（心跳/杂项）

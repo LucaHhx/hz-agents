@@ -129,9 +129,12 @@
 
 ## WINNERS 处理（折入 L3 UPSTREAM，此处备注）
 
-EVO `winnersList` 在两份 feed 都有：
-- **roulette 等纯展示**：`DispBroadcast` 直转（或按观众币种 `BroadcastToTableByCurrency`，多币种观众各看本币）。
-- **新族社交瀑布需注入我方中奖者**：drop 上游 → 合并我方下游中奖者（`handlers.CollectOurWinners`）→ EUR 归一排序截断 100 → per-观众币种广播；一局只播一次、合并失败不广播（同 PP B2 Model A）。按新族 winnersList 是否需展示我方玩家决定（IceFishing `winnersList{winners[{screenName,payout,multiplier}],winnersCount,totalAmount}`）。
+🔴 `winnersList` 名为公共帧但**默认必须合并我方本局中奖者再广播**——上游榜只含别家赌场玩家（我方下注不发上游 → 结构上永不含我方），裸直转会让我方玩家中大奖也不上榜（IceFishing000001 实测被用户指证：本人净中 10000 该排第二却不见自己）。**不是「按需决定」，是默认要做**。实现（icefishing `winners_broadcast.go`，镜像 PP moneytime/jackpotwheel）：
+- `HandleUpstream` 拦截该帧 → 解码 → `handlers.CollectOurWinners(tableID, gameID)` 取本局我方中奖者（`ScreenName=Nickname`、`payout=NetWin` 含本金）→ 追加 winners 数组、按 payout 降序、**截断回上游原 len** → 重 marshal **替换**原帧 `return true, merged`（1 进 1 出、只广播一次）。
+- 聚合字段 `winnersCount/bettorsCount/totalAmount` 全场口径 → **透传上游原值不动**，只插 winners 数组（IceFishing `winnersList{winners[{screenName,payout,multiplier}],winnersCount,bettorsCount,totalAmount}`）。
+- 合并铁律：合并失败（DB nil / CollectOurWinners err / 解码失败）→ **整局不广播**；零中奖 → 原样透传。
+- EVO 条目只有 `screenName`、无 userId（与 PP moneytime 含 userId 不同）→ **无需去重**，直接追加排序截断。
+- 多币种是该族增强（PP moneytime EUR 归一 + per-观众币种 `BroadcastToTableByCurrency`）；icefishing 单份广播即可（payout 用玩家本币 NetWin）。详见 known-pitfalls B8。
 
 ## prompt 模板
 

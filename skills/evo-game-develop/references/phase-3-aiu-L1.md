@@ -102,7 +102,7 @@ grep -rB2 -A3 'BETS_OPEN' $JS | head -30
 把结果**最小化**记入 `init_frame_sequence`：仅"客户端**等待**才解锁后续动作的帧"。
 
 **关键步骤 2 — 消息分类（Phase 4 输入，§2A）**：四类（按本族帧名，roulette 范例）：
-- **A 直转**（broadcast）：`winnersList`/`recentResults`(roulette)·`spinHistory`(gs)/`bettingStats`(gs 投注热度聚合，可 enrich 我方计数)/`appInfo`/`dealer`
+- **A 直转**（broadcast）：`recentResults`(roulette)·`spinHistory`(gs)/`appInfo`/`dealer`。🔴 `winnersList`/`bettingStats`(gs) 非纯直转——须合并我方（中奖者 / 聚合计数）后广播，见 B8·B11
 - **A2 communal 演出帧**（game show）：`<gt>.wheelSpinning/wheelStopping/wheelResult/bonus` 全桌开奖动画 → 直转、不缓存
 - **B per-user 改写**：个人注态帧剥离+回填（roulette `tableState.betState` / game show `<gt>.bets.state`）+ `balanceUpdated` drop+商户余额重发 — **EVO 大头**
 - **handle 业务**：开窗/关窗/结算锚（roulette `tableState{state}`/`winSpots`；game show `<gt>.betsOpen/betsClosed/gameResolved`）
@@ -171,7 +171,7 @@ grep -rB2 -A3 'BETS_OPEN' $JS | head -30
 ## §3 结算帧
 ### 3.1 结算锚 — roulette winSpots+GAME_RESOLVED（号码）；game show <gt>.gameResolved（result+倍率盘，公共）
 ### 3.2 个人派彩 — roulette win 帧（私聊，tableId=裸 id）；game show <gt>.bets status→Settled + acceptedBets[code].payout
-### 3.3 winnersList（全场赢家，A 直转/按币种广播）
+### 3.3 winnersList（全场赢家，🔴 须合并我方本局中奖者后广播——非纯直转，见 L4 WINNERS 处理 / known-pitfalls B8）
 
 ## §4 错误帧
 ### 4.1 betValidationError（字段全填；extendedErrorCode 仅会话失效场景填）

@@ -67,7 +67,7 @@ game show(离散事件):  <gt>.betsOpen → 玩家 placeChips → betsClosed(→
 | tableState(5 态) / `<gt>.betsOpen/betsClosed/gameResolved` | handle | 窗口/结算锚 | 状态机（kind 不同） |
 | winSpots / `<gt>.gameResolved` | handle | 触发派彩 | 结算锚 |
 | （无）/ `<gt>.wheelSpinning/wheelStopping/wheelResult/bonus` | **A2 communal 演出** | 开奖动画 | 全桌一份直转不缓存 |
-| winnersList / `<gt>.winnersList` | A 直转/按币种广播 | — | 公共社交瀑布 |
+| winnersList / `<gt>.winnersList` | **合并我方中奖者后广播**（非纯直转，B8） | 全场赢家 | 上游榜结构上不含我方，须注入本局我方 win |
 | recentResults / `<gt>.spinHistory` | A 直转 + 缓存回放 | 走势 | 全量快照帧 |
 | （无）/ `<gt>.bettingStats` | A 直转/enrich | 投注热度 | 聚合计数，可加我方 |
 | dealer/appInfo | A 直转 + init 缓存 | — | root-key/init |

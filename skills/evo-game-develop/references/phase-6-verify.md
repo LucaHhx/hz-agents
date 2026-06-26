@@ -1,7 +1,7 @@
 # Phase 6 — verify 全量验收（AI 自检指南）
 
 > 触发：Phase 5 整体 codex review fix 完成。
-> 验收清单（5 确定性 + V6/V7 语义判断 + **V9 per-user 构造闸门（EVO 核心）** + V10-V12 复盘闸门 + V13 DB/live-launch + V14 赢钱反推 + V15 历史隔离/进制 + **V16 资金 /bet→/result wiring**）。
+> 验收清单（5 确定性 + V6/V7 语义判断 + **V9 per-user 构造闸门（EVO 核心）** + V10-V12 复盘闸门 + V13 DB/live-launch + V14 赢钱反推 + **V14b 公共帧合并我方(winnersList/bettingStats)** + V15 历史隔离/进制 + **V16 资金 /bet→/result wiring**）。
 > 阶段：❌ 禁止向用户提问；失败首次 Claude 自修；≥2 次走 codex_decide 根因分类。
 
 ## AI 执行步骤
@@ -156,6 +156,19 @@ cd <worktree>/server && go test -v -run "TestV14PayoutReverse" ./game/evo/intern
 **PASS**：≥ 3 个真实 round 反推一致（≤ 0.01）；覆盖 直注命中 / 多注 / 全输；fixture 用 roundDetail json + message.txt 真数据（不构造）；**currencyMult 进制正确**。
 **FAIL**：单注差异→赔率/号码集错；全局同系数→三路 cap 顺序错；进制错→currencyMult 漏乘。
 
+### V14b. 公共帧合并我方数据（winnersList / bettingStats，名为公共实须 enrich）
+
+**目的**：上游 winnersList/bettingStats 只反映上游侧，裸直转会漏我方 seamless 玩家（中奖者不上榜 / 在桌人数偏少）。IceFishing000001 实测漏合并被用户指证（本人净中 10000 该排第二却不见自己）。
+
+```bash
+# 1. winnersList 不得仅落 DispBroadcast 默认分支（=漏合并）；须有拦截合并入口
+grep -nE 'winnersList|CollectOurWinners|mergeWinners' "$CORE"/upstream_*.go "$CORE"/winners_broadcast.go 2>/dev/null
+# 2. bettingStats 同理（若本族有该帧且需计入我方聚合计数）
+grep -nE 'bettingStats' "$CORE"/*.go
+```
+**PASS**：① winnersList 走拦截合并（`CollectOurWinners` → 追加本局我方中奖者 → 按 payout 降序 → 截断回上游原 len → **替换**原帧 1 进 1 出只广播一次）；② 合并失败（DB/查询/解码错）整局不广播、零中奖原样透传；③ 聚合字段 winnersCount/bettorsCount/totalAmount 透传上游原值不动；④ 单测用真实帧断言「本人中奖额插入正确排名」。
+**FAIL**：winnersList 仅落 DispBroadcast 默认分支=漏合并（我方中奖者永不上榜）；改了 winnersCount/totalAmount=露馅；除替换原帧外再 Broadcast 一帧=重复广播。
+
 ### V15. history API per-player 隔离 + currencyMult 进制端到端
 
 ```bash
@@ -201,6 +214,7 @@ grep -nE 'OnRoundSettled' "$CORE"/settle.go || echo "❌ settle 成功未调 OnR
     "V12_reconcile_recent_dealer":"PASS — 孤儿局 fail-closed 补结算 / recentResults 缓存 / dealer root-key 缓存",
     "V13_db_currency_live_launch":"DELIVERED — 经验文档填 DB+per-currency+post-merge 必查",
     "V14_payout_reverse":"PASS — N round 反推一致含全输 / currencyMult 进制正确",
+    "V14b_public_frame_merge":"PASS — winnersList 拦截合并本局我方中奖者 / 聚合透传 / 1 进 1 出只播一次",
     "V15_history_isolation_mult":"PASS — evo filter 隔离 / config 限红进制",
     "V16_bet_debit_before_result":"PASS — SubmitBets(OnMerchantBetResult) / 无误标 accepted / OnRoundSettled 必调"
   },

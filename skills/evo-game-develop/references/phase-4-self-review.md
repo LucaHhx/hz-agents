@@ -57,14 +57,14 @@ server 在 init 路径合成哪些帧？每帧必要性（bundle 哪个 reducer 
 
 | 分类 | 含义 | roulette 范例 / game show 范例 |
 |---|---|---|
-| **A 广播** | 上游帧直转 | winnersList/recentResults/appInfo/dealer · gs: `<gt>.spinHistory`/`<gt>.bettingStats`(可 enrich 我方聚合) |
+| **A 广播** | 上游帧直转 | recentResults/appInfo/dealer · gs: `<gt>.spinHistory`。🔴 winnersList/`<gt>.bettingStats` 非纯直转，须先合并我方再播(B8/B11) |
 | **A2 communal 演出** | 全桌开奖动画直转不缓存 | （roulette 无）· gs: `<gt>.wheelSpinning/wheelStopping/wheelResult/bonus` |
 | **B per-user 改写** | 拦截改写 per-user | tableState.betState · gs: `<gt>.bets.state` / balanceUpdated（drop+商户余额，无 playerId） |
 | **handle 业务** | 触发状态机/结算 | tableState 5 态/winSpots · gs: `<gt>.betsOpen/betsClosed/gameResolved` |
 | **C 自合成** | 上游不发、server 构造 | subscribe/betsAccepted/betActionResponse/win · gs: subscribe/`<gt>.placeChips` echo/`<gt>.bets` |
 
-🔴 **Q5 关键**：① **comm 集合差对 game show 失效**（所有 type 两份都有）→ per-user 主判据=计数悬殊+per-session 字段；② 漏 A2 演出帧类；③ C 类易漏。
-**自答模板**：表格逐事件 — 事件 / 分类 / 实现位置 file:line / capture 证据（含计数）。
+🔴 **Q5 关键**：① **comm 集合差对同名空壳帧失效**（所有 type 两份都有）→ per-user 主判据=计数悬殊 + `args`/嵌套 shape diff + per-session 字段；② 结果/终局/状态帧可能是 **handle + B 混合帧**，不能因它含公共开奖结果就裸广播；③ 漏 A2 演出帧类；④ C 类易漏。
+**自答模板**：表格逐事件 — 事件 / 分类 / 实现位置 file:line / capture 证据（含计数、args key-set、个人字段值域）。每个直转帧必须说明“无个人字段”；每个 drop 帧必须说明是否需要本地等价帧；每个 handle 帧必须说明是否同时需要 per-user 改写。
 
 ### Q6. currencyMult 进制 + per-currency 配置（EVO 特有）
 
