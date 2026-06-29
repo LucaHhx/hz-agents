@@ -50,7 +50,7 @@ Layer 5 (依赖全部, 1):
 | L1 | `phase-3-aiu-L1.md` | 4 | enum.go / 字典 md / odds.go(赔付参数) / client_frame_effects.md |
 | L2 | `phase-3-aiu-L2.md` | 5 | models.go / processor.go / bet_limits.go / bet_redis.go / bet_window.go |
 | L3 | `phase-3-aiu-L3.md` | 5 | upstream_*.go / downstream_*.go / **per_user_betstate.go** / settle.go / check_bet.go |
-| L4 | `phase-3-aiu-L4.md` | 5-6 | payout.go / recent_results+reconcile.go / history(BuildGameDetail) / 报表页 / currency config / [BETSTATS 条件] |
+| L4 | `phase-3-aiu-L4.md` | 5-6 | payout.go / recent_results+reconcile.go / **history detail render（renders/<gt>.go 局面区 1:1）** / 报表页 / currency config / [BETSTATS 条件] |
 | L5 | `phase-3-aiu-L5.md` | 1 | factory 注册 + DB 模板 + 全量 build |
 
 层间 codex 审查执行：`phase-3-layer-review.md`
@@ -86,7 +86,7 @@ Layer 5 (依赖全部, 1):
 - **per_user_betstate.go 是必产文件**（PP 无对应）——新族最易漏、最易错（快照时序、裸 tableId、余额来源），单列一个 L3 AIU 重点保障。
 - **强类型铁律**：所有协议帧 struct + `json.Marshal`/`Unmarshal`，**禁 `map[string]interface{}` 跨边界**（models.go）。
 - **包外唯一改动**：`factory/instance_factory.go`（L5）+ DB 行 + 报表页。runtime/gateway/video/lobby/容灾/资金全复用，**不碰**。
-- **history 是 JSON 不是 XML**：EVO `BuildGameDetail` / history 走 JSON（gateway/history_api.go 通用），数据源 `gameDetail.txt`；不像 PP 的 cgibin XML。报表前端页对照 `roundDetail/<rid>.json`（结构化）比 PP 只有 html 更好对。
+- **history detail 是 render HTML，不是 PP 的逐字段结构化**：EVO 玩家"我的历史"端点走 `gateway/history_api.go`（通用：token→玩家→`vendor_type='evo'`→时区分组），但**详情局面区是 EVO 服务端 SSR 的一段 HTML**（`gameDetail.txt .data.render`）。新族**必产一份 1:1 render**（`gateway/renders/<gt>.go` + `assets/<gt>/`，逐字节对齐真实），不是"通用接口拼字段、不够再补"（那是 PP cgibin XML 思路）。结构化结算体 `roundDetail/<rid>.json` 仅报表页（L4.4）逐字段对账用。详见 L4.3 + `references/phase-3-game-record-render.md`。
 
 ## 调度伪代码
 

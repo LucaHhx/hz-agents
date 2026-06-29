@@ -43,26 +43,30 @@
 
 ---
 
-## L4.3 — HISTORY_DETAIL（玩家历史详情）
+## L4.3 — HISTORY_DETAIL（玩家历史详情：结果区局面 1:1 render）
 
-**产物**：机台 `history.go`（若通用 `gateway/history_api.go` 不够覆盖新族 detail shape）+ 确认 SETTLE 落盘字段齐
+> 🔴 **EVO 与 PP 的根本不同**：PP 的 detail 是 cgibin XML、逐字段结构化、靠通用接口拼字段；**EVO 的 detail 局面区是 EVO 服务端 SSR 出的一段 HTML（`gameDetail.txt .data.render`），客户端 `dangerouslySetInnerHTML` 直插**。所以本 AIU 不是"通用接口够不够、不够补字段映射"（那是 PP 思路），而是**每个新族必产一份 `render`**——把局面区（结果 UI + bet 表）做成与真实 EVO **逐字节一致**。早期把 `render` 降级成纯文字（只塞段名）是 bug，不是方案。
 
-> EVO history 是 **JSON**（非 PP cgibin XML），玩家"我的历史"走 `gateway/history_api.go`（通用：token→玩家→按 vendor_type='evo' filter→按时区分组）+ `/game/{id}` 详情。⚠️ **数据源结构**：列表/详情字段在 `gameDetail.txt .data`（单对象，含 `gameType/status/startedAt` + **`render`=server-rendered HTML 详情串**，非逐字段结构化）；**结构化结算体在 `roundDetail/<rid>.json .data.data`**（`participants[].bets[].{code,stake,payout}` + `result`）。逐字段对账以 roundDetail 为准。
+**职责切分（先认清，避免误改基础设施）**：
+- **通用、复用、不碰**：`gateway/history_api.go`（token→玩家→`vendor_type='evo'` filter→按时区分组的 `/days` `/day` `/game/:id` 端点）+ `/frontend/*` 资源代理。新族**不写** per-machine `history.go`。
+- **每族必写**：`gateway/renders/<gametype>.go` + `assets/<gametype>/` 模板（`render` 的局面区装配）。`history_api.go` 的 `EvoHistoryGame` 已统一调 `renders.BuildRoundRender(gameType, gameID, tableDBID, txns, symbol)`，新族只在 `renders/render.go` 的 switch 加一个 case。
+
+**产物**：`gateway/renders/<gametype>.go`（查 round/txns + 模板装配）+ `assets/<gametype>/*.html`（从 capture 字节级抽出的 SSR 片段）+ `render.go` 分发加 case + `<gametype>_test.go`；并确认 L3 SETTLE 落盘字段齐（render 的数据源）。
 
 **分析输入**：
-- **`tmp-evo/<dir>/gameDetail.txt` 真 JSON**（`.data` 单对象；含 `render` HTML）
-- `roundDetail/<rid>.json`（`.data.data` 单局结算体 participants/bets/result）
-- 通用 `gateway/history_api.go` + `history_render.go` 看新族 detail 是否需扩展
-- L3 SETTLE 落盘字段（b_game_rounds + b_game_transactions）
+- **`tmp-evo/<dir>/gameDetail.txt` 真 JSON**：`.data.render` = 局面区 SSR HTML（**1:1 复刻的权威基线**，逐字节对比就比它）；`.data.{gameType,status,startedAt}` = 详情头部字段（通用 handler 已处理）。
+- `roundDetail/<rid>.json`（`.data.data` 结构化结算体 participants/bets/result）—— **报表页**逐字段对账用（L4.4），detail render 不依赖它。
+- L3 SETTLE 落盘字段（`b_game_rounds` + `b_game_transactions`）—— render 用我方结算数据回填模板。
 
 **实现内容**：
-- 核对通用 history 接口能否渲染本族详情；不够则补 per-family detail 映射（结构化 JSON，**禁 raw 字符串拼**）
-- **持久化字段完整性**（L3 SETTLE 配合）：`b_game_rounds.{dealer_name, round_id, game_type, extra, result}` + `b_game_transactions.{description=BetCodeDescription(bc), currency=本局会话币种, stake, payout, settled_at, max_capped}` 完整落（H3）
-- **投注类型 vs 开奖结果各自独立逐笔保存**（H/J7：bet.description 是下注点、result 是开奖，绝不混用）
+- 🔴 **结果区局面 1:1 复刻（本 AIU 核心）**：从 `.data.render` 字节级抽模板 + Go 装配 + **字节对比验收**，覆盖该族每种结果形态（数字/各 bonus/miss/带倍率…）。**完整四步法 + 逆向硬细节 + 资源代理 + bonus 帧落库模式见 `references/phase-3-game-record-render.md`**（roulette/crazytime/icefishing 已落地范例）。
+- **bonus 内部网格**（game show 常有：flapper 转盘 / cash hunt 网格 / pachinko / coin flip）：要 1:1 需先把完整 bonus 结果帧落 `b_game_rounds.Extra["bonusResult"]`（纯展示、不碰资金：cache-before-settle + marshal-fail 不阻断 + OnRoundSettled 时序不变）。落库前先核 result 帧数据齐全度（部分缺 per-zone/另一币，需另抓 setup 帧）。
+- **持久化字段完整性**（L3 SETTLE 配合，render 数据源）：`b_game_rounds.{dealer_name, round_id, game_type, extra, result}` + `b_game_transactions.{description=BetCodeDescription(bc), currency=本局会话币种, stake, payout, settled_at, max_capped}` 完整落（H3）。
+- **投注类型 vs 开奖结果各自独立逐笔保存**（H/J7：bet.description 是下注点、result 是开奖，绝不混用）。
 
-**B5 验收**：build/vet/test 过 + `history_test` 用真 `gameDetail.txt` JSON 做 fixture 断言关键字段 + 投注类型/开奖结果分离
+**B5 验收**：build/vet/test 过 + **每种结果形态与 `gameDetail.txt .data.render` 字节级 diff 通过**（归一空白 + mask 随机 UUID）+ `<gametype>_test.go` 留结构断言（关键 class / 资产路径 / 倍率规则 / 金额精度无浮点尾巴）+ 投注类型/开奖结果分离 + 资源经 `/frontend` 代理三路 200。
 
-**下游**：API 层调用（通用 handler，与 instance 解耦）
+**下游**：API 层 `EvoHistoryGame` 调用 `renders.BuildRoundRender`（通用 handler，与 instance 解耦）。
 
 ---
 

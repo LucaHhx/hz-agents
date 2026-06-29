@@ -77,9 +77,11 @@
 
 ## L3.3 — PER_USER（⭐ EVO 独有，PP 无对应，最易错）
 
-**产物**：`per_user_betstate.go`
+**产物**：`per_user_betstate.go` + `per_user_wire_test.go` + `tmp-evo/<dir>/frame_contract.md`
 
 > **为什么单列**：真 EVO per-player 连接、只推该玩家自己的注/余额；我方一上游广播多下游。整帧广播 → 全桌收代理账号的注（别人的注上自己板面、Rebet 错乱、余额串账）。这是 EVO 对接最大、最易错的工作量，单列一个 AIU 重点保障。**模板照抄 `roulettecore/per_user_betstate.go`，换字段名。**
+
+> 🔴🔴 **写合成代码前先跑 `references/per-user-frame-fidelity.md` 的步骤 A/B/C（强制）**：从 `message.txt`（=客户端期待的 target）建逐相位×逐 status 字段契约 + 广播频率契约 + 渲染源判定，写进 `frame_contract.md`。**漏字段 = 客户端崩 `undefined.map`/卡死/不渲染；广播频率不足 = 卡面/计时器/红点停滞。这类 bug 编译+单测+codex 全查不出，只能靠契约提前发现。** Monopoly Big Baller 因跳过此步被用户连续指证 5 轮（luckySymbols/threeRollsBalls/timeRemaining 缺字段崩、卡格红点不更新、广播频率不足）——见 fidelity.md §6。完成后 `per_user_wire_test.go` 逐 (相位,status) 断言字段集 ⊇ 契约 + 所有数组字段非 null。
 
 **分析输入**：
 - L1.4 client_frame_effects.md（个人注态帧字段）

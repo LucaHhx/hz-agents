@@ -134,9 +134,11 @@ EVO 现仅 roulette 一族；上文及各 reference 的 roulette 帧（5 态 `ta
 | **7** | 经验文档归档 | `references/phase-7-experience-doc.md` |
 
 **跨 phase 共用 references**（按需 grep，不必预读）：
+- `references/per-user-frame-fidelity.md` — 🔴 **per-user 合成帧保真度方法论（L3 PER_USER 必读，反复踩坑根因）**：三方对比（nobet 收=原料 / 我方合成 / message.txt=客户端期待 target）+ 逐相位×逐 status 字段契约 + 广播频率契约 + 「客户端渲染源」判定 + wire 单测。漏字段/频率不足 = 客户端崩 `undefined.map`/卡死/不渲染，编译+单测+codex 都查不出，**只能靠这套方法论提前发现**。
 - `references/evo-platform-primer.md` — EVO 基础设施复用边界 + **per-user 数据构造全模式** + roulettecore 作为新族模板逐文件映射（Phase 1/3 高频参考，EVO 最关键文档）
 - `references/codex-collab.md` — 三模式调用 + 全 prompt 模板 + state 跟踪
 - `references/known-pitfalls.md` — EVO 协议铁律 A-J 精华版（per-user / 资金 / 视频 / 货币 / 容灾）
+- `references/phase-3-game-record-render.md` — **游戏记录详情 render 1:1 复刻方法**（L4.3 配套）：renders 子包架构 + 四步法（分析 / 验资源 / 抽模板 / 字节对比）+ 逆向硬细节 + bonus 帧落库。让「我的历史→游戏详情」局面区逐字节还原，非纯文字降级。
 
 ## Phase 1 — 选 base + 复用边界 + factory 检测（AI 直接执行）
 
