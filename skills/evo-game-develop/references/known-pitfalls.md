@@ -9,6 +9,7 @@
 **A1**：协议事实只从 capture（message/message-nobet/config/gameDetail/roundDetail）+ `clientResources/frontend/` bundle。禁参考老项目 `/Users/luca/work/ppgame`。
 **A2**：`docs/evo-explore/` 设计文档是**实现前方案**，与 as-built 代码有出入（per-user 帧 / 视频解扰 / flipbook / currency 都是落地后改的）。**以 `server/game/evo/` 实际代码 + roulettecore 为准**。
 **A3**：capture 是事实下限非协议上限。稀有帧（betValidationError / canceled / 特殊货币 / 大奖）可能从不出现 → 结合 bundle + roulette 既有实现反推。
+**A4 capture 是「已被操作过的下限」，客户端代码才是协议上限（CrazyTime 撤注实证）**：capture 只录到录制时实际触发的帧——撤注没按就无 undo 帧、单子下注模式没用就无 Chip 帧，**「capture 没有」≠「协议没有」**。判协议全集（尤其下注 action / 撤注 / 罕见帧）必须 grep `clientResources/frontend/evo/mini/js/` 业务 bundle 的 type/action 常量 + reducer，**客户端代码权威**。行为分歧用**三方实证**坐实：① capture（真 EVO 行为）② 客户端 bundle（协议定义）③ **连我方服务端录一份 capture（我方实际行为）**。CrazyTime 撤注/单子下注 bug 就是靠「客户端代码露出 Chip/Undo action + 连我方服务端实测放 2000 筹码回 chips#0(注没记上)」坐实的——首份 capture 没按撤注、只用 SetChips 全量模式，误判无 bug。⚠️ **一个游戏可能有多套下注模式**（CrazyTime：SetChips 全量快照 vs Chip/BulkBet/Undo 增量，客户端 flag 决定），服务端须把 bundle 里所有 action 都处理，不能只按一份 capture 实现。
 
 ## B. per-user 数据构造（⭐ EVO 灵魂，PP 无）
 
@@ -112,3 +113,26 @@
 **L5 entry currency×geo 拒入**：IDR 会话从非印尼 IP 打开被拒 `incorrect-currency-for-geo-location` → 换匹配出口 IP。
 **L6 永不死线容灾（四路上游）**：panic recover 防进程崩 / 死会话 `Invalidate` 防 8min livelock / 读超时防半开静默 / 有界 mint（30s 超时）防冻全线 / 会话缓存 8min TTL 防高频 mint 触发限流(6007)。新族不碰容灾（基础设施层 `runner.go`+`lobby_failover.go`），但**结算依赖 game-ws 帧、无兜底是最大资金风险缺口**——新族 SETTLE 须有 reconcile 兜底（C12）。
 **L7 game ws balanceUpdated tableId 必须裸 original_id**（同 B1）：重连根因之一。
+
+## K. 交互式 bonus + 撤注（game show 玩家选择型；FunkyTime/CrazyTime 实证，codex+用户实测复盘）
+
+> game show 的 bonus 轮里玩家要做选择（Bar 选杯 / StayinAlive 选色 / CashHunt 选格…），**选择决定 per-player 倍率**。这是 FunkyTime 反复踩坑的根因，roulette / 纯数字 game show 无。新族**有交互 bonus（先抽 capture 看有无 `<gt>.chooseColor`/`setChoice`/`playerChoiceMade`/`colorChoice` 这类选择帧）则本节逐条对照**。前置：bonus 倍率盘全上游广播可复现（无则像 Lightning Storm HotSpot 那样代理无源 → 评估跳过）。
+
+**K1 交互 bonus 参与 UI（选择框/机会数 lives/选色盘）被客户端 `isParticipating` 门控 → 须在 betsClosed 即发 Accepted（🔴 否则整块 bonus UI 不显示）**：客户端 `isParticipating = isBetConfirmed(status∈{Closed,Accepted,…}) + 押中该 bonus 段`。真 EVO 在 `betsClosed` **就**发 `<gt>.bets{status:Accepted}`（capture 实证 Open→Accepted→Settled，在 wheelResult/bonus 之前）。我方原模型只在**异步商户 /bet 完成后**才发 Accepted → wheelResult 触发参与判定时 status 仍 Open → 不判参与 → **机会数/选色/选杯整块不显示**。修：betsClosed 时 `broadcastBetsClosedPerUser` 立即按连接发 Accepted（用 Redis 注；钱仍异步 /bet、失败走拒单纠正、/result 仍受 hasSuccessfulBetDebit 闸门 → **无资金风险**）。lives/bettingStats 是 communal 广播（已正常转发），根因在参与门控、不在转发。icefishing/crazytime 也是异步发 Accepted，但其 bonus 不依赖参与时序故未暴露。
+
+**K2 选择窗口锁（🔴 资金，防超付）**：玩家选择影响自己倍率 → 可等倍率盘广播后再改选最高倍率超付。必须在**倍率盘揭晓前**的「选择阶段结束」事件（DecisionFinished/ChoosingFinished）`closeBonusChoice` 锁定；之后 `recordBonusChoice` 拒绝改选、回显已锁选项。上游 readLoop 串行调 HandleUpstream → 结算先于 gameCleared，下游选择写由 bonusMu 保护，无 race。
+
+**K3 未选玩家 = auto 随机选一个（匹配 EVO，不是 minByValue 取最小）**：玩家不操作时真 EVO **帮随机选一个**（capture 实证 `colorChoice{auto:true}`/`playerChoiceMade{manual:false}` 选项变化、非固定默认），玩家拿那个选项倍率。**勿用最小倍率兜底**（亏待玩家、与 EVO 不一致——曾因 fund-safe 过度保守误用）。用**确定性伪随机**（seed=`gameID|userID`，固定选项集 fnv 哈希）→ 对玩家公平、不同玩家选项各异、且回执与结算取同一选项。
+
+**K4 自动选择回执（窗口结束发，让客户端高亮系统帮选的）**：选择窗口关闭时为押中该段、未手动选的在线玩家发 `colorChoice{auto:true}`/`playerChoiceMade{manual:false}`（`events.SendToUser` 定向；用固定选项集算选项——窗口结束时倍率盘未揭晓也能算）。🔴 **须在 closeBonusChoice 之前 record+发**（窗口锁后 recordBonusChoice 拒绝）。
+
+**K5 倍率盘缺失 fail-closed（🔴 资金）**：bonus 段倍率盘不完整（缺盘/缺项/非正）且有人押中该段 → **绝不按 0 结算**（会把中奖当未中、清 key、误派 0）。须 fail-closed（落人工介入入口、保留 bet key、不调 OnRoundSettled）等重试。仅在「有人押中该 bonus 段」时阻断（letter/number bettor 不受影响）。reconcile 孤儿局补结算同样走此校验。
+
+**K6 撤注 = 服务端快照栈（🔴 资金，game show undo 不重发 placeChips）**：game show 客户端撤注（独立 `<gt>.undo`/`undoAll` 帧，或 `<gt>.bet` 的 Undo/UndoAll action）**只发撤注信号、不重发 placeChips 全集**（非 client-authoritative，客户端本地维护 betHistory 栈），UI 以服务端 bets 回执为准重同步。服务端原只回完整态 → 撤注被回执覆盖（"无效果"）+ 残留注 betsClosed 照 /bet 超扣。修：维护 per-user 快照栈（key=`gameId|userId`）——每次下注受理压栈、undo 弹栈恢复上一快照覆盖 Redis 回缩减态、undoAll 清栈清 Redis、MarkBetsClosed 清栈、窗口关 undoGuard 拒撤注。镜像 `icefishingcore`/`monopolybigballercore`/`funkytimecore`/`crazytimecore` 的 `bet_undo.go`。⚠️ 全量快照下注族（funkytime placeChips）也需此栈——撤注同样是独立帧。与 C3「撤单先 CheckBet 校验窗口」配套。
+
+## R. 仓库/部署：client 资源 git 治理（EVO 全游戏共性，省 ~18MB/桌族）
+
+**R1 vendored client 媒体不进 git，回源 CDN cache-through**：`server/game/evo/client/frontend/` 每族会涨 vendored 媒体（webm 声音/png/webp/jpg 图片/woff2 字体/mp3/svg，约占一半体积）。运行时 `gateway/client_proxy.go(evoCDNProxy)` 在 `/frontend/*` 本地缺失时回源 `tmbge.evo-games.com` + cache-through 落盘 → 媒体**无需 git 跟踪**。`.gitignore` 忽略 `frontend/**/*.{webm,png,webp,jpg,jpeg,mp3,woff2,ogl,svg}`，**例外保留 `game-render-assets/**`**（我方自产 render 资源、不在 EVO CDN）+ `reports/`。**只 git 固定 js/json/html/css**（代码+协议+manifest+样式，须版本一致）。与 PP 的 `client/apps/*/` 同思路。
+- **版本一致天然保证**：content-hash 资源名不可变（`wheelsprit.10a145df.webp`），git 固定的 js/json 引用特定哈希 URL → 各服务器回源拉到的字节永远一致。
+- **依赖**：生产须能访问 tmbge CDN（出口受限环境需预热缓存或保留媒体）。
+- **历史回收**：`git rm --cached` 只停未来跟踪；`.git` 历史里的体积需 `git filter-repo` 重写（破坏性，另议）。

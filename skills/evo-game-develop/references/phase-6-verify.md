@@ -191,6 +191,22 @@ grep -nE 'OnRoundSettled' "$CORE"/settle.go || echo "❌ settle 成功未调 OnR
 **PASS**：onBetsClosed `go handlers.SubmitBets(...,OnMerchantBetResult)`；downstream 无 MarkBetAccepted；OnMerchantBetResult accepted 分支 MarkBetAccepted+echo；settle 成功 `OnRoundSettled` 必调；`/result` 前 `hasSuccessfulBetDebit` 闸门生效（运行时兜底，但 wiring 必须对）。
 **FAIL**：缺 SubmitBets → 无扣款派彩（凭空给钱）；缺 OnRoundSettled → 下局误标 cancelled+重复退款。
 
+### V17. 撤注快照栈 + 交互式 bonus（仅 game show；有选择帧才查；known-pitfalls K）
+
+> 触发条件：capture/bundle 有 `<gt>.undo`/`undoAll`（或 `<gt>.bet` Undo action）→ 查撤注栈；有 `chooseColor`/`setChoice`/`playerChoiceMade`/`colorChoice` 选择帧 → 查交互 bonus 全套。无则跳过。
+
+```bash
+# 撤注快照栈（全量快照族也须有：撤注是独立帧、不重发 placeChips）
+grep -lE 'pushBetSnapshot|popBetSnapshot|bet_undo' "$CORE"/*.go || echo "⚠️ 有 undo 帧但无快照栈 → 撤注无效+残留注超扣(K6)"
+# 交互 bonus：参与时序(betsClosed 发 Accepted) / 选择窗口锁 / auto 随机 / 盘缺失 fail-closed
+grep -lE 'broadcastBetsClosedPerUser|betsClosed.*Accepted' "$CORE"/*.go || echo "⚠️ 交互 bonus 须 betsClosed 即发 Accepted，否则参与 UI 不显示(K1)"
+grep -lE 'closeBonusChoice|bonusChoiceClosed' "$CORE"/*.go || echo "⚠️ 缺选择窗口锁 → 玩家看盘后改选超付(K2)"
+grep -nE 'minByValue.*未选|取最小' "$CORE"/*.go && echo "⚠️ 未选取最小不公，应 auto 随机匹配 EVO(K3)"
+grep -lE 'bonusBoardReady|abortOnBonusBoardMissing' "$CORE"/*.go || echo "⚠️ 缺倍率盘缺失 fail-closed → 中奖误判 0(K5)"
+```
+**PASS**：撤注有 `bet_undo.go` 快照栈（push 受理/pop undo/清栈 MarkBetsClosed/窗口关拒）；交互 bonus 四件套齐（betsClosed 发 Accepted / 选择窗口锁 / 未选 auto 随机+回执 / 盘缺失 fail-closed）。
+**FAIL**：撤注无栈 → "无效果"+超扣；缺参与时序 → bonus UI 整块不显示；缺选择锁 → 超付；缺盘校验 → 中奖派 0。
+
 ## 失败决策树
 
 ```

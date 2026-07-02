@@ -58,7 +58,7 @@
   3. 个人注态回填（roulette `tableState`+`personalizeTableState`；game show `<gt>.bets`+`<gt>.restore.begin/end` 重连恢复包）
   4. 缓存帧回放（dealer / appInfo / `<gt>.table`）
   - 实现位置 `handleConnect`：JoinRoom → 按序逐帧 send → RegisterConn
-- **下注 action 应用（模型从 L2 bet_protocol 定）**：roulette `bet_actions.go` 把 `betAction.action.type` PLACE/REMOVE/MOVE/UNDO 应用到 per-user UNDO 栈算累计注；**game show `placeChips.chips` 是全量快照 → 直接覆盖 Redis canonical，不建 UNDO 栈**（撤注走独立 `<gt>.undo/undoAll`，`betAction:"Repeat"` 取上局 repeat 快照）。
+- **下注 action 应用（模型从 L2 bet_protocol 定）**：roulette `bet_actions.go` 把 `betAction.action.type` PLACE/REMOVE/MOVE/UNDO 应用到 per-user UNDO 栈算累计注；**game show `placeChips.chips` 全量快照覆盖 Redis canonical**，`betAction:"Repeat"` 取上局 repeat 快照。🔴 **撤注仍须建服务端快照栈**（`bet_undo.go`，镜像 icefishing/funkytime/crazytime）：客户端 `<gt>.undo/undoAll`（独立帧或 `<gt>.bet` 的 Undo action）**只发撤注信号、不重发 placeChips**，服务端须弹快照栈恢复上一态覆盖 Redis 回缩减态——**勿因「全量快照」误判无需 UNDO 栈**（漏处理=撤注无效+残留注超扣，known-pitfalls K6）。CrazyTime 另有 Chip/BulkBet 增量模式，Chip action 须增量加单子（known-pitfalls A4）。
 - **`downstream_bet`**：解下注帧 → CheckBet（窗口）→ applyBet 落 Redis canonical（**不扣款**）→ 合成回执
   - 🔴 **bet 确认时序 + 资金（EVO 同 PP J10/J11）**：
     - `betActionResponse` 即时 ack（客户端知"收到、可继续放筹码"）；**`betsAccepted` 最终受理集在 BETS_CLOSED 之后下发**，绝不在下注期逐帧定格
@@ -124,7 +124,8 @@
 - **`OnGameResult`** 入口：解结算锚（roulette `winNumber`+号码集；game show `gameResolved.{result, <seg>Multipliers, totalMultiplier}` 倍率）。**禁假设 winNumber/odds 制。**
 - 写 `b_game_rounds`（Result/ResultCode/Extra/RawData；**列宽 ≥ 协议族最长显示串**，game show 的段名+倍率序列化串比 roulette winNumber 宽，防超长整局丢库——EVO 同 J12）
 - **读 Redis bets `GetRedisUserBets(tableID, gameID, requireAccepted=true)`**（fail-closed C7）。⚠️ **betCode 双命名空间**：Redis 用下注帧裸名、roundDetail 对账用前缀名（`IF_`），先映射
-- 全用户结算循环：赔付走 L4 PAYOUT 的**通用模型**（roulette `amount×(odds+1)`；game show 押中 segment `stake×<seg>Multiplier`、未中=0）
+- 全用户结算循环：赔付走 L4 PAYOUT 的**通用模型**（roulette `amount×(odds+1)`；game show 押中 segment `stake×(倍率+1)`、未中=0）
+- 🔴 **交互式 bonus 派彩 per-player（玩家选择型，FunkyTime 类）**：Bar/StayinAlive 倍率取决于玩家选杯/选色 → settle 须按 user 记录的选择查倍率盘；**未选玩家 auto 随机选一个（非取最小，匹配 EVO）**、**倍率盘缺失且有人押中该段须 fail-closed（不按 0 把中奖当未中）**（known-pitfalls K3/K5）。Disco 类 communal 单值无选择。纯数字/字母段仍按 base×topSlot。
 - **`handlers.SettleUsersSeamless(/result)`** 派彩 → 内置 `hasSuccessfulBetDebit` 闸门（**/result 必先有成功 /bet**，EVO 同 J11）
 - **per-user 下发**：`events.SendToUser(tableCode, userID, frame)`（只给本局有注用户；roulette `win` 帧 / game show `<gt>.bets` status→Settled+payout）+ `balanceUpdated`（商户余额，**tableId 用裸 EVO tableId**）
 - **取消路径**：`<gt>.gameCancelled`（如有）→ `OnRoundCancelled` 退款
