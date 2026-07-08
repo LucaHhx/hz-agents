@@ -70,6 +70,13 @@
 
 **C9 context 必须超时**：Redis SCAN/HGetAll 用 `context.WithTimeout(... 5s)` 而非 `context.Background()`。
 
+**C10 OnRoundSettled 必调（settle 成功后）**：漏调 → 下一局把已结算局误判未结算 → 误标 cancelled + 重复退款（超付）。settle 成功路径必须以 OnRoundSettled 收尾（treasureisland 历史实证）。
+
+**C11 孤儿局（已扣本金未结算）处理边界——PP 与 EVO 方法论差异**：
+- **不超付防线（通用，PP 已有）**：`SettleUsersSeamless::hasSuccessfulBetDebit` 闸门（无 /bet 流水不派彩）+ C10 OnRoundSettled + 归档 result detector（漏注册 → 整局被当残缺丢弃，逐机台必查）。
+- **少付敞口（PP 现状）**：game-ws 长期死 → 已扣本金的局永不结算。PP **无** EVO 的 `pendingsettle.Tracker`/sweep 兜底（HTTP 补派彩待接），新机台对接不需要自建——但**必须**保证 detector/OnRoundSettled 接线正确，让帧驱动结算路径闭环；上游断线由通用自愈链重连补帧。
+- **若日后给 PP 补 sweep**：照 EVO 五件套（`server/game/common/runtime/pendingsettle`，Mark on 扣款/Clear on 结算 compare-and-clear/帧驱动跨局计数/SweepStaleSettle/跨重启 Recover 终态守卫），Tracker 是跨 vendor 通用包，勿另造。
+
 ## D. 静默错误（必加 zap log）
 
 业务关键路径禁止 `_ = err`。下列必加 `global.HAB_LOG.Error/Warn` + `zap.Error(err)`：

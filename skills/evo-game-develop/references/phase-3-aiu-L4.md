@@ -36,8 +36,15 @@
 - **`recent_results.go`**：缓存最新走势帧（roulette `recentResults` / game show `<gt>.spinHistory`，每局重发的全量快照，**必缓存并新连接回放**，否则走势板空白 — 同 PP J2 全量快照帧），直转广播
 - **`reconcile.go`（孤儿局恢复，EVO 自愈）**：上游漏发 GAME_RESOLVED / 进程重启错过开奖时，从 `recentResults`（含历史开奖号）兜底补结算未结算局。`reconcileFromRecentResults` / `reconcileOnNewRound`：新局开窗时检查上一局是否已结算，未结算则用 recentResults 的结果补 OnGameResult。
   - 🔴 **fail-closed**：补结算同样走 `GetRedisUserBets(requireAccepted=true)` + `hasSuccessfulBetDebit`（不能凭 recentResults 给没扣款的注派彩）
+- **🔴 pending 态必用 `pendingsettle.Tracker`（M8 收敛，勿自写 pending 字段）**——「已扣本金未结算」孤儿局标记的单一真相源，五件套照抄既有 5 族（icefishing/monopolybigballer/funkytime/roulette/crazytime 的 `reconcile.go`）：
+  1. **Mark on 扣款**：`onBetsClosed` 提交 `/bet` 后 `p.pending.Mark(gameID)`（有扣款才标）。
+  2. **Clear on 结算**：settle 成功 `p.pending.Clear(gameID)`；**compare-and-clear**——`Clear` 返回 bool，退款路径只有「原子赢得清标记」的那条才发退款（`cancelOrphan` 先 `clearPendingSettle(orphan)` 不通过即 return），杜绝 sweep 与帧驱动/结算并发对同一孤儿局双退款。
+  3. **帧驱动**：`reconcileOnNewRound` 用 `p.pending.NextOrphanRound(newGameID)` 推进跨局计数，≥`OrphanRoundThreshold` 取消局退款。
+  4. **sweep 兜底（game-ws 长期死，最大资金敞口）**：实现可选接口 `SweepStaleSettle(tableDBID uint, maxAge time.Duration)`（进程级 settle_sweeper 60s 扫、5min 龄期退款）——帧驱动依赖「下一帧」，game-ws 整条线死则永不触发，没有 sweep 玩家本金被永久扣住。
+  5. **跨重启**：构造时 `pendingsettle.New(variant.TableID)`（Redis 持久化）+ `handlers.RecoverPendingSettle(p.pending, variant.TableID)` 载回（内置终态守卫：已 settled/cancelled 的局不载入，防重启后 sweep 双退款）。
+  - **监控接口**：`PendingSettleStatus() (string, time.Time, bool)`（返回 `p.pending.Pending()`）——运维看板资金安全面的孤儿局数据源（evoMachineReporter 经可选接口读取），新族必加否则看板盲区。
 
-**B5 验收**：build/vet/test 过 + `reconcile_test` 覆盖"漏 GAME_RESOLVED → 新局用 recentResults 补结算" + recentResults 缓存回放
+**B5 验收**：build/vet/test 过 + `reconcile_test` 覆盖"漏 GAME_RESOLVED → 新局用 recentResults 补结算" + recentResults 缓存回放 + Tracker 五件套接线（Mark/Clear/sweep/Recover/PendingSettleStatus 缺一即打回）
 
 **下游**：UPSTREAM 接入（recentResults 缓存 + 新局 reconcile 钩子）
 

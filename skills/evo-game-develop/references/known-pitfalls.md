@@ -66,6 +66,7 @@
 **C10 /result 必先有成功 /bet**：`onBetsClosed` 必 `go handlers.SubmitBets(ctx.TableID, gameID, p.OnMerchantBetResult)`；`MarkBetAccepted` 只在 `OnMerchantBetResult` accepted 分支（**绝不**在 betAction/applyBet）；`SettleUsersSeamless::hasSuccessfulBetDebit` 通用闸门兜底（无 bet 流水 fail-closed）。漏调 SubmitBets = 无扣款派彩（凭空给钱）。
 **C11 OnRoundSettled 必调**（settle 成功），否则下一局误标 cancelled + 重复退款。
 **C12 reconcile 孤儿局补结算同样 fail-closed**：从 recentResults 补结算的注也走 requireAccepted + hasSuccessfulBetDebit，不给没扣款的注派彩。
+**C13 孤儿局 pending 态必用 `pendingsettle.Tracker` 五件套（勿自写 pending 字段）**：Mark on 扣款 / Clear on 结算（**compare-and-clear**：退款只走「原子赢得清标记」路径，防 sweep×帧驱动并发双退款）/ `NextOrphanRound` 帧驱动 / `SweepStaleSettle` 可选接口（settle_sweeper 60s 扫 5min 龄期——game-ws 长期死时帧驱动永不触发，无 sweep = 本金永扣的最大敞口）/ `RecoverPendingSettle` 跨重启载回（终态守卫防双退款）。另加 `PendingSettleStatus()` 监控可选接口（看板资金安全面孤儿局数据源），缺了 = 运维盲区。详见 phase-3-aiu-L4 §L4.2。
 
 ## D. 静默错误（必加 zap log）
 业务关键路径禁 `_ = err`。必加 `global.HAB_LOG.Error/Warn + zap.Error`：OnGameResult / UpsertRound / SettleUsersSeamless / json.Unmarshal(bets/winSpots) / OnMerchantBetResult 早期 return / per-user snapshot 失败（warn）/ 视频三跳失败。
