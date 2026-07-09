@@ -103,9 +103,11 @@ cat "tmp-evo/$CAPTURE_DIR/state.json" 2>/dev/null  # 检查恢复点
 
 - **先判定来源**：上游影子账号收到的 `connection.kickout` 是代理会话事件，必须 drop，不能转发给真实下游玩家；我方玩家 token 失效/被顶替时，才按下游连接自合成踢出帧。
 - **先找 EVO 证据，不套 PP 协议**：EVO 抓包已出现 `connection.kickout`，`session/offline` 只是 PP/旧占位语义；除非 capture 或 bundle 证明客户端识别，否则不要用 `{"type":"session","args":{"session":"offline"}}`。
-- **WS 处理顺序**：game WS 发现 session 失效时，先向当前连接发送 typed envelope `connection.kickout{reason:"session_expired"}`（带 `id/time`），再关闭连接并清理 room/conn registry；下注路径还必须 fail-closed，不能先落库再踢。
+- **同 token 同桌互斥**：只在 game WS 做桌级 lease；新连接抢占成功后继续进入，旧连接收到 `connection.kickout{reason:"newConnection"}` 并关闭。不要把同桌互斥协议发给新连接，否则客户端会停在“刷新/继续”流程；video/chat/lobby 不做桌级 lease。
+- **token/session 失效**：game WS 发现 session 失效时，向当前连接发送 typed envelope `connection.kickout{reason:"inactivity"}`（带 `id/time`），再关闭连接并清理 room/conn registry；下注路径还必须 fail-closed，不能先落库再踢。不要使用 `session_expired`，EVO 客户端不识别该 reason。
+- **返回商户站点**：`/style` 必须同时 patch `licensee_lobby.url`、`mobile_settings.licensee_lobby.url`、`sessionTimeout.url`、`mobile_settings.session_timeout.url`。`inactivity` 弹窗的确认按钮依赖 `sessionTimeout.url`；只 patch lobby 会导致只有返回大厅或无按钮。URL 优先级：merchant gameurl 请求里的 `LobbyUrl` > operator `home_url` > 我方 host fallback。进入游戏前 token 已失效拿不到 session 返回地址时，落 `/`/EV.19 可接受。
 - **Setup 处理顺序**：`/setup?EVOSESSIONID=...` 带 token 必须验真；失效时返回明确的 EV.19 HTML 页面。若客户端 failedAuth 跳到 `/`，根路径也必须返回同一 HTML，不能让用户落到 404。
-- **验证点**：补 WS 回环测试（顶替 session → 收到 `connection.kickout` → Redis 无注单）和 `/setup`/`/` HTML 测试；不要只靠 build 通过。
+- **验证点**：补 WS 回环测试（同桌第二连接进入 → 旧连接收到 `newConnection` 且新连接可玩；token 失效 → 收到 `inactivity` → Redis 无注单）和 `/style` sessionTimeout URL 测试；不要只靠 build 通过。
 
 🔴 **per-user 帧时序 + 余额来源（铁律）**：① 余额用**商户钱包**（drop 上游渠道 USD `balanceUpdated`，**按下游连接寻址 per-connection 重发**——`balanceUpdated` 不一定带 playerId，IceFishing 只含 `balance/balances[]/currencyCode/tableId`，靠 ws 连接定向），客户端 ~6s 收不到即重连；② 下发帧 `tableId` 用**裸 EVO tableId**（PPTableID），填 code 客户端判「未收到」；③ 结算 per-user 帧在**结算锚帧触发清 Redis 之前**抓 `userBetsSnapshot`；④ `currencyMult` 进制——所有金额按币种乘系数。
 

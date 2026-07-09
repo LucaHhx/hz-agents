@@ -83,6 +83,14 @@ cat "tmp/$CAPTURE_DIR/state.json" 2>/dev/null  # 检查恢复点
 > 1. **采样缺口**：某帧不在 message-nobet **≠ 不广播**，可能只是没采到那种 bonus 局 / 边角触发（message-nobet 自愈重连 + `flags:'w'` 截断重录，单份覆盖有限。treasureisland 实例：某份重录后只剩 Bingo+BBM，Marbles/CFT 演出帧误入 C 列，实为广播）。→ **uId 双判据定锤**：无 uId + 桌级字段(tableId)=广播(A/A2/B)；有 uId / 个人会话定向=per-user(C)。**diff 出候选，uId + 跨多份 no-bet feed 交叉才能定**。
 > 2. **录制天然不完整，必须结合客户端代码**：capture 只是"录时恰好发生的"，**不是完整协议**。特殊 / 稀有帧（错误 betValidationError、取消 canceled、会话 session、稀有 bonus 如 rc8 CFT 录几小时都不出、桌级自动消息 toasterMessage 整份仅 1 条易漏）可能**从不出现**在任何 capture。**不可"没录到=不存在"** —— 必须结合客户端 JS chunk 协议反推（事件名/字段/渲染组件）+ 同供应商既有机台沉淀。**capture 是事实下限，非协议上限**。
 
+#### token 失效 / 同桌互斥 / 视频连接边界
+
+- **同 token 同桌互斥**：只在 game WS 做桌级 lease；第二个窗口进入同一桌时，新连接抢占成功后继续玩，旧连接收到 `{"duplicated_connection":{}}` 并关闭。不要把该帧发给新连接，否则 `Continue Here` 会无效或出现两个窗口轮流顶号。
+- **token/session 失效**：`session.offline` 只用于 token 失效、会话被注销、账号被别处使用等真正失效场景；发送后客户端会按 PP 原生流程关闭 game/video/chat 并提示用户。不要把 Redis 占用失败、内部错误、同桌互斥误包装成 `session.offline`。
+- **视频/chat/dga/stub**：这些连接只做 token 失效保险监控，不能做桌级互斥 lease。PP 视频可能重连或存在多路流；给 video 加玩家占用会直接导致游戏内视频 WS 被拒绝。
+- **错误处理**：lease/Redis 异常无法判定玩家状态时，宁可记录日志并关闭当前异常连接，不能伪造 duplicate/session 协议给客户端，避免触发错误弹窗和错误流程。
+- **验证点**：补 game WS 同桌抢占测试（旧连接收到 duplicate、新连接可继续）、video WS 不因 game lease 被拒测试、token 失效关闭 game/video/chat 的回归测试；不要只验证单浏览器登录。
+
 录制工具：pp-game 仓库 `scripts/game_dev/fetch_client.mjs`（**双路会话**：有头下注 → message.txt；无头 nobet 影子账号 → message-nobet.txt；浏览器自动点 Details，数据落 `.txt` / `.html`）。**本 skill 不主动录**。
 
 ## 8 Phase 概览 + 读取计划（progressive disclosure）
