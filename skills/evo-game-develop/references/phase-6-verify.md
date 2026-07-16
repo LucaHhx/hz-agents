@@ -137,9 +137,10 @@ AI 填实进经验文档部署节：
 - **DB 前置**：`b_tables`（vendor_type='evo'、code='evo'+裸id、original_id=裸id、game_type、enabled=1、failover_group_id）；`b_table_currency_configs` 各币种限红 + **currencyMult**；`b_currency_rates` 有启用 EUR 行 + symbol（J6）
 - **ID 双字段对齐**：`b_tables.code`(索引) vs `original_id`(协议帧)；factory implementedTables 键=code、switch=original_id
 - **per-currency 进制**：每币种 currencyMult 正确（IDR 20000 / BRL 5 / INR 100…）
+- 🔴 **非 USD 账号实测下注+派彩**（G5/G6，`go test` 与 codex 都抓不到）：拿一个 IDR 或 INR 账号进桌，下一笔**接近该币种上限**的注（如 IDR 直注 20000）确认受理、中奖确认派彩未被截顶。USD 账号必然通过（mult=1），**只跑 USD 等于没测**。历史：roulette 的 `CheckBet` 直读 USD 机台默认限额，IDR 玩家 13 笔 betAction 全回 `1048` 静默 wipe chip，USD 测试一路绿灯，直到用户抓 HAR 才暴露
 - **post-merge live-launch 必查**（test/codex 抓不到）：`/config` wsHost 指我方 + 视频参数 + 限红非空；大厅 allowlist 自动订阅新桌；game ws 连我方进桌；descrambler/视频可放后置；session mint（Akamai tls-client）
 
-**PASS**：经验文档填实四组清单。
+**PASS**：经验文档填实四组清单 + 非 USD 账号实测通过。
 
 ### V14. 赢钱反推验证（capture 局对照算钱）
 

@@ -158,7 +158,7 @@ roulette 的 `tableState.betState.{bets, lastGameChips, history}` 是会话私�
 ## <a id="6"></a>6. 注册链路（新族 + 新桌）
 
 **新桌（含新族首桌）三步**：
-1. `factory/instance_factory.go`：`implementedTables()` 加 `"evo<tableId>": true`；`newGameInstance` switch 加 `case "<裸 tableId>": return buildXxxInstance(table)`；新族写 `buildXxxInstance`（造 Variant + LoadLimits + NewProcessor + SetBalanceSource(runtime.PlayerBalance) + SeamlessBetService + runtime.NewEvoInstance）。
+1. `factory/instance_factory.go`：加 `table<Name> = "<裸 tableId>"` 常量；`implementedTables()` 加 `table<Name>: true`（🔴 **键是 original_id 裸 id，不是 `evo`+id 的 code**——后台同步弹窗按 `PreviewTable.TableID(=original_id)` 比对，误用 code 会让所有 EVO 桌错显「未实现」，是已修的历史坑）；`newGameInstance` switch 加 `case table<Name>: return buildXxxInstance(table)`（switch 的是 `table.OriginalId`）；新族写 `buildXxxInstance`（造 Variant + LoadLimits + NewProcessor + SetBalanceSource(runtime.PlayerBalance) + SeamlessBetService + runtime.NewEvoInstance）。
 2. `b_tables` 插行：`vendor_type='evo'`、`code='evo'+裸id`、`original_id=裸id`、`game_type`、`enabled=true`、`failover_group_id`。大厅 allowlist 自动从 DB 刷新订阅，**不改大厅代码**。
 3. `b_table_currency_configs` 预存该桌各币种限额（/config 按 tableID+currency 查；缺 → 限红/兜底错）。
 

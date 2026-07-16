@@ -126,6 +126,7 @@
 - **读 Redis bets `GetRedisUserBets(tableID, gameID, requireAccepted=true)`**（fail-closed C7）。⚠️ **betCode 双命名空间**：Redis 用下注帧裸名、roundDetail 对账用前缀名（`IF_`），先映射
 - 全用户结算循环：赔付走 L4 PAYOUT 的**通用模型**（roulette `amount×(odds+1)`；game show 押中 segment `stake×(倍率+1)`、未中=0）
 - 🔴 **交互式 bonus 派彩 per-player（玩家选择型，FunkyTime 类）**：Bar/StayinAlive 倍率取决于玩家选杯/选色 → settle 须按 user 记录的选择查倍率盘；**未选玩家 auto 随机选一个（非取最小，匹配 EVO）**、**倍率盘缺失且有人押中该段须 fail-closed（不按 0 把中奖当未中）**（known-pitfalls K3/K5）。Disco 类 communal 单值无选择。纯数字/字母段仍按 base×topSlot。
+- 🔴 **payout cap 按玩家币种取（G5）**：`payoutCapLookup` 必须 `p.limitsFor(currency)` 而非 `p.limits.PayoutLimit`（后者是 USD 口径，会把 IDR 派彩按 USD 值截顶＝**少付玩家两万倍**）。取不到该币种限额时返 `0`（=不封顶）+ `zap.Error` 告警：注单已扣款、结算必须完成，不能像下注那样拒（此处是全链路唯一 fail-open 点，靠 launch/`/config`/CheckBet 三道闸兜住不该发生）
 - **`handlers.SettleUsersSeamless(/result)`** 派彩 → 内置 `hasSuccessfulBetDebit` 闸门（**/result 必先有成功 /bet**，EVO 同 J11）
 - **per-user 下发**：`events.SendToUser(tableCode, userID, frame)`（只给本局有注用户；roulette `win` 帧 / game show `<gt>.bets` status→Settled+payout）+ `balanceUpdated`（商户余额，**tableId 用裸 EVO tableId**）
 - **取消路径**：`<gt>.gameCancelled`（如有）→ `OnRoundCancelled` 退款
@@ -148,6 +149,7 @@
 **实现内容**：
 - `CheckBet` hook
 - **双重 fail-closed（C1）**：内存窗口 + Redis 窗口任一异常返错
+- 🔴 **限额按玩家币种取（G5）**：`lim, err := p.limitsFor(ev.Currency)`，`err != nil` → 拒单 + `zap.Warn`。**禁止**直读 `p.limits`（那是 factory 按 USD 装配的机台默认，非 USD 玩家会被错拒）。同样禁止直读的还有 `settle.go` 的 `payoutCapLookup` 与 per-user 帧里的 `payoutLimit` 展示值 —— 新族收尾必 `grep -n 'p\.limits\b'` 确认只剩 `limitsFor` 内部那一处兜底
 - 按 betType 单注限额 → `ErrCodeBetTooLow/TooHigh`（**currencyMult 进制比较**）
 - 用户当前局总 stake + 新注 > 台限 → `ErrCodeTableLimitExceeded`
 - betCode 白名单校验 → `ErrCodeUnknownBetCode`（roulette 数字 / game show 字符串段名）

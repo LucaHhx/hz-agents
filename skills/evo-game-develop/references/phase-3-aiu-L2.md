@@ -53,8 +53,9 @@
 - `bet_limits.go`：`<GameType>Limits`（按 betType/段 min/max + TableBetMax + SafeBetPct[roulette 覆盖率玩法专属]）+ 默认值常量（与客户端 fallback 一致 — G2）；**runtime 注入支持 per-currency override**（`runtime.Load<GameType>Limits(db, tableDBID, currency)`）
 - `rules_matrix.md`：客户端展示项 / config 字段名 / 客户端 fallback / 后端 enforce（暂留 `?` 由 L3 CHECK_BET 填）
 - ⚠️ **currencyMult 进制**：限额值是进制整数，校验时与下注金额同进制比较
+- 🔴 **loader 必须 fail-closed（G5）**：`runtime.Load<GameType>Limits` 返 `(Limits, error)`。缺该币种行时按 `limit(cur)=limit(USD)×currencyMult(cur)` 等比重建（复用 `runtime.resolveCurrencyConfig`），拿不到 mult / USD 基准行也缺 → 返 error。**禁止回落 USD 原值**（拿 USD 的 2000 量 IDR 注额 = 合法注全拒 + 派彩截顶少付）。新族只需调 `resolveCurrencyConfig(tableDBID, currency)` 拿 `(cfg, scale)`，把 `scale` 乘到每个**金额键**上（min/max/payout_limit/table_bet_max_limit；百分比/倍率/计数类**不乘**）
 
-**B5 验收**：bet_limits.go 单测覆盖默认值 + matrix 行数 ≥ betType 数
+**B5 验收**：bet_limits.go 单测覆盖默认值 + matrix 行数 ≥ betType 数 + 「USD 行 ×mult 重建 == 该币种真实行」golden（数值抄 live 库，见 `runtime/limits_scale_test.go`）
 
 **下游**：CHECK_BET 填实矩阵 / PAYOUT cap 默认 / CURRENCY_CONFIG
 

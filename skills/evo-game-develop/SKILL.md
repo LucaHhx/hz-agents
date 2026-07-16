@@ -35,8 +35,8 @@ else
     done
 fi
 [[ -z "$CAPTURE_DIR" ]] && { echo "❌ 找不到 capture 目录（应在 tmp-evo/<EVO tableId>/）"; exit 1; }
-EVO_TABLE_ID="$CAPTURE_DIR"               # EVO 原始 tableId，用于协议帧（subscribe channel / win.tableId / game ws path）
-TABLE_CODE="evo${EVO_TABLE_ID}"           # b_tables.code，用于 instance_factory 索引 / 准入 / Variant.TableID
+EVO_TABLE_ID="$CAPTURE_DIR"               # EVO 原始 tableId(=original_id)，用于协议帧 + factory 准入/implementedTables 键
+TABLE_CODE="evo${EVO_TABLE_ID}"           # b_tables.code，用于 FindByTableCode / Variant.TableID / Redis bet key
 
 cat "tmp-evo/$CAPTURE_DIR/state.json" 2>/dev/null  # 检查恢复点
 ```
@@ -48,8 +48,8 @@ cat "tmp-evo/$CAPTURE_DIR/state.json" 2>/dev/null  # 检查恢复点
 
 | 概念 | 值 | 用途 |
 |---|---|---|
-| `EVO_TABLE_ID`（= capture 目录名） | `vctlz20yfnmp1ylr` | EVO 原始 tableId。**协议帧**里用：上游 game ws path `/public/<gt>/player/game/<EVO_TABLE_ID>/socket`、subscribe channel `table-<EVO_TABLE_ID>`、下发 `win.tableId` / `balanceUpdated.tableId`（客户端按 URL 匹配，填错判「余额未收到」→ 重连）。`enum`/`Variant.PPTableID` 存它。 |
-| `TABLE_CODE`（= `evo`+tableId） | `evovctlz20yfnmp1ylr` | `b_tables.code`，我方机台编号。**索引/路由**用：`instance_factory.implementedTables` 键、`FindByTableCode`、下游 game ws path `:tableId`、`Variant.TableID`、Redis bet key。 |
+| `EVO_TABLE_ID`（= capture 目录名 = `b_tables.original_id`） | `vctlz20yfnmp1ylr` | EVO 原始 tableId。**协议帧**里用：上游 game ws path `/public/<gt>/player/game/<EVO_TABLE_ID>/socket`、subscribe channel `table-<EVO_TABLE_ID>`、下发 `win.tableId` / `balanceUpdated.tableId`（客户端按 URL 匹配，填错判「余额未收到」→ 重连）。`enum`/`Variant.PPTableID` 存它。🔴 **factory 也用它**：`newGameInstance` 的 `switch table.OriginalId` 准入 + `implementedTables()` 的键。 |
+| `TABLE_CODE`（= `evo`+tableId） | `evovctlz20yfnmp1ylr` | `b_tables.code`，我方机台编号。**索引/路由**用：`FindByTableCode`、下游 game ws path `:tableId`、`Variant.TableID`、Redis bet key。 |
 | `gameType` | `roulette` | 游戏族目录 `games/<gameType>/<gameType>core/`、game ws path `<gt>` 段。 |
 
 > 🔴 **两者绝不混用**：`Variant.TableID = table.Code`（带 evo 前缀，我方索引）；`Variant.PPTableID = table.OriginalId`（裸 EVO tableId，协议帧用）。下发给客户端的 `tableId` 字段一律用 **PPTableID（裸 EVO tableId）**——填 code 客户端 URL 不匹配，判余额/桌态不属本桌。
@@ -177,8 +177,9 @@ if [[ -d "$REPO_ROOT/server/game/evo/internal/games/$GAMETYPE" ]]; then
     REUSE_CORE="$GAMETYPE"   # 已有同族 core（如又一张 roulette 桌）→ 只加 factory case + DB，几乎零新代码
 fi
 
-# factory 已注册检测（键 = b_tables.code 带 evo 前缀）
-if grep -q "\"$TABLE_CODE\":" "$REPO_ROOT/server/game/evo/internal/factory/instance_factory.go" 2>/dev/null; then
+# factory 已注册检测。🔴 键 = original_id（裸 EVO tableId），**不是** code：
+# newGameInstance 用 `switch table.OriginalId`，implementedTables() 键同口径（误用 code → 后台同步弹窗全显「未实现」，已修坑）。
+if grep -q "\"$EVO_TABLE_ID\"" "$REPO_ROOT/server/game/evo/internal/factory/instance_factory.go" 2>/dev/null; then
     jq --arg ts "$(date -u +%Y-%m-%dT%H:%M:%SZ)" '. + {phase:1,status:"skipped",already_registered:true,last_updated:$ts}' "$STATE" > "$STATE.tmp" && mv "$STATE.tmp" "$STATE"
     exit 0  # 流程结束
 fi

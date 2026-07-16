@@ -9,7 +9,7 @@
 **A1**：协议事实只从 capture（message/message-nobet/config/gameDetail/roundDetail）+ `clientResources/frontend/` bundle。禁参考老项目 `/Users/luca/work/ppgame`。
 **A2**：`docs/evo-explore/` 设计文档是**实现前方案**，与 as-built 代码有出入（per-user 帧 / 视频解扰 / flipbook / currency 都是落地后改的）。**以 `server/game/evo/` 实际代码 + roulettecore 为准**。
 **A3**：capture 是事实下限非协议上限。稀有帧（betValidationError / canceled / 特殊货币 / 大奖）可能从不出现 → 结合 bundle + roulette 既有实现反推。
-**A4 capture 是「已被操作过的下限」，客户端代码才是协议上限（CrazyTime 撤注实证）**：capture 只录到录制时实际触发的帧——撤注没按就无 undo 帧、单子下注模式没用就无 Chip 帧，**「capture 没有」≠「协议没有」**。判协议全集（尤其下注 action / 撤注 / 罕见帧）必须 grep `clientResources/frontend/evo/mini/js/` 业务 bundle 的 type/action 常量 + reducer，**客户端代码权威**。行为分歧用**三方实证**坐实：① capture（真 EVO 行为）② 客户端 bundle（协议定义）③ **连我方服务端录一份 capture（我方实际行为）**。CrazyTime 撤注/单子下注 bug 就是靠「客户端代码露出 Chip/Undo action + 连我方服务端实测放 2000 筹码回 chips#0(注没记上)」坐实的——首份 capture 没按撤注、只用 SetChips 全量模式，误判无 bug。⚠️ **一个游戏可能有多套下注模式**（CrazyTime：SetChips 全量快照 vs Chip/BulkBet/Undo 增量，客户端 flag 决定），服务端须把 bundle 里所有 action 都处理，不能只按一份 capture 实现。**Monopoly 又一实证**：grep bundle `sendPlaceChipMessage({name:...})` 全集见客户端发 6 种 action（Chip/BulkBet/Repeat/Undo/**Double/UndoAll**），我方只处理前 4 种、漏 Double(翻倍)/UndoAll(清空) → 玩家点加倍/清空落 default 被拒单、功能失效（capture 只录了 4 种）。反过来 SetChips/Move 只在 enum 定义、`sendPlaceChipMessage` 从不发送 → 不处理也对，**以「实际 send 的 action」为准、非 enum 全集**。
+**A4 capture 是「已被操作过的下限」，客户端代码才是协议上限（CrazyTime 撤注实证）**：capture 只录到录制时实际触发的帧——撤注没按就无 undo 帧、单子下注模式没用就无 Chip 帧，**「capture 没有」≠「协议没有」**。判协议全集（尤其下注 action / 撤注 / 罕见帧）必须 grep `clientResources/frontend/evo/mini/js/` 业务 bundle 的 type/action 常量 + reducer，**客户端代码权威**。行为分歧用**三方实证**坐实：① capture（真 EVO 行为）② 客户端 bundle（协议定义）③ **连我方服务端录一份 capture（我方实际行为）**。CrazyTime 撤注/单子下注 bug 就是靠「客户端代码露出 Chip/Undo action + 连我方服务端实测放 2000 筹码回 chips#0(注没记上)」坐实的——首份 capture 没按撤注、只用 SetChips 全量模式，误判无 bug。⚠️ **一个游戏可能有多套下注模式**（CrazyTime：SetChips 全量快照 vs Chip/BulkBet/Undo 增量，客户端 flag 决定），服务端须把 bundle 里所有 action 都处理，不能只按一份 capture 实现。**Monopoly 又一实证**：grep bundle `sendPlaceChipMessage({name:...})` 全集见客户端发 6 种 action（Chip/BulkBet/Repeat/Undo/**Double/UndoAll**），我方只处理前 4 种、漏 Double(翻倍)/UndoAll(清空) → 玩家点加倍/清空落 default 被拒单、功能失效（capture 只录了 4 种）。反过来 SetChips/Move 只在 enum 定义、`sendPlaceChipMessage` 从不发送 → 不处理也对，**以「实际 send 的 action」为准、非 enum 全集**。**roulette 族第三次实证（RedDoorRoulette 对接时发现，已修 commit f1a4d34e）**：`roulettecore` 只定义 PLACE/REMOVE/MOVE/UNDO 四个 action，漏 **`UNDO_ALL`**（客户端「清除全部筹码」按钮，bundle 有 `action:{type:"UNDO_ALL"}` / `"bets/UNDO_ALL"` / `CLIENT_PRESSED_UNDO_ALL`）→ 落 switch `default` 回 `ErrCodeInternalServer`、**Redis 注单原封不动** → 玩家以为已清空、封盘照扣全额本金。当年 `vctlz` 的 capture 只录到 `PLACE`（录制时没点撤销）故未暴露；而其余 5 族（crazytime/funkytime/icefishing/monopoly/monopolybigballer）**全都处理了 UndoAll，roulette 是唯一遗漏**。→ **新族对接第一件事：把 bundle 的 action 全集与既有同族实现做集合差，差集就是候选 bug**。
 
 ## B. per-user 数据构造（⭐ EVO 灵魂，PP 无）
 
@@ -53,6 +53,14 @@
 
 **B14 bonus 子游戏公开帧可能缺 per-session 选择字段，结算要找权威终局倍率**：bonus 演出/结果帧可能在 nobet mirror-feed 只给公共倍率表，不给本会话选择点；有下注会话则可能多出自动选择/个人选择字段。分析时要比较同名帧 shape，并确认结算倍率来源。若终局/结算锚帧有最终 `totalMultiplier`，而 bonus 子帧缺少可用个人选择倍率，资金结算必须 fallback 到终局倍率；数字段仍按本族 odds/slot multiplier 公式，不能统一套 `totalMultiplier`。
 
+**B14.1 🔴 倍率盘可能【完全不经 ws 下发】——对接前必须先证明「倍率盘可从 ws 取到」，否则 per-player bonus 不可做（RedDoorRoulette 实证）**：CrazyTime 的 `crazybonus.result.flappers` 是**公共广播**（nobet 影子会话也能拿全网格），这是 b1/b4 per-player bonus 能做的**前提**。**但 RedDoorRoulette 没有任何对应帧**：三 flapper 的倍率印在**实体转盘上（只在视频里）**，game ws 全程不下发——nobet 会话的 bonus 相位 `tableState` 只有 `bonusSpots:{号码:level}`；**即便是 bonus 参与者的有头会话**（收到了 `autoAssignedFlapper`）也只拿到自己的 `bonusWin.payout`，仍无倍率盘。而我方代理账号**从不向上游下注** → 生产中连 `autoAssignedFlapper` 都收不到。
+- **陷阱帧 `bonusWin.finalMultiplier` 是公共值不是本人倍率**：两个 bonus 局都 = 200（= 最高倍率），nobet 无下注也收到；round2 玩家实际倍率 50 而 `finalMultiplier`=200。**拿它给所有人结算 = 超付 4~6 倍**。
+- **旁路也不成立**：bonus 局 `winnersList` 赢家条目带 `multiplier`，其**值集合**确实等于倍率盘（round2 `{30,50,200}` vs Green50/Blue200/Yellow30），但①只下发前 50 名赢家、低倍率 flapper 可能无赢家而缺值 ②**无 color/position 映射**（看到 30 和 50，不知哪个是 Yellow）③到达在 bonus 结束之后 → **不可作为倍率盘来源**。
+- **唯一程序化来源 = REST `roundDetail.bonusRound.flapperResults`**（color→totalMultiplier）+ `wheelSpinResults`（Initial/ReSpin 全历程）。风险：我方运营商本局在上游**无参与者**，hall B2B `evo/rounds/{rid}/detail` 是否仍返回该局，**离线无法验证、须 live 探针**。
+- **Phase 0/1 就要跑这个判据**（别等 L3 才发现）：`jq -rs '.[]|select(.dir=="recv")|.payload|fromjson|select(.type|test("bonus|result"))|.args' message-nobet.txt` 找 per-flapper/per-cell 倍率网格。**找不到 → 该 bonus 是「代理模型无源」**，与 Lightning Storm HotSpot 同类（那次决定放弃）。要么接 REST 兜底 + fail-closed，要么放弃该机台。
+
+**B14.2 🔴 bonus 派彩倍率的「净 vs 总返还」口径逐族不同，照抄必错本金（RedDoorRoulette vs CrazyTime 实证）**：`crazytimecore/odds.go:149` 的 bonus 是 `stake × (m+1)`（m 是**净**倍率，+1 返本金，#429）。**RedDoorRoulette 的 flapper `totalMultiplier` 是【总返还】倍率**：`stake × TotalReturn` —— roundDetail 实证 `stake 4000, totalMultiplier 200 → payout 800000`（= 4000×200，**不是** ×201）。**照抄 CrazyTime 公式每次 bonus 中奖多付 1 倍本金。** 新族必须从 `roundDetail/*.json` 的 `participants[].bets[].{stake,payout}` 除一下坐实口径，**禁止跨族沿用派彩公式**。同理 RDR 的 bonus 是**替换**直注赔率（20×→200×）而非叠加，且**只作用直注**（同局覆盖该号码的 dozen/red 仍按标准赔率）。
+
 **B15 winnersList 金额必 per-currency 换算、不止合并（#431，Monopoly 唯一漏接实证）**：B8 只讲合并我方中奖者，但 winnersList communal 广播、下游玩家币种各异——上游 winnings 是**帧流货币**（`frameCcy`，sniff 自上游 `balanceUpdated.currencyCode`；🔴 用 frameCcy 而非重采样容灾组 active 会话，否则 failover/重连窗口取错币种 → 金额数量级偏高），我方注入的赢家是各自本币。必须 `convertUpstream`（上游从 frameCcy 换）+ `convertOurs`（我方从 `w.Currency` 换）**归一到每个观众货币** + `events.BroadcastToTableByCurrency` 分组下发（`handlers.ConvertDisplayAmount` best-effort、失败保原值不阻断）。裸 communal 广播原值 → 非基准货币玩家金额错乱 + 与上游 winnings 混排排序错。**新族 winners_broadcast 必查是否接 frameCcy per-currency**——Monopoly 是 6 族里唯一漏的（communal 广播 NetWin），照 icefishing/crazytime 补齐（processor sniff + 4 段换算 + factory `SetUpstreamCurrencySource`）。
 
 **B16 bonus 演出帧逐帧夹带 per-user 金额，必按连接注入 bonusWin（Monopoly boardWalk/boardState/cashPrize 实证，用户指证「进 bonus 没金额」）**：monopoly bonus（2/4 Rolls 棋盘）演出帧不只公共动画——boardWalk（每步）/boardState（重连态）/cashPrize（Chance 现金奖）各带 `bonusWin{betAmount,winAmount,totalWinAmount}` 个人金额（= 玩家触发段 `spinResult.result` 押注 × 该步 `multiplier` / 累计 `totalMultiplier`）。上游影子会话不下注 → 这些帧 bonusWin 空/缺，裸广播 → 玩家进 bonus 全程看不到自己赢额增长。判据同 B13（逐帧 `args|paths(scalars)` diff bet vs nobet、找**仅 bet 有**的字段），出现 bonusWin 类个人字段就必须 per-user 注入、不能裸广播；演出帧不涉资金故解析失败裸广播保底。⚠️ 别被 B10「communal 演出帧直转」误导——同一族的演出帧也可能夹带个人金额，**必须逐帧 diff、不能整类当 communal**。
@@ -94,6 +102,14 @@
 **G3** payout cap `min(A,B,C)`：A=`maxMultiplier×用户当局总注`（用户级非单注）/ B=`Convert(euro_table_payout_max,EUR,currency)` / C=`table_payout_max`。EUR 换算失败 fail-closed。
 **G4 🔴 currencyMult 进制全路径**：EVO 金额是进制制（IDR÷20000、BRL×5、INR×100，config.currencyMult）。下注校验 / 结算 / payout / 限额比较 / 显示**全部按币种乘系数**，漏一处金额错乱。限额与下注金额必须同进制比较。
 
+**G5 🔴 限额/封顶必须 per-currency 取，禁止静默回落 USD**（2026-07-10 HAR 实证，6 族全中）：`b_table_currency_configs` 逐币种存限额，同桌 `straight_bet_max` USD=2000 / IDR=4000万（差 mult 倍）。三条硬规矩：
+- **建实例时装配的 `p.limits` 只是机台默认（factory 按 USD 读）**，一切校验/封顶必须走 `limitsFor(currency)` 按玩家币种取。曾 roulette 的 `CheckBet` 直读 `p.limits.ValidateBets`（虽然 `BetCheckEvent.Currency` 已填好）→ IDR 玩家合法注全判 `1048`；该码在客户端属**静默组**（只 wipe chip 不弹 toast），玩家只见「下注全部被撤回」无提示。
+- **`p.limits` 直读点要 grep 干净**，不止 `CheckBet`：`settle.go` 的 `payoutCapLookup`（少付玩家）、per-user 帧的展示值（MBB `per_user_playerstate.go` 的 `payoutLimit`）都曾漏改。
+- **loader 内部不许回落 USD 原值**。缺该币种行时按 `limit(cur) ≈ limit(USD) × currencyMult(cur)`（USD mult 恒 1，含 `$$BaseCurrency=EUR` 的 game show 桌）重建；`currencyMult` 是**币种属性跨桌恒等**，可从任意桌该币种 config 读。拿不到 mult / USD 基准行也缺 → 返 error：下注侧 fail-closed 拒单，结算侧 cap=0 不封顶 + `ERROR` 告警（注单已扣款，结算不能拒）。**绝不可用 `b_currency_rates.rate`（市场汇率）代替 mult** —— IDR 15800≠20000、INR 83≠100、EUR 0.92≠1，用它放大会系统性少封顶＝少付玩家。同源教训见 PP issue #64（`GetRouletteLimitsByCurrency` 缺配置返 error）。
+  - ⚠️ **该恒等式不处处精确，重建是安全兜底而非真值复刻**：live 全量比对 281 个金额键 → 275 精确、6 个真实值 **>** 重建值（全是 FunkyTime IDR 的 per-segment max，上游放宽 2×）、**0 个真实值 < 重建值**。故重建只会偏保守（误拒大额合法注），绝不放行超限注；min 与 payout_limit 全库精确。真值永远靠命中本币种行（scale=1）拿到，重建分支只在配置缺口时兜底并 warn 催补齐。**若某天出现「真实值 < 重建值」，重建就会放行超限注 —— 那时必须改回纯 fail-closed，不要调 scale 迁就数据。**验证 SQL 与例外断言见 `runtime/limits_scale_test.go`。
+
+**G6 🔴 非 USD 币种必须实测，USD 账号一路绿灯**：G5 那类 bug 对 USD 玩家完全不可见（mult=1，回落 USD 等于没回落）。新族验收至少跑一个 IDR/INR 账号下注 + 中奖派彩。另：缺币种配置的玩家本就进不了桌（`merchant launch` 的 `errEvoCurrencyConfigMissing` + EVO `/config` 404 `currency not supported`），所以 `CheckBet` 的 fail-closed 是**纵深防御**不是唯一防线 —— 但新加进桌入口时必须同步补这道闸。
+
 ## H. 历史 / 报表（EVO JSON，非 PP XML）
 **H1** history 是 **JSON**（`gateway/history_api.go` 通用）：token→玩家→按 `vendor_type='evo'` filter（防 PP 局窜入）→按玩家时区分组 YYYYMMDD；`/day` 元素带玩家时区偏移；接口可能是裸数组。
 **H2** b_game_rounds.Extra 前瞻落盘：所有族特色字段（winNumber/倍数/bonus/子序列）凡 history/报表可能渲染都落，**禁因本局 capture 未触发而省略**。
@@ -126,6 +142,8 @@
 
 > game show 的 bonus 轮里玩家要做选择（Bar 选杯 / StayinAlive 选色 / CashHunt 选格…），**选择决定 per-player 倍率**。这是 FunkyTime 反复踩坑的根因，roulette / 纯数字 game show 无。新族**有交互 bonus（先抽 capture 看有无 `<gt>.chooseColor`/`setChoice`/`playerChoiceMade`/`colorChoice` 这类选择帧）则本节逐条对照**。前置：bonus 倍率盘全上游广播可复现（无则像 Lightning Storm HotSpot 那样代理无源 → 评估跳过）。
 
+**K0 🔴 参与门控的判据逐族不同，必须 grep 客户端 selector 实证，不可套用别族结论**：K1 描述的 `isParticipating = isBetConfirmed(status) + 押中该 bonus 段` 是 **FunkyTime/game show 的形态**。**RedDoorRoulette 完全不同**：其 `La(G)`（`roulette.47a5cd75.js:251699`）= `betState.bets` 存在 && `bets[开奖号的直注 betCode]` 存在，**与 `betsAccepted`/status 无关**，且在 `BONUS_GAME_INITIALIZING` **首帧一次性判定并锁定**。→ 对 RDR 的正确修法不是「betsClosed 提前发 Accepted」，而是**从 bonus 首帧起逐帧向该连接注入本人 `betState.bets`**；漏了则押中开奖号的玩家看不到选 flapper 界面。旁证：`autoAssignFlapperInMs`（选择倒计时）在 nobet 与 bet 会话**都出现 = 公共计时**，不是门控信号，构造 per-user betState 时**不能当私有字段剥掉**。**新族做法**：grep 客户端里控制 bonus UI 显隐的 selector，把它的入参逐个回溯到帧字段，再决定 per-user 注入什么。
+
 **K1 交互 bonus 参与 UI（选择框/机会数 lives/选色盘）被客户端 `isParticipating` 门控 → 须在 betsClosed 即发 Accepted（🔴 否则整块 bonus UI 不显示）**：客户端 `isParticipating = isBetConfirmed(status∈{Closed,Accepted,…}) + 押中该 bonus 段`。真 EVO 在 `betsClosed` **就**发 `<gt>.bets{status:Accepted}`（capture 实证 Open→Accepted→Settled，在 wheelResult/bonus 之前）。我方原模型只在**异步商户 /bet 完成后**才发 Accepted → wheelResult 触发参与判定时 status 仍 Open → 不判参与 → **机会数/选色/选杯整块不显示**。修：betsClosed 时 `broadcastBetsClosedPerUser` 立即按连接发 Accepted（用 Redis 注；钱仍异步 /bet、失败走拒单纠正、/result 仍受 hasSuccessfulBetDebit 闸门 → **无资金风险**）。lives/bettingStats 是 communal 广播（已正常转发），根因在参与门控、不在转发。icefishing/crazytime 也是异步发 Accepted，但其 bonus 不依赖参与时序故未暴露。
 
 **K2 选择窗口锁（🔴 资金，防超付）**：玩家选择影响自己倍率 → 可等倍率盘广播后再改选最高倍率超付。必须在**倍率盘揭晓前**的「选择阶段结束」事件（DecisionFinished/ChoosingFinished）`closeBonusChoice` 锁定；之后 `recordBonusChoice` 拒绝改选、回显已锁选项。上游 readLoop 串行调 HandleUpstream → 结算先于 gameCleared，下游选择写由 bonusMu 保护，无 race。
@@ -137,6 +155,12 @@
 **K5 倍率盘缺失 fail-closed（🔴 资金）**：bonus 段倍率盘不完整（缺盘/缺项/非正）且有人押中该段 → **绝不按 0 结算**（会把中奖当未中、清 key、误派 0）。须 fail-closed（落人工介入入口、保留 bet key、不调 OnRoundSettled）等重试。仅在「有人押中该 bonus 段」时阻断（letter/number bettor 不受影响）。reconcile 孤儿局补结算同样走此校验。
 
 **K6 撤注 = 服务端快照栈（🔴 资金，game show undo 不重发 placeChips）**：game show 客户端撤注（独立 `<gt>.undo`/`undoAll` 帧，或 `<gt>.bet` 的 Undo/UndoAll action）**只发撤注信号、不重发 placeChips 全集**（非 client-authoritative，客户端本地维护 betHistory 栈），UI 以服务端 bets 回执为准重同步。服务端原只回完整态 → 撤注被回执覆盖（"无效果"）+ 残留注 betsClosed 照 /bet 超扣。修：维护 per-user 快照栈（key=`gameId|userId`）——每次下注受理压栈、undo 弹栈恢复上一快照覆盖 Redis 回缩减态、undoAll 清栈清 Redis、MarkBetsClosed 清栈、窗口关 undoGuard 拒撤注。镜像 `icefishingcore`/`monopolybigballercore`/`funkytimecore`/`crazytimecore` 的 `bet_undo.go`。⚠️ 全量快照下注族（funkytime placeChips）也需此栈——撤注同样是独立帧。与 C3「撤单先 CheckBet 校验窗口」配套。
+
+**K7 🔴 结算锚不一定是「开奖/终局状态帧」，且 bonus 局可能两段派彩（RedDoorRoulette 实证）**：直觉会把 `GAME_RESOLVED`（或同名终局态）当结算锚，**RDR 会错**。真锚是 **`bonusStart==false` 的那条 `winSpots`**：
+- 普通局只有 1 条 `winSpots`（`bonusStart=false`），在 `GAME_RESOLVED` **之后** ~0.4s。
+- bonus 局有 2 条：`#1{bonusStart:true}`（无 `bonusWin`，在 bonus 子状态机**之前**）→ `#2{bonusStart:false, bonusWin{...}}`（在 `CELEBRATING` 期间，**早于** `GAME_RESOLVED` ~7s）。**时序相对 GAME_RESOLVED 会翻转**，靠状态帧定锚必错。
+- 🔴 **`winSpots#1` 不含押中 bonusSpot 号码的直注**：round 18c046a7（开 12）的 `#1` betCode 集 = `{46,48,43,47,42}`（无直注 `15`），`#2` 才有 `{15:800000,...}`（已 ×200）。**按 `#1` 结算会漏掉直注的本金 + 整个 bonus 派彩。**
+- 方法论：结算锚 = **携带 per-user 派彩明细的那一帧**，用「有下注会话 vs nobet 会话」逐帧 diff 找它，别按帧名/状态名想当然；并确认是否存在「中间态派彩帧」这种半成品。
 
 ## R. 仓库/部署：client 资源 git 治理（EVO 全游戏共性，省 ~18MB/桌族）
 
