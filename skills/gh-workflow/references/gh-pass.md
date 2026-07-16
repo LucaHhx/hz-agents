@@ -201,34 +201,15 @@ fi
 **超限必须重写**：先砍非核心 bullet，再缩单行长度，**不放过**。
 目标是 `git log -1 --format=%B` 看到的总长 = subject + 空行 + body **< 10 行**。
 
-### 5. AskUserQuestion 让用户确认文案
+### 5. 文案自检通过即直接合并（不再向用户确认）
 
-加载工具：
+用户授权（2026-07-14）：squash 文案由 AI 决定，**符合硬约束即直接进入 Step 6**，
+不调 AskUserQuestion 确认文案。要求：
 
-```
-ToolSearch({ query: "select:AskUserQuestion", max_results: 1 })
-```
-
-先把生成的 subject 和 body 完整 echo 到终端，再发起：
-
-```
-AskUserQuestion({
-  questions: [{
-    question: "Squash 合并 PR #<N>，文案确认？",
-    header: "Squash 合并",
-    multiSelect: false,
-    options: [
-      { label: "合并",     description: "用上面文案 gh pr merge --squash --subject ... --body-file ..." },
-      { label: "调整文案", description: "由我说明怎么调，不合并" },
-      { label: "取消",     description: "什么都不做" }
-    ]
-  }]
-})
-```
-
-- 合并 → Step 6
-- 调整 → 回到 Step 4 重写
-- 取消 → 清理临时文件后停止
+- 合并前把最终 subject 和 body 完整 echo 到终端留痕（用户可随时打断/事后追溯）
+- 自检通过（body ≤ 7 行 / 1024 bytes，subject ≤ 70 字符）→ 直接 Step 6
+- 重写循环超过 3 次仍超限 → 停下报告（见「错误处理」），不强行合并
+- 用户当次会话明确要求"合并前给我看文案"时恢复问询，以当次指示为准
 
 ### 6. 执行合并
 
