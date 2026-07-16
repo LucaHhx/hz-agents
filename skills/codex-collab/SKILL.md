@@ -1,29 +1,31 @@
 ---
 name: codex-collab
-description: 通过 codex CLI 让 Claude 和 codex 协作。三种用法：(1) 代码审查 — 一次性 + 并行 N 个 codex agent 做只读审查；(2) 多轮对话 — 用 thread_id resume 与 codex 续聊，用于追问 / 讨论 / 探索实现思路；(3) 决策咨询 — 把 codex 当独立 AI 顾问做方案选型 / 命名 / 架构评估，要求结构化输出。关键词：codex 审查、codex review、codex 对话、问 codex、和 codex 聊、codex 讨论、codex 续审、codex resume、多轮对话、codex 决策、让 codex 选、codex 顾问、并行审查、未提交审查、分支对比审查、目录审查、code review、PR 审查（除非明确要求 GitHub PR review）。本 skill 默认 read-only sandbox，让 codex 写文件请走 `dev-*` / `unify-fix`。
+description: 通过 codex CLI 让 Claude 和 codex 协作。四种用法：(1) 代码审查 — 一次性 + 并行 N 个 codex agent 做只读审查；(2) 多轮对话 — 用 thread_id resume 与 codex 续聊，用于追问 / 讨论 / 探索实现思路；(3) 决策咨询 — 把 codex 当独立 AI 顾问做方案选型 / 命名 / 架构评估，要求结构化输出；(4) 执行干活 — 用 codex_dev.sh 让 codex 实际写文件 / 跑命令完成任务，默认受控 full-auto（workspace-write，限工作目录内、不联网），需联网装依赖或跨目录写时显式 --yolo；输出流式可见（file_change / command_execution），干完 Claude 用 git diff 审查。关键词：codex 审查、codex review、codex 对话、问 codex、和 codex 聊、codex 讨论、codex 续审、codex resume、多轮对话、codex 决策、让 codex 选、codex 顾问、并行审查、未提交审查、分支对比审查、目录审查、code review、PR 审查（除非明确要求 GitHub PR review）、codex 写文件、codex 干活、codex 执行、让 codex 改代码 / 实现 / 修 bug、codex --yolo、codex full-auto。前三种默认 read-only sandbox；第四种是唯一可写模式，用完即退。
 ---
 
 # Codex Collab
 
-把 codex CLI 当作 Claude 的协作伙伴，提供四个脚本对应三种用法：
+把 codex CLI 当作 Claude 的协作伙伴，提供五个脚本对应四种用法（前三种只读，第四种可写）：
 
 | 模式 | 脚本 | 用途 |
 |---|---|---|
 | 1. 审查 | `scripts/codex_review.sh` | 一次性、并行 N 个 codex agent，只读代码审查（read-only 写死） |
 | 2. 沟通 | `scripts/codex_discuss.sh` | 保持 thread_id 多轮对话；强制 codex 每轮做"上下文自检"+"轮数感知"；硬上限 `--max-rounds` 防发散 |
 | 3. 决策 | `scripts/codex_decide.sh` | 一次性结构化决策；强制 codex 自己 `rg/cat` 主动读代码；上下文不足返回 `INSUFFICIENT_CONTEXT` 列出还需哪些路径 |
-| 底层 | `scripts/codex_chat.sh` | 通用 chat 包装（被以上三个调用）；裸调时由调用方自己拼 prompt |
+| 4. 执行 | `scripts/codex_dev.sh` | **唯一可写模式**：让 codex 真正写文件 / 跑命令完成任务。默认受控 full-auto（workspace-write，限工作目录内、不联网）；`--yolo` 才放开全部沙箱（联网 / 跨目录写）。输出流式显示 file_change / command_execution，干完 Claude `git diff` 审查 |
+| 底层 | `scripts/codex_chat.sh` | 通用 chat 包装（被 2/3 调用）；裸调时由调用方自己拼 prompt |
 
 **关键设计**（决策/沟通模式强制实现）：调用方提供"问题 + 入口路径"，**不直接给候选答案让 codex 选**。codex 自己用 `rg / cat` 主动探索；上下文不足时显式声明缺什么路径，由调用方补充后再调一次。这避免了"调用方喂答案 → codex 当应声虫"的退化。
 
 ## 核心约束（严格遵守）
 
-1. **默认只读 + 双层硬门**：两个脚本默认 `--sandbox read-only`。
+1. **只读是默认，写是显式模式**：审查 / 沟通 / 决策 / 底层 chat 四个脚本默认 `--sandbox read-only`。
    - `codex_review.sh` 写死 read-only，不可覆盖。
-   - `codex_chat.sh` 默认 read-only。提升权限**两扇门都要显式推开**（防误触）：
+   - `codex_chat.sh`（及其上层 discuss/decide）默认 read-only。临时提升权限**两扇门都要显式推开**（防误触）：
      - `-s workspace-write` 必须额外带 `--allow-workspace-write`
      - `-s danger-full-access` 必须额外带 `--allow-danger-full-access`
-     不带对应 flag 直接 exit 2。让 codex 持续写文件本身就该退出本 skill，走 `dev-*` / `unify-fix`。
+     不带对应 flag 直接 exit 2。
+   - **要 codex 持续写文件 / 跑命令做实事，走模式 4 `codex_dev.sh`**（默认 full-auto = workspace-write，`--yolo` 才全放开沙箱），不要用 chat 硬撑写权限。`codex_dev.sh` 是本 skill 唯一定位为「可写」的脚本，用完即退回只读协作。
 2. **必须过滤输出**：`codex exec --json` 会吐出大量事件流，不过滤会爆上下文。**必须**走脚本（已内置 `jq -r --unbuffered` 过滤），或在裸命令时手动加：
    ```
    | jq -r --unbuffered 'if .type == "thread.started" then "THREAD_ID=" + .thread_id elif .item.type == "agent_message" then .item.text else empty end'
@@ -253,10 +255,99 @@ THREAD_ID=...
 
 把最终决策原样转给用户/写回业务 state。决策是一次性的，不需要持久化 thread_id（除非用户要追问 — 那转沟通模式起新会话或 resume）。
 
+## 模式 4：执行工作流（让 codex 动手干活）
+
+前三种模式 codex 只读、只说不做。**执行模式让 codex 真正改文件、跑命令**，完成一个**明确、可验收**的任务：修一个已定位的 bug、生成脚手架、按模板批量改、装依赖后跑测试等。
+
+**强制使用 `codex_dev.sh`**（不要用 chat + `--allow-workspace-write` 硬撑）。它相对 chat 的区别：
+- 默认权限就是 **full-auto**（`--sandbox workspace-write`），开箱即写，不用叠 flag；
+- jq 过滤器**额外保留 `file_change` / `command_execution` 事件**，让你实时看到 codex 改了哪些文件、跑了什么命令、退出码多少，而不只是它最后说了什么。
+
+### 何时用执行模式 vs 退回 dev-agent
+
+- ✅ 任务边界清晰、能一句话说清「改成什么样 + 怎么验证」→ 交给 `codex_dev.sh` 一把梭，干完你 `git diff` 审。
+- ✅ 你想要一个**独立实现视角**跑通某个改动，再和自己的实现对比。
+- ❌ 需要跨多文件反复试错、边写边和用户确认设计 → 那是 `hz-backend` / `hz-frontend` / `unify-fix` 的活，不要硬塞给 codex 单次执行。
+
+### 两档权限（默认够用，yolo 是显式升级）
+
+| 档位 | 传参 | codex 能做什么 | 用在 |
+|---|---|---|---|
+| 默认 full-auto | 不加 flag | 读写**工作目录内**文件、跑命令；**默认不联网**、不能写目录外 | 绝大多数「改本仓库代码」任务 |
+| `--yolo` | 加 `--yolo` | 放开全部沙箱 = `--dangerously-bypass-approvals-and-sandbox`：可联网、可写任意路径 | 装依赖（npm/pip 联网）、跨目录写、需要访问外部资源 |
+
+`--yolo` 会 stderr 打醒目警告。**能用默认就别上 yolo**。默认档遇到联网/越界操作会「失败并把错误返回给 codex」，不会卡住等审批（exec 非交互，本就不询问）。
+
+需要多个可写目录但不想全放开时，用 `--add-dir /abs/path`（可重复）扩展白名单，比 yolo 安全。
+
+### Step 1 — 首次派活
+
+工作目录**强烈建议是 git 仓库根**（干完能 `git diff` 审 codex 的改动）：
+
+```
+bash /Users/luca/.claude/skills/codex-collab/scripts/codex_dev.sh \
+  -d /Users/luca/work/pp-game \
+  -l dev-fix \
+  -- '修复 server/service/foo/bar.go 里 CalcPayout 的边界 bug：当 bet 为 0 时应返回 0 而非 panic。
+补一个表驱动单测覆盖 bet=0 / 正常 / 超大值三种，然后 go test ./server/service/foo/ 验证通过。'
+```
+
+联网/跨目录才升级：
+
+```
+bash .../codex_dev.sh -d /Users/luca/work/proj --yolo \
+  -- '安装 zod 依赖并把 src/schema.ts 改成用 zod 校验，pnpm test 通过。'
+```
+
+输出（已过滤，流式）形如：
+```
+THREAD_ID=019e...
+我会先定位函数，再补测试。
+📝 update /Users/luca/work/pp-game/server/service/foo/bar.go
+📝 add /Users/luca/work/pp-game/server/service/foo/bar_test.go
+⚙️ exit=0 $ /bin/zsh -lc 'go test ./server/service/foo/'
+ok  ...  0.312s
+已完成：修复了 bet=0 分支并补齐单测，全部通过。
+```
+
+### Step 2 — 续接同一任务（可选）
+
+拿首次输出的 `THREAD_ID`，用 `-t` 续接（**resume 不要再传 `-d` / `--yolo` / `--add-dir`**，由原会话继承，脚本会 stderr 警告并忽略）：
+
+```
+bash .../codex_dev.sh -t 019e... -l dev-fix2 \
+  -- '刚才的测试漏了负数 bet，补一个 case 并重跑。'
+```
+
+### Step 3 — 审查 codex 的改动（必做，别盲信）
+
+codex 干完后**回到工作目录用 `git diff` / `git status` 亲自过一遍**它的改动，不要因为它说"已完成"就照单全收。必要时把 diff 再喂给**模式 1 审查**做一轮独立 review，形成「codex 写 → codex（另一视角）审 → 你定夺」的闭环。
+
+### 流式观察（关键：让你/Claude 边跑边看）
+
+`codex exec` 每完成一段就 emit 一个事件，脚本 jq 已 `--unbuffered`，所以**段级流式就绪**。但能不能实时看到取决于谁在收：
+
+- **用户在自己终端直接跑脚本** → 直接看到 file_change / command_execution 逐条刷出。
+- **Claude 想边跑边收**（而不是等命令整段返回）→ 必须用 **Monitor 工具**包装命令（每行 stdout = 一条通知）。直接用 Bash 工具会缓冲到命令结束才一次性返回，看不到中间过程。
+- **两边都想看** → 脚本输出 `tee` 到日志文件，用户 `tail -f` 那个文件：
+  ```
+  bash .../codex_dev.sh -d /repo -- '...' 2>&1 | tee /tmp/codex_dev.log
+  ```
+
+### codex_dev.sh 脚本特性小结
+
+- `-d DIR` 首次必填、已存在的绝对路径（建议 git 根）；resume 时忽略
+- `-t THREAD_ID` 续接任务
+- `--yolo` 放开全部沙箱（默认不加 = full-auto workspace-write）
+- `--add-dir DIR` 扩展可写目录（可重复，绝对路径且存在）；yolo 下忽略
+- `-m MODEL` / `-l LABEL` 同其他脚本
+- 输出流式保留 `agent_message` / `file_change` / `command_execution`，命令输出超 3000 字符尾部截断
+- 退出码 0/2/3/4 同其他脚本
+
 ## 常见误用 / 坑
 
 - ❌ 不加 jq 过滤直接 `codex exec --json`：事件流刷屏，会瞬间吃掉几千行上下文。
-- ❌ 让 codex "顺便修一下"：本 skill 默认不允许，要修改请退出 skill 用 `dev-backend` / `unify-fix`。
+- ❌ 用 chat/review 让 codex "顺便修一下"：这些是只读模式。要 codex 真改文件走**模式 4 `codex_dev.sh`**（明确、可验收的任务）；复杂、需反复试错的开发仍退回 `hz-backend` / `hz-frontend` / `unify-fix`。
 - ❌ 并行 3 个 review agent 但没在同一条消息里发出 3 个 tool call：会变成串行，慢 3 倍。
 - ❌ `--cd` 用相对路径 / 省略：codex 可能跑在意外目录上，审错文件。
 - ❌ resume 时传 `--cd` 或 `--sandbox`：codex 会报错 `unexpected argument`；这俩参数只在首次会话生效，由原会话继承。脚本已自动处理（resume 路径不传），但你**裸跑 codex 命令时必须自己注意**。
@@ -266,6 +357,10 @@ THREAD_ID=...
 - ❌ 决策 prompt 没带输出格式约束：codex 可能写一大篇分析，你解析不出明确决策。**一定要用反引号代码块限定输出格式**。
 - ❌ 用 Bash 工具直接调脚本期望看到流式：Bash 工具会等命令完成才一次性返回，看不到中间段落。要让 Claude 段段收到，**必须用 Monitor 工具**（每行 stdout = 一个事件通知）。用户在自己终端运行不受影响。
 - ❌ 在 zsh / bash 终端里粘贴带反斜杠续行的命令，反斜杠后有空格会让续行失效：`-d ...` 会被当成独立命令报 `command not found`。**长命令推荐单行或用 `<<'EOF'` heredoc 喂 stdin**。
+- ❌ 执行模式（codex_dev.sh）干完就照单全收：codex 可能读到工作区的 AGENTS.md / skill 而跑偏，或验证不充分。**必做 `git diff` 亲审**，重要改动再走模式 1 做独立 review。
+- ❌ 无脑上 `--yolo`：yolo = 放开全部沙箱（联网 + 全盘写）。默认 full-auto（workspace-write）已能改本仓库文件，能用默认就别 yolo；只是多几个可写目录就用 `--add-dir`。
+- ⚠️ codex 若挂了 skill（`~/.codex/skills` 软链本仓库 skills）：执行任务时会先读 brainstorming 等 skill，受其"先出设计等批准"HARD-GATE 影响**停下征询确认**（exec 非交互没人回答 = 任务失败）。`codex_dev.sh` 已内置「自主执行 header」压制此行为，别删。
+- ⚠️ **维护脚本者注意（本次踩坑实录）**：① macOS 无 `timeout`/`gtimeout` 命令，脚本别依赖（超时交给调用方，如 Bash 工具的 timeout / Monitor 的 timeout_ms）；② `codex exec` **不接受** `-a/--ask-for-approval`，full-auto 只需 `--sandbox workspace-write`（exec 非交互本就不询问审批）；③ macOS 自带 bash 3.2，`set -u` 下展开**空数组** `"${arr[@]}"` 报 `unbound variable`，要先 `[[ ${#arr[@]} -gt 0 ]]` 守卫；④ codex `--json` 每行**已是 JSON 对象**，jq 里**别加** `fromjson`（那是把字符串解析成 JSON 的，对已是对象的输入会报错、被 `?` 吞成 empty，导致过滤后 stdout 全空）。
 
 ## 文件索引
 
@@ -273,5 +368,6 @@ THREAD_ID=...
 - `scripts/codex_chat.sh` — 底层通用 chat 包装（新建 + resume），默认 read-only 可覆盖；裸调用罕见
 - `scripts/codex_discuss.sh` — 多轮沟通（强制轮数感知 + 每轮自检），调底层 chat
 - `scripts/codex_decide.sh` — 一次性决策（强制上下文自检 + 主动 rg/cat + 不足返 INSUFFICIENT_CONTEXT），调底层 chat
+- `scripts/codex_dev.sh` — **执行模式（唯一可写）**：让 codex 真写文件 / 跑命令。默认 full-auto（workspace-write），`--yolo` 放开全部沙箱，`--add-dir` 扩展可写目录；注入自主执行 header 压制"先确认"；流式输出 file_change / command_execution；支持 `-t` resume 续接任务
 - `references/prompts.md` — 三种审查场景的 prompt 模板 + 通用注入头
 - `references/aggregation.md` — 多 agent 审查结果去重和分类规则
