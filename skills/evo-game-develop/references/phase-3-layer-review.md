@@ -43,7 +43,7 @@ bash $CODEX_COLLAB/scripts/codex_review.sh -d "$WT" -l "layer-${LAYER}-round-${R
 - **🔴 PER_USER**：剥净私有字段（roulette `tableState.betState` / game show `<gt>.bets.state`）/ 回填本人注 / 下发帧 tableId 用**裸 id** / 1007 LateBet 回填
 - balanceUpdated 上游 drop + 商户余额 per-user 重发（余额源 PlayerBalance；**无 playerId 按连接寻址**）
 - **🔴 资金**：**关窗锚帧**（roulette BETS_CLOSED / game show `<gt>.betsClosed`）必调 `SubmitBets(...,OnMerchantBetResult)`；MarkBetAccepted 只在 accepted 分支；受理回执在关窗**之后**下发（不在下注期定格）
-- SETTLE：requireAccepted fail-closed / `OnRoundSettled` 必调 / `/result` 必先 /bet（hasSuccessfulBetDebit）/ Extra 前瞻落盘 / 列宽 ≥ 最长串（J12）
+- SETTLE：requireAccepted fail-closed / `OnRoundSettled` 必调 / `/result` 必先 /bet（hasSuccessfulBetDebit）/ Extra 前瞻落盘 / 列宽 ≥ 最长串（H5）
 - betValidationError 字段全填 + error code 命中客户端真识别分支 + 普通拒单 extendedErrorCode 留空
 - CheckBet 双重 fail-closed + currencyMult 进制 + 撤单窗口校验（C3/C4）
 
@@ -54,7 +54,7 @@ bash $CODEX_COLLAB/scripts/codex_review.sh -d "$WT" -l "layer-${LAYER}-round-${R
 - **BETSTATS check**：capture 有 `<gt>.bettingStats` 则建（直转或合并我方聚合计数，**非 per-player 不可注单玩家注**）；roulette 无则跳过——**不可默认「EVO 无 betstats」**
 - **reconcile fail-closed**：走势帧（recentResults/spinHistory）补结算同样走 requireAccepted + hasSuccessfulBetDebit
 - 走势全量快照帧（recentResults/spinHistory）缓存 + 新连接回放
-- HISTORY_DETAIL：结构化对账以 `roundDetail/<rid>.json .data.data` 为准（`gameDetail.txt .data` 含 `render` HTML 非逐字段）；投注类型/开奖结果分离（J7）；缺数据填 "0" 不空串（I8）
+- HISTORY_DETAIL：结构化对账以 `roundDetail/<rid>.json .data.data` 为准（`gameDetail.txt .data` 含 `render` HTML 非逐字段）；投注类型/开奖结果分离（H3）；缺数据填 "0" 不空串（I8）；**文案位全 key 化走 `tr()`、key 取自本族串包命名空间、非英文 locale 渲染无英文残留（H7）**——render 里直接拼进 HTML 的英文单词即漏网
 - **REPORT_PAGE**：渲染 vs `roundDetail/<rid>.html` ≥ 90% + 对照 `roundDetail/<rid>.json` 字段；**一桌一份不共用、不引共享 _assets**；前置 messages 非空 + round/extra 齐
 - CURRENCY_CONFIG：`b_table_currency_configs` 各币种限红 + currencyMult；`/config` 返回限红非空
 

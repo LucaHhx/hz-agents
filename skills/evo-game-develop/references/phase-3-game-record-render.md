@@ -8,24 +8,41 @@
 
 ```
 server/game/evo/internal/gateway/
-├── history_api.go          # 通用：EvoHistoryGame 调 renders.BuildRoundRender(gameType, gameID, tableDBID, txns, symbol)
+├── history_api.go          # 通用：EvoHistoryGame 调 renders.BuildRoundRender(...)，locale 取自玩家档案 evo_locale
 └── renders/                # 每族一份 render，集中管理
     ├── render.go           # 唯一导出入口 BuildRoundRender 按 gameType 分发 + 共享 renderBetRow / evoTablesFilter / gameType 常量
+    ├── loc.go              # 🔒 通用本地化层（官方串包取包 + translator.tr/trf 三层回退）——新族不碰，只调
+    ├── money.go            # 🔒 通用金额格式化（币种符号 + 小数位）——新族不碰，只调
     ├── <gametype>.go       # 该族查询(b_game_rounds/transactions) + 模板装配 + <gametype>_test.go
     └── assets/<gametype>/  # 从 capture 字节级抽出的 SSR 片段，//go:embed assets/<gametype>/<name>.html 注入
         ├── style.html      # 自包含 <style>（含 ssr_* 布局；可能内嵌 base64 字体）
         └── <部件>.html     # sector / icon / multiplier / bet 行 等模板，命名去族前缀
 ```
 
+入口签名（新族只加 case，不改签名）：
+
+```go
+func BuildRoundRender(gameType, gameID string, tableDBID uint, txns []gameData.BGameTransactions,
+    symbol string, decimals int, bonusChoice, locale string) string {
+    tr := newTranslator(locale)   // 本次 render 的文案查找器，往下逐层传给各族 build 函数
+    ...
+}
+```
+
 - gateway 只认 `renders.BuildRoundRender`，不关心各族细节。新族 = 在 `render.go` 的 switch 加一个 `case gameType<Family>: return build<Family>Render(...)` + 新建 `<gametype>.go` + `assets/<gametype>/`。
 - 简化文字 render 族可仅 `style.html`；1:1 族模板较多属正常（crazytime ~20 个，icefishing ~8 个）。
 - **禁 raw 字符串硬拼**整段 HTML：动态片段走模板占位替换（`{{KEY}}`），静态美术片段 verbatim 落 `assets/`。
+- 🔴 **`tr` 必须一路传到出文案的最底层函数**（注名/段名/表头装配处），不要在上层翻好再往下传字符串——底层拿不到 `tr` 就会有人图省事写死英文。既有族的签名形如 `evoBetName(bc int, tr *translator)` / `buildRouletteRoundRender(..., tr *translator)`，照此办理。
 
 ## 1. 四步法（每族重复）
 
 ### Step A — 分析结果区结构（先读 gameDetail.txt）
 - 抽 `.data.render`，剥 `<style>` 后看 body 骨架；枚举**所有结果形态**（数字/各 bonus/miss/leaf-带倍率…）。逐形态找 capture 样本。
-- 判定动态 vs 静态：哪些是随局变化的值（中奖段、倍率、坐标、图标名），哪些是固定美术（金框 SVG、渐变 defs、字体）。
+- **把每个片段归成三类**（不是两类——漏了第三类就会写死英文，全族返工过一次）：
+  - **静态美术**：固定不变的金框 SVG、渐变 defs、字体 → verbatim 落 `assets/`。
+  - **动态值**：随局变化但**不随语言变**的（中奖号、倍率、金额、坐标、图标名、CSS class）→ `{{KEY}}` 占位，Go 填。
+  - **文案位**：玩家可读的文字（表头 `Result`/`Bet Type`/`Win`/`Total`、注名 `Red`/`1st dozen`、段名 `Leaf 1`/`Bar`、bonus 标题）→ **必须 key 化走 `tr()`**，见 §2。判据：把它换成中文，页面语义仍成立的，就是文案位。
+- ⚠️ capture 里的 `.data.render` 是**录制账号那一种语言**的成品（通常 en-US）。它只是「英文形态」的基线，不是「唯一形态」——抽模板时看到的每个英文单词都要先问一句「这是文案还是标识符」。
 - 映射我方落库字段：`b_game_rounds.{ResultCode, Multiplier, Extra}` + `b_game_transactions.{BetCode, BetAmount, Payout}`。**render 的 data-sector 展示名可能 ≠ 我方裸码**（如 crazytime DB 存 `b4`，render 用 `CrazyBonus` + 图标 `CrazyTime.svg`）——建段码→展示名/资产名映射表。
 
 ### Step B — 验证资源可达（务必先验，再写代码）
@@ -43,7 +60,72 @@ server/game/evo/internal/gateway/
 - `build<Family>Render`：查 round + 聚合每注 → 选模板 → `fillTemplate(tpl, map{...})` 填值 → 拼结果区 + bet 表。
 - **验收必做字节对比**：把同一局输入喂进装配器，与 capture 的 `sectorGroup`（结果区）/ bet 行做归一化（压空白）后逐字节 diff，覆盖**每种结果形态**。这是 1:1 的唯一硬证据，写成临时 dump test 跑完即删，关键断言留进 `<gametype>_test.go`。
 
-## 2. 逆向硬细节（踩过的坑，新族大概率重演）
+## 2. 文案 key 化（Step A 归出文案位后做，与 Step C/D 并行推进）
+
+> **为什么必须做、两套 key 空间、取包通道、回退链**——铁律全在 `known-pitfalls.md` **H7**，先读那条（就那一条，别通读）。
+> 本节只讲**怎么找到本族的 key**。基础设施 `renders/loc.go` 已建好，新族不写取包/缓存/回退代码，只做映射。
+
+### 2.1 三步找键
+
+**Step 1 — 定位本族命名空间**（🔴 不能按 gameType 拼，见 H7：SuperSicBo 和 LightningDice 都在 `history.dice.*`，DragonTiger 是驼峰）
+
+```bash
+PACK=server/game/evo/client/frontend/loc/strings/en-US/history.json
+# a. 点号命名空间全集，找形似本族的
+python3 -c "
+import json,collections
+ns=json.load(open('$PACK'))['history']
+c=collections.Counter(k.split('.')[1] for k in ns if k.startswith('history.') and k.count('.')>=2)
+print(' '.join(f'{k}({v})' for k,v in c.most_common()))"
+# b. 大写族缩写裸键全集（FT_=FanTan / FNT_=FunkyTime 易记反）
+python3 -c "
+import json,re,collections
+ns=json.load(open('$PACK'))['history']
+print(collections.Counter(m.group(1) for k in ns if (m:=re.match(r'^([A-Z]{2,5})_',k))))"
+```
+
+条目数是强信号：本族真正的键在**条目多**的那个空间（`history.dice` 59 条 vs `history.sicbo` 3 条 → SuperSicBo 用前者）。
+
+**Step 2 — 值→键反查**：拿 Step A 归出的每个文案位的英文原文，去串包里搜值
+
+```bash
+python3 -c "
+import json,sys
+ns=json.load(open('$PACK'))['history']
+for want in sys.argv[1:]:
+    hits=[k for k,v in ns.items() if isinstance(v,str) and v==want]
+    print(f'{want!r:20} -> {hits}')" "Small" "Big" "Red" "1st dozen"
+```
+
+**Step 3 — 按族筛**：反查通常返回多个候选（`"Small"` → `history.baccarat.small` / `history.dice.small` / `BAC_Small` / `SicBo_Small` / `FT_Small`）。🔴 **只保留 Step 1 定位到的那个空间里的**，绝不按「哪个看着像」挑。带占位符的模板类（`"{0} Red"` / `"Split: {0}/{1}"`）用 `trf` 传参，`def` 传**已替换好的英文成品**。
+
+### 2.2 映射写成表，测试直接核对生产表
+
+把段码→key→英文写成**一张生产用的表**，测试拿同一张表逐条核对官方 en-US 值，杜绝「测试与实现各写一份」漂移：
+
+```go
+var rouletteOutsideBets = map[int]struct{ key, en string }{
+    48: {"history.roulette.red", "Red"}, 43: {"history.roulette.dozen1", "1st dozen"}, ...
+}
+// <gametype>_test.go
+for bc, b := range rouletteOutsideBets {
+    if got := pack[b.key]; got != b.en {   // 官方值 != 我方英文回退 → key 接错了
+        t.Errorf("bc=%d key=%s：官方=%q 我方=%q", bc, b.key, got, b.en)
+    }
+}
+```
+
+🔴 **官方 key 名常与注型不同名**，纯靠名字猜必错：`trio` 实为 Street、`six_number` 实为 Line。**只认「官方值 == 我方英文字面量」这个判据**，不认名字像不像。
+
+### 2.3 本族测试三件套（照抄 `loc_test.go` 形态）
+
+1. **key 映射正确**：上面的表驱动核对（官方 en-US 值 == 我方英文回退）。
+2. **译文真接通**：`newTranslator("zh-Hans")` 渲染一局，断言中文片段存在 **且英文片段不残留**（`>Result<`/`<span>Red</span>` 之类）。只断言「有中文」不够——回退链会让整页退英文而测试仍绿。
+3. **非文案不随语言变**：同一局中文 render 里，开奖号 `<tspan>18</tspan>`、金额 `data-role="won">₹100` 必须原样。防止把标识符/数值误当文案 key 化。
+
+> 测试用 `TestMain` 起 `httptest.NewServer(http.FileServer(http.Dir("../../../client")))` 把串包源指向真实 client 子树 → 取包走与生产同构的 HTTP 路径，不联网、可重跑。**本包既有的英文断言测试全都在真实 en-US 串包下跑，它们就是「key 化后英文输出逐字节不变」的回归 oracle**——key 接错，那批先红。
+
+## 3. 逆向硬细节（踩过的坑，新族大概率重演）
 
 | 现象 | 处理 |
 |---|---|
@@ -57,7 +139,7 @@ server/game/evo/internal/gateway/
 | 同一形态因**别的状态**换资产（icefishing leaf logo：base 用 `leaf{N}`、带倍率用共享 `leafGlobal`） | 别只按段判，按真实条件（是否带倍率）切换。 |
 | 倍率/角标**仅特定条件显示** | 从样本反推条件（crazytime 数字 result 仅 `slotResult==result` 时叠角标；icefishing leaf 仅 `totalMultiplier>1` 才显示，且数字 svg vs bonus webp 两套资产）。 |
 
-## 3. bonus 内部局面 → 需先落库（数据前置）
+## 4. bonus 内部局面 → 需先落库（数据前置）
 
 bonus 局 `render` 除结果主面板外，常含**内部演出网格**（crazytime flapper 转盘 / cash hunt 网格 / pachinko / coin flip）。要 1:1 这段，bonus 结果帧的完整数据必须**落库**——而 handler 往往只抽了最终倍率、丢了全网格。
 
@@ -66,13 +148,18 @@ bonus 局 `render` 除结果主面板外，常含**内部演出网格**（crazyt
 - `persistRound` 对 bonus 局把帧原文写 `b_game_rounds.Extra["bonusResult"]`；`forgetResultContext` 一并清。
 - 内部 UI 所需字段不在 Args struct 的，**扩 struct**（如 `ArgsPachinkoResult.LandingZone`、`ArgsCoinFlipResult.Coin`），别用 map。
 - ⚠️ **数据齐全度先核**：result 帧可能不含全部内部数据（pachinko 只给 `landingZone+totalResult`、缺 per-zone 倍率；coinflip 缺另一枚币）。缺的需另抓 setup 帧落库，或内部简化展示——落库前先确认 render 要什么 vs 帧给什么。
+- 🔴 **公共网格之外，还要落「本人落在哪一项」**（正交维度，易漏）：bonus 若是「多候选项各自独立倍率、玩家/系统落在其中一项」形态，**光有公共网格无法反推本人选择**——两个候选项倍率相同时必然歧义（曾靠倍率反推取首个匹配，同值时高亮错色）。做法见 known-pitfalls **B19**：结算时把选中项落 `b_game_user_actions`（`persistBonusChoices`，funkytime/crazytime 两族范例），render 按 `(tableCode,gameId,uuid,actionType)` 精确查。**`BuildRoundRender` 的 `bonusChoice` 参数就是喂这个的**，高亮判定写成「落库值优先、反推兜底」两级（范例 `crazytime_flapper.go:chosenFlapperPosition`）。
 
-## 4. 验收清单（B5）
+## 5. 验收清单（B5）
 
 - [ ] `renders/<gametype>.go` + `assets/<gametype>/` 就位，`render.go` 分发加 case。
 - [ ] 资源三路 200（CDN / 我方代理），绝对 URL 已改相对。
 - [ ] **每种结果形态**与 capture 字节级 diff 通过（归一空白 + mask 随机 UUID）。
-- [ ] bet 表结构对齐真实（族专属 class + 逐段图标），金额精度无浮点尾巴（`math.Round(x*100)/100` 再去尾零）。
-- [ ] `<gametype>_test.go` 留结构断言（关键 class / 资产路径 / 倍率规则 / 精度）。
+- [ ] bet 表结构对齐真实（族专属 class + 逐段图标）。
+- [ ] 🔴 **金额一律走 `renders/money.go` 的 `moneyCurrency(symbol, decimals, amt)`**（decimals 来自 `configCache.CurrencyDecimals`，源 `b_currency_rates.display_decimals`，null=2）。**禁止硬编码 2 位 + `math.Round(x*100)/100`**——那是已淘汰写法，对 decimals≠2 的币种（IDR 等 0 位）展示错位；逐段 float64 累加的浮点尾巴（`0.85+0.85→1.70000000000000004`）由它统一定点消除。
+  > ⚠️ **展示 ≠ 出账**：`moneyCurrency` 内部是 `math.Round`（展示可四舍五入）；**出账金额的去尾必须在 payout 计算层用 `handlers.FloorPayoutToCents` 完成**（我方是庄家，见 known-pitfalls C15）。别把这两条路径混为一谈。
+- [ ] 🔴 **文案位全部 key 化**：`grep -nE '"[A-Z][a-z]+ ?[A-Za-z]*"' renders/<gametype>.go` 逐个确认——出现在 `tr(key, "英文")` 第二参数里的是回退值（✅），直接拼进 HTML 的是漏网（❌）。key 全部取自 §2.1 定位的**本族**空间。
+- [ ] 🔴 **非英文 locale 实跑**：`newTranslator("zh-Hans")` 渲染一局，中文片段在 + 英文片段不残留 + 开奖号/金额不变（§2.3 三件套）。**只测 en-US 等于没测**——三种故障（key 错 / 取包失败 / 缺 secret）对英文玩家全部不可见。
+- [ ] `<gametype>_test.go` 留结构断言（关键 class / 资产路径 / 倍率规则 / 精度）+ key 映射表驱动核对（官方 en-US 值 == 我方英文回退）。
 - [ ] bonus 局若做内部网格：bonus 帧已落 `Extra["bonusResult"]`，资金路径未动（cache-before-settle、marshal-fail 不阻断、OnRoundSettled 时序不变）。
 - [ ] build/vet/test + policy-pr（单 .go ≤500 行；模板 .html 不计）+ 5 binary 编译。

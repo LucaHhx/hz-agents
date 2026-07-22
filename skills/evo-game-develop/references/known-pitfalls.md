@@ -4,6 +4,47 @@
 > 与 PP 的本质区别：**PP 多数帧直转，EVO 大量帧 per-session 会话私有、必须 per-user 改写**——B 节是 EVO 灵魂。
 > 视频（V 节）+ 大厅/会话/容灾（L 节）是 EVO 独有、PP 没有的大块。
 
+## 🔍 怎么用这份文件：**按块查，不要通读**
+
+本文件是**查询手册不是教材**。全文 200+ 行，一次读完等于把 40 条铁律摊平进上下文、每条都记不牢。
+正确用法：**做到哪一块，只读那一块对应的几条**（下表），做完那块再查下一块。
+
+> ⚠️ **两套 L 编号别混**：左列的 `L1`-`L5`/`L4.3` 是 **AIU 的 Layer**（开发分层）；右列的 `〔L节〕L1`-`L7` 是**本文件「大厅/会话/容灾」节**的铁律编号。凡右列出现 L 都加了〔L节〕前缀。
+
+| 你正在做的块（Layer） | 只读这几条铁律 | 配套 reference |
+|---|---|---|
+| **Phase 0** 协议分类 / capture 验收 | A1-A4、B0、B13 | `phase-0-acceptance.md` |
+| **Phase 1** 复用边界判定（建新 core？） | **I11、I2** | SKILL.md「复用边界三分」 |
+| **L1** DICT / enum / 协议常量 | A4、B0、E、**I2** | `phase-3-aiu-L1.md` |
+| **L2** MODELS / RULES / 限额 | E、G1-G5、I2 | `phase-3-aiu-L2.md` |
+| **L3** UPSTREAM 分流 | B6、B10、B12、B13、B16、**B17**、**E2**、D | `phase-3-aiu-L3.md` |
+| **L3** PER_USER（⭐ 工作量大头） | **B0-B4**（含 **B1.1** 内部 key）、B13、B16、**E2** | **`per-user-frame-fidelity.md` 全文** |
+| **L3** SETTLE / 结算锚 | **C1-C16**、K5、K7、B14.2、**B18** | `phase-3-aiu-L3.md` |
+| **L3** CHECK_BET / 下注校验 | C1-C4、**C16**、G1-G6 | `phase-3-aiu-L3.md` |
+| **L3** WINNERS 合并 | **B8、B15、E2** | L4 末「WINNERS 处理」 |
+| **L4.1** PAYOUT | B14.2、**B14.3**、**C15**、G3、G4、G5 | `phase-3-aiu-L4.md` |
+| **L4.2** HISTORY_RECENT / reconcile | C7、C12、C13、C14 | `phase-3-aiu-L4.md` |
+| **L4.3** HISTORY_DETAIL（render） | **H1-H7**、I8、**B19** | **`phase-3-game-record-render.md`** |
+| **L4.4** REPORT_PAGE | **H4**（架构已更正）、H5、B14.2 | `phase-3-aiu-L4.md` |
+| **L4.5** CURRENCY_CONFIG | G4、G5、G6、〔L节〕L3 | `phase-3-aiu-L4.md` |
+| **L4.6** BETSTATS（条件） | B11 | `phase-3-aiu-L4.md` |
+| **交互式 bonus**（有选择帧才做） | **K0-K8**、B14、B14.1、**B14.3**、**B19** | `phase-3-aiu-L3.md` |
+| **下注受理 / 撤注 / UNDO** | **K8**（全量快照零回执）、K6、A4、C3、C4、**C16** | `phase-3-aiu-L3.md` |
+| **L5** FACTORY 注册 | B1、**B1.1**（双 ID 口径） | `phase-3-aiu-L5.md` |
+| 视频（后置，可不做） | V1-V5 | — |
+| 大厅 / 会话 / 容灾（基本不碰） | 〔L节〕L1-L8 | `evo-platform-primer.md` |
+| **提交前 / 每层收尾** | F1-F6、R1、D、**E2** | `phase-3-layer-review.md` |
+
+**🔴 无论做哪块都先扫一眼的五条**（不是某块专属，是全程判据）：
+**A4**（capture 是下限、客户端代码是上限——「capture 没有」≠「协议没有」）、
+**B0**（per-user 是通用律但帧名逐族不同，勿照搬 roulette）、
+**C10/C11**（`/result` 必先 `/bet`；`OnRoundSettled` 必调——凭空给钱 / 重复退款的两个总闸）、
+**E2**（强类型 struct 是隐式白名单，改写帧会静默吃掉未声明字段——跨 4 族复发）、
+**K8**（全量快照下注协议受理必须零回执——跨 3 族复发，当前最高频 bug class）。
+
+> 📌 **本表 2026-07-21 据近 3 个月 69 个 EVO commit + 63 个 issue 复盘更新**：新增 K8 / E2 / C15 / C16 / B1.1 / B14.3 / B18 / B19 / I2 / I8 / I11 / L8 / B17；**更正** H4（报表页架构与实现相反）、B1+L7（balanceUpdated 有反例）。
+> **跨族复发排行**（说明旧 skill 没拦住，新族务必一次到位）：E2 丢字段 **4 族** > K8 受理回执 **3 族** > B1.1 双命名空间 **3 子系统** > C16 在飞写 **5 族**。
+
 ## A. 信息源边界
 
 **A1**：协议事实只从 capture（message/message-nobet/config/gameDetail/roundDetail）+ `clientResources/frontend/` bundle。禁参考老项目 `/Users/luca/work/ppgame`。
@@ -15,7 +56,13 @@
 
 **B0 「per-user 帧」是 EVO 通用律，但帧名/shape 逐族不同（从 capture 推导，勿照搬 roulette 名字）**：通用律 = 会话私有帧（本人注/余额/个人受理/个人派彩）广播前剥离、按下游连接回填。**roulette 的具体载体**：`tableState.betState`/`betActionResponse`+`betsAccepted`/`winSpots`/5 态 `tableState.state`。**game show(IceFishing) 的载体不同**：per-user 注帧 = `<gt>.bets`(`state.{status,chips,acceptedBets,rejectedBets,repeat,history}`，status `Idle→Open→Accepted→Settled`，**合并了 roulette 的 betState+受理 betsAccepted+派彩 win 三职能**，无独立 betActionResponse/betsAccepted/win 帧)，结算锚=`<gt>.gameResolved`，开/关窗=离散 `<gt>.betsOpen`/`betsClosed`。**下面 B1-B9 帧名是 roulette 实例，新族先从 capture 找到对应载体再套同一律**（找 per-user 帧靠**计数悬殊+per-session 字段**，不靠 type 集合差——game show 集合差为空）。
 
-**B1 下发帧 tableId 用裸 EVO tableId（PPTableID），不是 b_tables.code**：真 EVO 客户端按 URL 里的 table_id 匹配桌态/余额。`win`/`balanceUpdated`/`tableState`/`subscribe` 下发填 code → 客户端判「不属本桌 / 余额未收到」→ 重连。索引/路由才用 code。**EVO 无 PP 的 B1 字节替换（bytes.ReplaceAll）**——EVO 是 per-user 合成帧时直接填正确裸 tableId。
+**B1 下发帧 tableId 默认用裸 EVO tableId（PPTableID），但🔴【逐帧逐族 grep 客户端门控坐实】——已有反例**：真 EVO 客户端多按 URL 里的 table_id 匹配桌态/余额，`win`/`tableState`/`subscribe` 填 code → 客户端判「不属本桌」→ 重连。索引/路由才用 code。**EVO 无 PP 的字节替换（bytes.ReplaceAll）**——per-user 合成帧时直接填正确 id。
+- 🔴 **反例（#495，dice 族 balanceUpdated 必须填我方 code）**：sicbo/lightningdice 共用的客户端 bundle 模块 15451 对 `balanceUpdated` 有严格相等门控 `t === v.getTableId()`，而 `v.getTableId()` 读的是 `/config` 的 `table_id` ——**这个字段被我方 `api_config.go` 改写成了 code**（`evoSuperSicBo000001`）。填裸 original_id 恒不相等 → **稳态余额帧被静默丢弃、UI 冻结在进桌值**（不影响真实扣派款，但是资方/客诉风险）。修法：`sicbocore/per_user_betstate.go` 把 `outboundTableID()`（桌态帧，裸 id）与 `balanceTableID()`（balanceUpdated，我方 code）**拆成两个函数**，别整族共用一个。
+- **为何 roulette 不暴露**：其 handler 是 `isAAMS() && !tableId || dispatch(...)`——非 AAMS **恒无条件更新、根本不看 tableId**，init 首帧另靠 `renewBalance` 放行。所以「裸 id 全对」是**该族客户端不校验的偶然结果**，不是 EVO 协议规定。真 EVO 自己无此坑（它的 config.table_id == 帧 tableId，没有双命名空间）。
+- **新族做法**：接入任何按桌维度的字段/门控前，拿**本族** bundle grep 该帧的门控条件 + 对照本族 `/config` 实际返回的 `table_id`，逐帧决定填哪个。**禁止整族套用一个取值函数，禁止照搬 roulette 结论或隔壁代码**。
+
+**B1.1 🔴 双命名空间不止在协议帧内容——我方【内部跨子系统 key】同样会静默错位（三次独立事故）**：B1 讲的是帧内容；而这三起事故的根源都在**我方自己写的 key**：① 大厅镜像用 `original_id` 存储、游戏侧返回时自报 `physicalId=code` → 查不到桌、误弹「桌子暂时无法使用」（#405，修法 `runtime/lobby_idmap.go` 入口统一改写成 code）；② 下注计数 `IncrBetCount` 写 key 用 `ctx.TableID`(=code)、聊天发言门控 `Evaluate` 读 key 用 `originalID` → 计数永远判不达标、**发言被永久拦截**（#525，修法 `gateway/chat_send.go:89` 改用 tableCode 对齐写侧）；③ 即上面 B1 的 #495。
+- **通用律**：新族只要新增任何**以 tableId 为 key 的内部状态**（限流计数器 / 镜像存储 / 缓存 / 统计 / 告警去重），必须**显式核对读写两端用的是同一个命名空间**，不能想当然套用某段既有代码的写法。这类 bug 编译测试全绿、现象离根因很远（「发言被拦」看不出是下注计数 key 错位）。
 
 **B2 个人注态帧是会话私有，广播前必剥离、下发按用户回填**（roulette `tableState.betState` / game show `<gt>.bets.state`，见 B0）：roulette `betState.{bets,lastGameChips,history}` 是这条会话玩家自己的注/上局 Rebet/逐笔历史。整帧广播 → 全桌收代理账号的注（别人的注上自己板面、Rebet 错乱）。修法（`per_user_betstate.go`，game show 换锚帧名）：
 - 广播前 `stripTableStateBetState` 剥 bets/lastGameChips/history，只留公共桌态。
@@ -61,9 +108,31 @@
 
 **B14.2 🔴 bonus 派彩倍率的「净 vs 总返还」口径逐族不同，照抄必错本金（RedDoorRoulette vs CrazyTime 实证）**：`crazytimecore/odds.go:149` 的 bonus 是 `stake × (m+1)`（m 是**净**倍率，+1 返本金，#429）。**RedDoorRoulette 的 flapper `totalMultiplier` 是【总返还】倍率**：`stake × TotalReturn` —— roundDetail 实证 `stake 4000, totalMultiplier 200 → payout 800000`（= 4000×200，**不是** ×201）。**照抄 CrazyTime 公式每次 bonus 中奖多付 1 倍本金。** 新族必须从 `roundDetail/*.json` 的 `participants[].bets[].{stake,payout}` 除一下坐实口径，**禁止跨族沿用派彩公式**。同理 RDR 的 bonus 是**替换**直注赔率（20×→200×）而非叠加，且**只作用直注**（同局覆盖该号码的 dozen/red 仍按标准赔率）。
 
+**B14.3 🔴 全局叠加倍率（顶槽/连击）与 per-player 网格倍率并存时，「哪些帧已烘焙、哪些没有」逐帧不同，必须实证——CrazyTime 曾系统性少赔**：CrazyTime 顶槽命中 CashHunt/CrazyBonus 段时玩家少赔（该局顶槽 3x，应赔 15x=5×3，实赔 5x）。根因：`bonusMultiplierResolver` 只取 `grid[pick]` 没乘顶槽；**而同一族的 b2/b3（Pachinko/CoinFlip）上游已把顶槽烘焙进 `totalResult`/`multiplier`，再乘就超付**——四个 bonus 段口径不一致。
+- **修法**：`crazytimecore/bonus_perplayer.go:160-181` 的 `perPlayerTopSlotFactor` 只对 **per-player 网格**乘顶槽，注释写明 b2/b3 已烘焙。
+- **判据（对 capture 逐帧核）**：看结算帧的 `resolved.totalMultiplier` 究竟等于 `grid[at]` 还是 `grid[at] × topSlot`。**漏乘少赔、错乘超付，两个方向都是资金事故**，且同族内不能整类套用。
+- **通用性**：任何 game show 只要「全局叠加倍率」与「per-player 选点网格」并存就会重演。与 B14.2（净 vs 总返还）是同一家族的两个正交维度。
+
 **B15 winnersList 金额必 per-currency 换算、不止合并（#431，Monopoly 唯一漏接实证）**：B8 只讲合并我方中奖者，但 winnersList communal 广播、下游玩家币种各异——上游 winnings 是**帧流货币**（`frameCcy`，sniff 自上游 `balanceUpdated.currencyCode`；🔴 用 frameCcy 而非重采样容灾组 active 会话，否则 failover/重连窗口取错币种 → 金额数量级偏高），我方注入的赢家是各自本币。必须 `convertUpstream`（上游从 frameCcy 换）+ `convertOurs`（我方从 `w.Currency` 换）**归一到每个观众货币** + `events.BroadcastToTableByCurrency` 分组下发（`handlers.ConvertDisplayAmount` best-effort、失败保原值不阻断）。裸 communal 广播原值 → 非基准货币玩家金额错乱 + 与上游 winnings 混排排序错。**新族 winners_broadcast 必查是否接 frameCcy per-currency**——Monopoly 是 6 族里唯一漏的（communal 广播 NetWin），照 icefishing/crazytime 补齐（processor sniff + 4 段换算 + factory `SetUpstreamCurrencySource`）。
 
 **B16 bonus 演出帧逐帧夹带 per-user 金额，必按连接注入 bonusWin（Monopoly boardWalk/boardState/cashPrize 实证，用户指证「进 bonus 没金额」）**：monopoly bonus（2/4 Rolls 棋盘）演出帧不只公共动画——boardWalk（每步）/boardState（重连态）/cashPrize（Chance 现金奖）各带 `bonusWin{betAmount,winAmount,totalWinAmount}` 个人金额（= 玩家触发段 `spinResult.result` 押注 × 该步 `multiplier` / 累计 `totalMultiplier`）。上游影子会话不下注 → 这些帧 bonusWin 空/缺，裸广播 → 玩家进 bonus 全程看不到自己赢额增长。判据同 B13（逐帧 `args|paths(scalars)` diff bet vs nobet、找**仅 bet 有**的字段），出现 bonusWin 类个人字段就必须 per-user 注入、不能裸广播；演出帧不涉资金故解析失败裸广播保底。⚠️ 别被 B10「communal 演出帧直转」误导——同一族的演出帧也可能夹带个人金额，**必须逐帧 diff、不能整类当 communal**。
+
+**B17 帧时效语义二分 → 决定「缓存回放」还是「不缓存」（新连接白板 / 演出错乱的总判据）**：我方是伪服务端，下游玩家随时 join，而上游只在自己的节奏发帧。每个 A 类广播帧都必须先判一句：**「这一帧迟到 30 秒送到，对刚进桌的玩家还有意义吗？」**
+- **有意义 = 全量快照帧** → **缓存最新一帧，新连接 init 时回放**。典型：走势帧（`recentResults`/`<gt>.spinHistory`，每局重发全量）、`dealer`、`appInfo`、裸 `tableState`(binding)、限红/配置类。**漏缓存 = 新玩家进桌走势板空白/无荷官名**，而老玩家正常——**测试和 codex 都抓不到，只有真正新开一个连接才暴露**。
+- **无意义 = 时效帧** → **直转不缓存**，迟到自然丢弃，新连接等下一个自然帧。典型：A2 演出帧（`wheelSpinning`/`wheelStopping`/`wheelResult`/`bonus`，见 B10）、心跳/ping、bettingStats 瞬时计数。**误缓存 = 新玩家进桌看到上一局的开奖动画**。
+- ⚠️ **同一族里两类都有**，按帧判不按族判；拿不准就看该帧是否「每局重发完整集合」——是则快照类。
+- 与 B12 的关系：game show 的 `restore.begin/end` 就是把这批**快照类**帧打包重放的协议化形式；我方自合成 restore 包时，装进去的正是这里判定为「缓存回放」的那些帧。
+
+**B18 结算后的衍生广播（余额 / 走势 / 统计）必须晚于结算锚帧下发，不能在 `OnGameResult` 里当场推**：真 EVO 帧序是**结算广播恒先于 `balanceUpdated`**。我方若在 `OnGameResult` 里直接推余额（最直觉的写法），客户端此时状态机仍判「本局进行中」，会**把这条余额更新吞掉** → 派彩成功但余额数字不刷新，直到下一局或手动刷新（SuperSicBo 实证）。
+- **修法**：`OnGameResult` **只收集不发送**（返回 `balances []balancePush`），发送点收敛到结算广播之后（`sicbocore` 的 `broadcastDiceStateResolvedPerUser` → 再 `sendSettleBalances`）。
+- **通用律**：结算相关的多帧存在**顺序依赖**，不能假设可任意穿插。与 K7（结算锚不一定是终局状态帧）、B15（winnersList 依赖结算落库先完成）同属「结算时序」家族——新族把这三条一起过一遍。
+
+**B19 per-player bonus 的「本人落在哪一项」必须结算当下落库，事后靠倍率值反推必然失真**：bonus 是「多候选项各自独立倍率、玩家或系统落在其中一项」形态时（CrazyTime flapper / FunkyTime 选杯选色），**两个候选项倍率相同就无法反推**——曾靠倍率反推取首个匹配，同值时高亮错色；报表页干脆写死「the private player choice is not stored」。
+- **根因**：选择只存在内存态（`Processor.bonusPicks[gameID][userID]`），`forgetResultContext` 一清即永久丢失。
+- **做法（FunkyTime #469 / CrazyTime 2026-07-22，两族均已落地）**：结算成功路径调 `persistBonusChoices` 把 `{segment,choice}` 写 `b_game_user_actions`（`ActionType` 各族一个常量），详情 `history_api.bonusChoiceFor` + 报表 `renderers/<gt>.js` 的 `playerChoice(report)`（读 `report.userActions`，**后端零改动**——`roundReportUserActions` 不按 actionType 过滤）按 `(tableCode,gameId,uuid,actionType)` 精确取，取不到才退回反推（旧局兼容）。
+- 🔴 **落库值必须与结算 resolver 同源**（同一份 picks，含 auto 代选）：否则高亮的那一项 ≠ 给玩家派钱的那一项。**把这条写成单测**（`crazytimecore/bonus_choice_persist_test.go` 的 `TestBuildBonusChoiceActions_MatchesSettlementPick`：断言 `grid[落库choice] == resolver(user)`）。
+- **纯展示不阻断结算**：装配拆成纯函数便于单测，写库失败只 `Warn`；非 per-player 段（共享单值/数字段）一条都不落，否则详情会高亮一个并不存在的"选择"。
+- **与 L4.3「bonus 内部局面落库」的分工**：那条讲**公共网格数据**要落库，本条讲**玩家落在哪一项**这个正交维度——公共网格 + 事后反推 ≠ 记录选择。
 
 ## C. 资金路径 fail-closed（同 PP，EVO 照守）
 
@@ -72,21 +141,39 @@
 **C3** 撤单（REMOVE/UNDO 清注）必须先 CheckBet 校验窗口才改 Redis（关窗后撤单=资金风险）。
 **C4** 整批拒清 Redis 仅限非窗口类（窗口拒绝不清，防"界面已撤实际扣款"）。
 **C5/C6** BC Atoi 失败显式跳过 + ERROR log；bets JSON 解析失败 continue 跳过用户（不 append 空 BetData）。
-**C7** GetRedisUserBets SCAN/HGetAll 失败返 error **不返 nil**（否则被当无下注 → 漏结算/漏退款）。
+**C7 「Redis 读失败 ≠ 无下注」这条规则适用于【每一个】读 bet key 的代码路径，不止 `GetRedisUserBets`**：SCAN/HGetAll 失败必须返 error **不返 nil**（否则被当无下注 → 漏结算/漏退款）。🔴 **易漏点**：`/bet` 提交路径是完全独立的一段代码（`common/merchantclient/bet_submit.go:444-466` 的 `getAllBetsForGame`），当初 SCAN 失败 `return nil,nil`、HGetAll 失败 `continue` → **部分用户被扣款、部分用户注单被静默吞掉**，且结算侧读同一批 key 也读不到 → 两边 `failedKeys` 都空 → **整局被当正常结算关闭**。修法：失败一律 append `FailedSnapshotKey{Reason: reasonRedisScanError}`，调用方见非空即整局不提交 `/bet` + 落人工介入。**新族/新功能只要自己写了一次 SCAN+HGetAll（提交/报表/监控都可能各写一次），就要重新过一遍这条**，不会因为结算路径守住了就自动免疫。
 **C8** payout_cap 接入：per-user round payout max + `handlers.CapUserPayout` 等比缩放 + MCap=true。
 **C9** Redis SCAN/HGetAll 用 `context.WithTimeout(5s)` 非 Background。
 **C10 /result 必先有成功 /bet**：`onBetsClosed` 必 `go handlers.SubmitBets(ctx.TableID, gameID, p.OnMerchantBetResult)`；`MarkBetAccepted` 只在 `OnMerchantBetResult` accepted 分支（**绝不**在 betAction/applyBet）；`SettleUsersSeamless::hasSuccessfulBetDebit` 通用闸门兜底（无 bet 流水 fail-closed）。漏调 SubmitBets = 无扣款派彩（凭空给钱）。
 **C11 OnRoundSettled 必调**（settle 成功），否则下一局误标 cancelled + 重复退款。
 **C12 reconcile 孤儿局补结算同样 fail-closed**：从 recentResults 补结算的注也走 requireAccepted + hasSuccessfulBetDebit，不给没扣款的注派彩。
 **C13 孤儿局 pending 态必用 `pendingsettle.Tracker` 五件套（勿自写 pending 字段）**：Mark on 扣款 / Clear on 结算（**compare-and-clear**：退款只走「原子赢得清标记」路径，防 sweep×帧驱动并发双退款）/ `NextOrphanRound` 帧驱动 / `SweepStaleSettle` 可选接口（settle_sweeper 60s 扫 5min 龄期——game-ws 长期死时帧驱动永不触发，无 sweep = 本金永扣的最大敞口）/ `RecoverPendingSettle` 跨重启载回（终态守卫防双退款）。另加 `PendingSettleStatus()` 监控可选接口（看板资金安全面孤儿局数据源），缺了 = 运维盲区。详见 phase-3-aiu-L4 §L4.2。🔴 **新族必查**：grep `pendingsettle` 确认接入五件套（Monopoly 曾是 6 族里唯一漏接的，自写 `pendingGameID` 缺 sweep/跨重启/监控，运维看板读不到其孤儿局）。🔴 **sweep maxAge 须 > 最长 bonus 演出局**：game show 长 bonus 局是分钟级（实测 monopoly 2/4Rolls 关窗→结算 192s、crazytime 大转盘 100s），旧 5min 会把**正常长局**误判孤儿退款 → 随后真结算再派彩 = 退款+派彩双付；已全局改 2h（`settle_sweeper.go`，远超最长演出局、只退真搁浅局）。「健康桌 pending 秒级清除」这个 sweep 立论对普通局成立、对长 bonus 局不成立。
+🔴 **反模式（曾真实发生）**：`pendingsettle.Clear` 的调用点必须**唯一收敛在结算成功路径内部**。`reconcileFromRecentResults` 原实现在末尾**无条件**调 `clearPendingSettle(orphan)`——不管 `OnGameResult` 成功还是 fail-closed 都清，于是 Redis 读失败走兜底分支时 pending 也被抹掉 → sweep 与跨局退款双双失效、**本金永久卡住且无人工介入入口**。修法 `roulettecore/reconcile.go:57-63` 删掉该行，注释写明「pending 清理由 OnGameResult 独占，此处不得再清」。**兜底 helper 里出现第二个 `Clear` 调用点本身就是坏味道**——新族写 reconcite 时最容易顺手加一行「清一下图个干净」。
 
 **C14 局资金终态机 settle_state（已根治双付+本金永扣，common 层全托管，新族零接线自动生效）**：曾有两类跨族资金 bug——① fail-closed 局 persistRound 已写 SettledAt、`HasTerminalRound` 靠它判终态 → 重启误清 pending → 本金永扣；② 结算(/result R+rid)与取消退款(/refund F+rid)幂等空间被前缀隔开互不感知 → 跨端点双付。根治：`b_game_rounds.settle_state`（''/settling/settled/cancelled）单一真相源 + DB CAS 原子抢占（`handlers/settle_state.go`），`SettleUsersSeamless` 入口 claim（已取消局返 `ErrRoundCancelled` → 机台走既有 abortSettleTopLevel 不派彩）、`OnRoundCancelled` 退款前 claim（已结算/结算中跳过退款）、`HasTerminalRound` 只认 settle_state、refund_worker 三类 task 复检（refund_timeout 是 **per-user** 查 result 流水——局 settled 但该用户恰 /bet 超时未派彩仍须退他本金）。设计全文 `docs/资金终态机/DESIGN.md`。**新族注意**：结算必须走 `handlers.SettleUsersSeamless`、取消必须走 `p.OnRoundCancelled`（common 唯一实现），就自动在终态机保护内——绕开自调 wallet = 脱保；SettledAt 只是开奖展示时间，**永远不要拿它判资金终态**。
+
+**C15 🔴 出账金额一律【向下去尾】不许四舍五入；且整局 Total 必须【原始精度求和后再去尾一次】，不是逐笔去尾再相加**：我方是庄家，`math.Round` / `fmt.Sprintf("%.2f")` / 裸 `float64 +=` 隐含的四舍五入会把 1.316… 抬成 1.32，**系统性多付**。
+- **两个维度都要对**：① **方向**——floor 不是 round；② **顺序**——真 EVO 是「逐笔按原始高精度(6 位)累加 → 对总和去尾到分」，**不是**「逐笔去尾到分 → 相加」。两者差 1 分且都是真实业务行为：FanTan 3 笔 SSH 应得 15799.99，逐笔去尾累加得 15799.98（**少付**），四舍五入得 15800.00（**多付**）。展示用的逐笔金额单独去尾到分，**局 Total 另走原始精度那条路**。
+- **工具（common 层已备，直接用）**：`handlers.FloorPayoutToRaw`（6 位，供求和）/ `handlers.FloorPayoutToCents`（2 位，供出账展示），内部走 `decimal.Truncate` 而非 `math.Floor(v*100)`（避开 IEEE-754 表示误差）。范例 `fantancore/payout.go:53,75-77,116`。`BetOdds` 等展示倍率要用**去尾前**的 payout 反算。
+- 🔴 **新族 L4.1 必做的核对**：看本族赔率表有没有**非终止小数**（分母含 2/5 之外的质因子，如 FanTan SSH 的 79/60）。有 → 必须全程走上面两个 helper；无 → round 与 floor 结果相同，**但仍建议接入**，因为赔率表会随新玩法变。
+- ⚠️ **现状（已知未消风险，别误以为全局已修）**：`FloorPayout*` **目前只有 fantan 接入**，其余 8 族的 payout 仍是裸 `float64 +=`（恰好赔率都是有限小数故未暴露）；展示层 `renders/money.go:38` 的 `moneyCurrency` **内部仍是 `math.Round`**。**「展示可 round、出账必 floor」是两条独立路径**——出账的去尾必须在 payout 计算层完成，不能指望展示层。
+
+**C16 🔴 关窗必须排空「已过窗口校验、尚未落 Redis」的在飞下注写（late-bet 资金竞态，4 族已有、roulette 第 5 次才补）**：EVO 架构下「下游 betAction 写入」和「上游关窗/结算抓快照」**必然跑在不同 goroutine**（下游 WS 读循环 vs 上游读循环）。betAction 过了 `IsBetsOpen` 布尔校验、还没写完 Redis 时，BETS_CLOSED 已经抓走结算快照 → 该笔注**既没扣款也没参与结算**（或反向少扣多派），客户端却显示「已受理」。
+- **修法（样板代码，新族照抄）**：Processor 加 `betWritesWG sync.WaitGroup`；`beginBetWrite()` 在 `betsMu` **读锁内** `Add(1)`（窗口已关则返 false 拒单）/ `endBetWrite()` `Done()` 配对；`MarkBetsClosed` 关窗后 **`betWritesWG.Wait()` 排空再让调用方抓快照**；`handleBetAction` 用 `beginBetWrite` + `defer endBetWrite` 包住**全部** `applyBet` 落库。范例 `roulettecore/{processor.go:70-74, bet_window.go:73-97, downstream_bet.go:62-66}`。
+- **为何新族必踩**：这是纯样板代码，「只做 `IsBetsOpen` 布尔检查」看起来完全正确、编译测试全绿，**只有 `-race` + 精确时序才暴露**。icefishing 等 4 族早有此模式，roulette 作为最老的族反而漏了、直到 `0f7481c9` 才补——**新族从零写 `downstream_bet.go` 没有「抄别族」这一步，不会自动带上**。F4 的 race 测试必须覆盖这条。
 
 ## D. 静默错误（必加 zap log）
 业务关键路径禁 `_ = err`。必加 `global.HAB_LOG.Error/Warn + zap.Error`：OnGameResult / UpsertRound / SettleUsersSeamless / json.Unmarshal(bets/winSpots) / OnMerchantBetResult 早期 return / per-user snapshot 失败（warn）/ 视频三跳失败。
 
 ## E. struct 序列化
-**禁 `map[string]interface{}` 跨边界**。所有 JSON 帧 struct + `json.Marshal`/`Unmarshal`（含 root-key 帧用具名 struct）。禁 raw 字符串拼 JSON。
+
+**E1 禁 `map[string]interface{}` 跨边界**。所有 JSON 帧 struct + `json.Marshal`/`Unmarshal`（含 root-key 帧用具名 struct）。禁 raw 字符串拼 JSON。
+
+**E2 🔴🔴 强类型 struct 做「解码→改写→重编码」时，struct 就是一张隐式白名单：未声明的字段会被静默吃掉（8 天内两族同款事故，跨 4 族复发）**：只要走 `Unmarshal 进具名 struct → 改几个字段 → Marshal 广播` 这条路（B8 的 winnersList 合并、`stripTableStateBetState` 剥离、per-currency 换算改写…），**凡 struct 里没声明的字段，哪怕你根本不想动它、只想原样透传，都会在往返中消失**。
+- **实际事故**：① 中奖广播列表整块空白——`winnersList` 漏建模 `totalAmount`/`winnersCount`/`bettorsCount`，客户端按 `winnersCount>0` 门控整个 widget 是否渲染（**#463 FunkyTime 07-13 → #497 FanTan 07-21，同款事故 8 天内两次**；FanTan 的 `models.go` 注释原话：「曾因对接文档误记『无聚合字段』而漏建模」）；② XXXtreme 闪电轮盘**红色雷击特效消失**——`stripTableStateBetState` 强类型重编码把 `luckyChains`/`luckySplits` 剥没了（#485）；③ 手工构造新 struct 字面量时漏拷贝已声明的 `Multiplier`（#432 CrazyTime，姊妹变体）。
+- **修法**：补齐字段（`fantancore/models.go:94-97`、`funkytimecore/models.go:156-166`），**纯透传的未知/易变字段用 `json.RawMessage` 兜住**（`roulettecore/models.go:50-56` 的 `LuckyChains`/`LuckySplits`）。
+- 🔴 **验收硬要求**：每个「拦截-改写-重转发」的帧写一个 **round-trip 完整性单测**——真实上游样例帧 `Unmarshal → 我方 struct → Marshal`，与原始帧 **diff 出的 key 集合必须为空**（故意丢弃的逐个在注释写明原因）。**只断言「我方要用的字段还在」查不出这类 bug**，这正是它跨 4 族复发的原因。
+- ⚠️ **字段清单不能凭对接文档**（#497 就是文档误记害的），必须拿 capture 真帧逐字节核对。
 
 ## F. 测试
 **F1** payout/odds 单测 ≥ 4 个 `roundDetail/<rid>.json` 真样本（EVO 结构化 outcomes，比 PP html 好对）。
@@ -114,9 +201,48 @@
 **H1** history 是 **JSON**（`gateway/history_api.go` 通用）：token→玩家→按 `vendor_type='evo'` filter（防 PP 局窜入）→按玩家时区分组 YYYYMMDD；`/day` 元素带玩家时区偏移；接口可能是裸数组。
 **H2** b_game_rounds.Extra 前瞻落盘：所有族特色字段（winNumber/倍数/bonus/子序列）凡 history/报表可能渲染都落，**禁因本局 capture 未触发而省略**。
 **H3** b_game_transactions 字段齐：Currency（本局会话币种）/ Description（BetCodeDescription，下注点）/ Stake / Payout / SettledAt / MaxCapped。**投注类型(description) 与开奖结果(result) 各自独立逐笔保存，绝不混用**。
-**H4** 报表前端页 `client/reports/<裸 id>/index.html` **一桌一份、不共用、不引共享 _assets**；fetch 通用 `/gameHistory/report` JSON 渲染，对照 `roundDetail/<rid>.{html,json}` ≥90%。前置：UPSTREAM archiveCurrentRaw 落 messages + SETTLE 落 round/extra。
+**H4 报表前端页 = 「每桌一个 14 行 stub + 按 gameType 共享 renderer」，不是一桌一份自包含**（⚠️ 本条 2026-07 更正：早期文档写的「一桌一份、内联自包含、不引共享 `_assets`」是 PP 旧铁律，EVO 从第一个报表 commit 起就不是这样，照旧文字做会重新发明一套、维护量暴增）：
+- **实际结构**：`client/reports/<裸 tableId>/index.html` 只是引导 stub（14 行：两个 `<link>` + `<div id="ppreport-root">` + `<script src="/reports/_assets/report.js">`，**无内联 CSS/JS**）；渲染逻辑在 `_assets/renderers/<gametype>.js`（当前 8 个：crazytime / crystalroulette / fantan / funkytime / icefishing / lightningdice / monopoly / sicbo）；`_assets/report.js` 的 **`RENDERER_BY_TABLE` 映射表**把 tableId → renderer 名。
+- **新族做法**：先查 `RENDERER_BY_TABLE`——**同协议桌大概率直接复用已有 renderer**（`247dc9a6` 一次把 12 张欧轮 + 5 张 SicBo 全指向同一个 renderer）；确需新渲染形态才加 `_assets/renderers/<新族>.js`。**每桌仍必须有自己的 index.html 目录**（防串桌、URL 即桌），但它只是 stub。
+- 不变的部分：fetch 通用 `/gameHistory/report` JSON 渲染，对照 `roundDetail/<rid>.{html,json}` ≥90%。前置：UPSTREAM archiveCurrentRaw 落 messages + SETTLE 落 round/extra。
+- 🔴 **报表 renderer 是与 Go render 完全独立的第二条计算路径**：同一个倍率/金额在 `renders/<gt>.go`（详情）和 `renderers/<gt>.js`（报表）里各算一次，**L4.1 结算算对了不代表这两处会读到对的值**，各自都要对照 `roundDetail` 核（实证见 B14.2 末尾）。
 **H5** b_game_rounds 显示串列宽 ≥ 协议族最长值（直接 varchar(200)），否则超长一条整局丢库（同 PP J12）。game show 的 result 是字符串段名+倍率（`result:"Leaf2"`/`totalMultiplier`/`<seg>Multipliers` 嵌套 JSON），Extra/Description 列宽须容纳多段倍率序列化串，**勿沿用 roulette winNumber 数字宽度**。
 **H6 历史详情渲染方式逐机台不同（render SSR vs 结构化 data.data），对接前必看 gameDetail 实际结构**：真 EVO 多数机台（crazytime/icefishing/funkytime/monbigballer）历史详情响应 `data.render`（SSR HTML，我方 `gateway/renders/<gt>.go` 生成）；少数局面复杂的（Monopoly Live/RedDoorRoulette）响应结构化 `data.data`（`result.outcome{type,wheelResult,boardMoves,reSpins}`+`participants`，客户端 `<gt>.history` chunk React 渲染棋盘走位）。**对接前必 grep gameDetail.txt 顶层 data 是 `render` 还是 `data`、按实际选路径**——发错（该 data.data 却发 render）客户端走 CommonHtml 兜底、复杂局面渲染不出。data.data 路径需结算时把局面数据落 `b_game_rounds.Extra`（monopoly `boardMoves`/`reSpins` 从 boardWalk/rollResult/multiplier 帧采集），`history_api.go` **只对该 gameType 分支切 data.data、其他族维持 render 不动**。🔴 前端字段契约要核对（reSpins 前端无条件 `forEach` → 恒非 nil 禁 null；BonusRound 必带 boardMoves 数组）；上游 game-ws 无源字段（monopoly `boardState.upgrades`/`timesPassedGo`/`index`）是硬缺口 → 承认并置空/省略（确认前端缺该字段不崩，别硬造）。
+
+**H7 render 文案走 EVO 官方串包 key，禁写死英文、禁自建翻译资产（9 族已全 key 化，新族照做）**：`renders/<gt>.go` 里凡玩家可见的文字（表头 / 注名 / 段名 / bonus 标题）一律 `tr(key, 英文字面量)`，不能硬编码——客户端界面本身已按玩家 locale 显示，历史详情是全客户端里唯一由我方 SSR 的一块，写死即成英文孤岛。基础设施 `renders/loc.go` 已建好（**通用、不碰**），新族只做「找本族的 key」这一件事，方法见 `phase-3-game-record-render.md` §2。
+- **翻译源 = 官方串包 `/frontend/loc/strings/<locale>/history.json` 的 `history` 命名空间**，即 EVO 自己 SSR 用的同一套 key。51 语全量、每语 3563 键（3561 条文案 + `__rules`/`__assets` 两个对象值）、结构一致 → **零翻译资产投入；加语言 = 落一个 json + `b_languages` 加一行，不改代码**。
+- 🔴 **两套 key 空间并存，必须按族取键、绝不按值瞎配**：① 点号命名空间 `history.<族>.<key>`（1381 条，族名百余个）；② 大写族缩写裸键 `<PREFIX>_<Segment>`（`ROU_`361 / `MB_`600 / `FT_`28 / `FNT_`17 / `CT_`12 / `MBB_`10 / `DT_`6 / `IF_`5…）。**同一句英文在多族空间都有**——`"Small"` 同时是 `history.baccarat.small` / `history.dice.small` / `BAC_Small` / `SicBo_Small` / `FT_Small`，取错族=拿到别族行话且英文看不出来。🔴 **`FT_`=FanTan、`FNT_`=FunkyTime（易记反，已踩）**；`IF_`=IceFishing。这批前缀与 SKILL.md「betCode 变量轴」讲的结算侧前缀（`IF_Leaf1`/`FNT_Bar`）是**同一套族缩写**，段名 betCode 往往直接就是键名。
+- 🔴 **命名空间名 ≠ gameType，必须去串包实搜、不可按目录名拼**：SuperSicBo 与 LightningDice 都用 `history.dice.*`（**按玩法分，不按机台族分**），DragonTiger 是驼峰 `history.dragonTiger.*`；而 `history.sicbo.*`/`history.fantan.*`/`history.icefishing.*` 各只有 1-3 条、基本用不上。表格骨架 `resultheading`/`betType`/`betheading`/`win`/`total` **无族前缀、全族共用**（印证官方共用一个渲染器）。
+- 🔴 **取包必须走本服务自身 HTTP `/frontend/` 端点且带 `X-Origin-Secret`**：串包是按需资源、本地可以没有，该端点（gwstatic + evoCDNProxy）已实现「本地命中 → 回源 CDN → 落盘缓存」，客户端取串包走的就是它，render 复用同一条通道才不会与之漂移（同 R1 的媒体回源思路）。**不带 secret → live/prod 的 OriginVerifier 403 → 全语言静默退英文**，而本地无 secret 不复现。禁读文件路径、禁再写第二份取包/缓存逻辑。
+- **三层回退全 fail-safe**：玩家 locale → en-US → 调用方传入的英文字面量。官方自己也漏翻（实测 de 的 `history.dice.small` 就是 "Small"），末端英文兜底不是冗余。**绝不显示 raw key、绝不空白**；加载失败**不入缓存**（否则一次网络抖动就把该语言钉死在英文直到进程重启）。
+- **官方 en-US 值与我方英文字面量逐字节相同 → key 化后英文输出必须一字不变，既有字节 diff 测试即回归 oracle**（取错 key 那批测试先红）。反过来说：🔴 **英文账号一路绿灯，与 G6「USD 一路绿灯」同构**——key 取错、整包取不到、secret 没带，三种故障对 en-US 玩家全部不可见，**验收必须实跑一个非英文 locale**。
+- **与桌名翻译分属两条链，别互相代替**：官方只对 8 个亚洲语言本地化**游戏名**（品牌策略非漏翻），**桌名不在官方包内** → 走我方 `b_languages.translations` 运营配置（见 L4）；render 内的文案走官方串包。
+
+## I. 包边界与复用形态（防"抄既有机台模板"抄成耦合）
+
+> 编号与 `pp-game-develop` 的 I 节**同源对齐**（EVO 生产代码注释直接引用 `known-pitfalls I2`）。
+> 此处只收 EVO 实际在用的 + EVO 独有的；PP 特有条目（I1 PIXI 模块 / I3 sessionTimeout / I6 增量协议…）见 PP skill。
+
+**I2 🔴 betCode 集 / 赔率 / 限额 / 错误码常量必须各族独立定义，禁跨族 import**（EVO 代码 10 处引用此条）：跨包耦合会让一族改数值**静默污染**另一族，且语义会漂移（同名 code 在两族含义不同）。每族自己的 `games/<族>/{odds.go,bet_limits.go}` + `<族>core/enum.go` 写全量裸值，宁可重复也不 import 兄弟族。**即使两族数值当前完全相同也要各写一份**——它们是独立演化的业务事实，不是可 DRY 的重复代码。
+
+**I8 history/详情字段缺数据填 `"0"` 不填空串**：客户端 history 渲染直接把字段值贴进 DOM，空串会渲染出空白格而不是 0。score / multipliers / payouts 一律给 `"0"`。
+
+**I11 🔴 复用形态分四档，越靠前越省；fork 一份 core 是最后手段（错判 = 此后每个资金修复都要修两遍且必然漂移）**：新桌进来先自上而下套判据，能停在哪档就停在哪档。
+
+| 档 | 判据 | 做法 | 实证 |
+|---|---|---|---|
+| ① **纯配置复刻** | 同族**同赔率**，只有桌名/语言/视频/限额不同 | 只加 factory case + DB 行 + 报表页，**零新代码** | #498 轮盘家族 16 台 |
+| ② **nil-gated 钩子注入** | 同族同协议，**仅赔付数学有增量差异** | 既有 core 里加**可空钩子**；标准桌钩子恒 nil → 原路径零改变 | `roulettecore/lightning_hook.go`（Lightning 30× / XXXtreme 20× 降赔 + 幸运号倍率） |
+| ③ **参数化共享 core** | gameType 不同但**协议逐字段同构**，只有数学层不同 | 分歧点收敛成 `GameDef`（纯函数注入 `IsBetCode`/`BetLabel`/`Parse<结果>`/`CalcPayout`）+ `BetLimits` 接口，协议层零 fork | `sicbo/sicbocore/gamedef.go`（Lightning Dice 零 fork 复用） |
+| ④ **建新 core** | 上面全不成立（新状态机/新下注模型/新 per-user 载体） | 走完整 AIU DAG | 本 skill 主攻 |
+
+- **③ 的同构判据（四条全中才算）**：同状态/相位帧 → 同下注模型（全量快照 vs 增量 + UNDO 栈形态一致）→ 同 per-user 帧载体 → 同结算锚。**只有数学层不同**（betCode 集/赔率表/限红分组/特殊门控）。
+- 🔴 **② 的资金红线（照抄进任何共享层改造）**：**钩子只改赔付数字，不碰扣款 / 结算时序 / pending / reconcile / Redis 注单**。越过这条线就不再是「注入」而是改共享资金路径，必须按全族回归。
+- 🔴 **② 必须 nil-gated**：标准桌两个钩子均 nil → 直接走原 `CalcPayout`，行为与改造前**逐字节一致**且零额外 Redis 读。改造后先验「老桌路径没变」，再验新桌。
+- 🔴 **③ 的 `GameDef` 只能经构造函数产出（`SicBoDef()`/`LightningDiceDef()`）、字段全必填**：手工构造漏注入 → 结算路径 nil panic。**宁 crash 不静默用错族赔率**（错赔率=资金事故；crash 有 runner recover 兜底）。
+- **与 I2 的分界**：共享**行为**（协议层/状态机/资金路径）✅；共享**常量**（betCode/赔率/限额数值）❌，各族独立定义。
+- **改共享层的反向 oracle**：还原该共享改动后跑**两族全部**测试——耐久测试变红 = 这确实是共享层职责；全绿 = 本该放在某一族的数学层里。
+- 判定时机见 SKILL.md **Phase 1「复用边界」**。
 
 ## V. 视频中转（egcvi，EVO 独有大块，不碰钱但易花屏/重连）
 
@@ -130,13 +256,19 @@
 
 ## L. 大厅 / 会话 / 容灾（EVO 独有，新族基本不碰但要知边界）
 
+> ⚠️ 本节编号 **L1-L7 指大厅/会话/容灾条目**，与 AIU 的 **Layer 1-5（L1-L5）不是一回事**。引用时写〔L节〕L3 以免误读。
+
 **L1 Akamai 反爬**：entry（evo-games.com）卡 TLS+HTTP2 双指纹 → 必须 `bogdanfinn/tls-client` Chrome profile；取 config 必须用**会话 tls-client**（标准库 403）。lobby/game ws 走 Akamai **UA 黑名单**（非指纹）→ 用普通 UA `evo-client/1.0`，认证靠 URL query EVOSESSIONID。**真凶 tlssha1**：go<1.25 标准库 ClientHello 带 SHA1 被判 bot → 修 `//go:debug tlssha1=0`；cookie jar 重试须复用 `_abck`（`primeAkamaiJar` 预热，建会话一次成功）。
 **L2 大厅复合 key tableId:vtId**：部分桌（FunkyTime/blackjack）lobby key 是 `{tableId}:{vtId}`，configs/filterAttr/thumbnails/categories 复合、playersCount/history 纯；写镜像剥离+记 vtKey，下发 configs 用复合 key，否则桌不渲染。**取 config 复合 key 须剥纯 tableId。**
 **L3 货币 config 真 per-currency**：换 showCurrency 后 /config 限红按 currencyMult 换算（USD1/BRL5/INR100，上游算好），可照 PP 逐货币换 session 同步落 `b_table_currency_configs`。
 **L4 语言 per-玩家个性化不可广播**：POST `locale-override {value:locale}`(204) 持久化 + 带新 locale 重跑 setup/字符串包（软重载）；静态串包/清单可 CDN。语言偏好 EVO 用 `Params.evo_locale`(BCP-47)、PP 用 `Params.language`(短码)，格式不同分开存。桌名翻译自建 `b_tables.name_translations`，下发按 evo_locale 改写 title（回退 译名→name→上游原文）；49 locale 全集 `web/src/utils/evoLocales.js`。
 **L5 entry currency×geo 拒入**：IDR 会话从非印尼 IP 打开被拒 `incorrect-currency-for-geo-location` → 换匹配出口 IP。
 **L6 永不死线容灾（四路上游）**：panic recover 防进程崩 / 死会话 `Invalidate` 防 8min livelock / 读超时防半开静默 / 有界 mint（30s 超时）防冻全线 / 会话缓存 8min TTL 防高频 mint 触发限流(6007)。新族不碰容灾（基础设施层 `runner.go`+`lobby_failover.go`），但**结算依赖 game-ws 帧、无兜底是最大资金风险缺口**——新族 SETTLE 须有 reconcile 兜底（C12）。
-**L7 game ws balanceUpdated tableId 必须裸 original_id**（同 B1）：重连根因之一。
+**L7 game ws 下发帧 tableId 取值逐帧逐族定（⚠️ 本条已按 #495 修正）**：桌态帧用裸 original_id（同 B1，重连根因之一）；**但 `balanceUpdated` 在 dice 族必须用我方 code**——客户端对该帧有 `=== /config.table_id` 门控，而 `/config.table_id` 被我方改写成 code。**别整族共用一个 tableId 取值函数**，详见 B1 反例。
+
+**L8 上游连接的 `instance` 参数必须 per-桌（或 per-用途）唯一，否则同账号同 gameType 二次连接互相顶号（~31s 踢线死循环）**：EVO 按 `(EVOSESSIONID, instance)` 判定「同一客户端实例」。生产 `dialUpstreamGame` 曾对同账号所有桌发同一个 `instance="hab001-<uid>-"` → `evoSpeedAutoRo00001` 与另一张轮盘桌（同 gameType）同时运行时，两条上游 game ws **每 ~31s 交替被 close 1005**。现象极具迷惑性：表现为「两桌互相断连」而非「连接失败」。
+- **修法**：instance 加 `originalID` 后缀（`runtime/game_upstream.go:123,126`），对齐 `chat_upstream.go` / `lobby.go` 已有写法。探针 `game_multitable_probe_test.go`。
+- **通用性**：game/chat/lobby 三处现已修复且属「新族不碰」的基础设施，**但任何未来新增的上游连接类型**（新旁路探针 / per-桌侧连接 / 新协议族的独立连接）都要显式带 per-桌或 per-用途后缀。
 
 ## K. 交互式 bonus + 撤注（game show 玩家选择型；FunkyTime/CrazyTime 实证，codex+用户实测复盘）
 
@@ -161,6 +293,14 @@
 - bonus 局有 2 条：`#1{bonusStart:true}`（无 `bonusWin`，在 bonus 子状态机**之前**）→ `#2{bonusStart:false, bonusWin{...}}`（在 `CELEBRATING` 期间，**早于** `GAME_RESOLVED` ~7s）。**时序相对 GAME_RESOLVED 会翻转**，靠状态帧定锚必错。
 - 🔴 **`winSpots#1` 不含押中 bonusSpot 号码的直注**：round 18c046a7（开 12）的 `#1` betCode 集 = `{46,48,43,47,42}`（无直注 `15`），`#2` 才有 `{15:800000,...}`（已 ×200）。**按 `#1` 结算会漏掉直注的本金 + 整个 bonus 派彩。**
 - 方法论：结算锚 = **携带 per-user 派彩明细的那一帧**，用「有下注会话 vs nobet 会话」逐帧 diff 找它，别按帧名/状态名想当然；并确认是否存在「中间态派彩帧」这种半成品。
+
+**K8 🔴🔴 全量快照下注协议：受理成功必须【零回执静默】，拒单只回【差量】（两周内三族复发，当前最高频 bug class）**：`placeChips`/`SetChips` 这类**全量快照**协议（每次上报都是累计后的全集，客户端本地乐观渲染 + 本地 `betHistory` 栈），真 EVO 在**下注窗口内对受理成功完全不下发任何帧**（capture 实证：CrazyTime 41 条上行 bet 零回执、FanTan 85 次 placeChips 零回执），`bets` 帧只在**局状态节点**（Open / Accepted / Settled）下发。
+- **我方多发一帧全量 bets 的后果**：客户端把它当服务端权威快照接受 → ① 清空/覆盖本地 betHistory 栈 → **撤销按钮置灰失效**（#448 CrazyTime、#496 FanTan）；② 快速连点时多帧回执按 FIFO 到达，把面板**回滚到该请求发出时刻的旧快照**，玩家在错误基线上继续叠加 → **盘面乱跳、总额与筹码数对不上**（#531 FunkyTime，实测滞后约 6 帧）。
+- **修法**：受理成功路径**彻底删掉** `sendConnBets`/回执调用（`funkytimecore/downstream_bet.go:83-94`、`crazytimecore/downstream_bet.go:91`、`fantancore/downstream_bet.go:91`）。**纠正的唯一来源是拒单 / undo 路径**——只有这两条才回帧。
+- 🔴 **拒单回执必须做差量，不能整帧标 rejected**：全量协议下入参是累计全集，直接整帧标 `RejectedBets` 会把**此前已成功受理的注**一起打上错误码，客户端据此把它们全部视觉撤回（玩家逐个点击累计触顶时必现，批量下注不复现）。修法 `rejectedDelta(frame, accepted)` 只保留 `frame[code] - accepted[code] > 0` 的正增量（`funkytimecore/downstream_bet.go:201-220`）。资金侧 Redis 是对的，但「客户端所见 ≠ 实际扣款」等价于一次严重一致性事故。
+- **与 B5 的分界**：B5 讲的是 **ack 式增量协议**（roulette `betsAccepted` 不能在下注期定格位置）；本条讲**全量快照协议**（下注期一帧都不发）。**两类协议规则不同，先判本族属哪类再套**。
+- **与 K6 的关系**：K6 是撤注要维护服务端快照栈，本条是受理不能发回执——同一份全量协议的两条互补铁律，K6 之外还要过这一条。
+- **三次实证**：#448 CrazyTime(07-08) → #496 FanTan(07-16) → #531 FunkyTime(07-21)。每次都被当新 bug 单独修，**新族务必一次到位**。
 
 ## R. 仓库/部署：client 资源 git 治理（EVO 全游戏共性，省 ~18MB/桌族）
 

@@ -43,25 +43,34 @@ grep -roE '"(subscribe|balanceUpdated|betValidationError)"' "$CAP"/clientResourc
 **PASS**：每客户端发的 type 在 server 有处理；每 server 主动发的本族帧在 bundle 有 reducer。
 **FAIL**：任一行 ❌ → 修（如 server 漏识别某下注帧 → 走 default 默默 ack 不落库）。
 
-### V7a. history JSON 真 fixture 单测
+### V7a. history JSON 真 fixture 单测 + render 文案 key 化
 
 ```bash
 head -1 "$CAP"/gameDetail.txt > /tmp/sample.json
 grep -rE 'gameDetail.txt|TestBuildGameDetail|os.Open.*gameDetail' "$CORE"/*_test.go
 cd <worktree>/server && go test -v -run "TestBuildGameDetail|TestHistory" ./game/evo/internal/games/<gametype>/...
+
+# render 文案 key 化（H7）：漏网的英文会直接拼进 HTML
+R=<worktree>/server/game/evo/internal/gateway/renders
+grep -nE '"[A-Z][a-z]+( [A-Za-z0-9]+)*"' "$R"/<gametype>.go | grep -vE 'tr\(|trf\(|\.svg|\.webp|\.png|ssr_|data-|class='   # 命中即人工核对是否文案漏 key 化
+cd <worktree>/server && go test -v -run "TestLoc|Localized|Keys" ./game/evo/internal/gateway/renders/
 ```
-**PASS**：≥1 个用真 `gameDetail.txt` JSON 的测试；断言关键字段非空；缺数据填 "0" 不空串（I8）；投注类型/开奖结果分离（J7）。
+**PASS**：≥1 个用真 `gameDetail.txt` JSON 的测试；断言关键字段非空；缺数据填 "0" 不空串（I8）；投注类型/开奖结果分离（H3）；🔴 **render 文案全走 `tr(key,英文)`，key 属本族串包命名空间（表驱动测试核对官方 en-US 值 == 我方英文回退），且 `zh-Hans` 渲染出中文 + 无英文残留 + 开奖号/金额不变**。
+**FAIL**：英文字面量直接拼进 HTML → 该族历史详情成为客户端里唯一的英文孤岛；只跑 en-US → key 错/取包失败/缺 X-Origin-Secret 三种故障全部不可见（同 G6「USD 一路绿灯」）。
 
 ### V7b. 报表前端页视觉还原（≥ 90%）
 
 ```bash
-PG=<worktree>/server/game/evo/client/reports/<裸 evo_table_id>
+R=<worktree>/server/game/evo/client/reports
 ls "$CAP"/roundDetail/*.html "$CAP"/roundDetail/*.json     # 还原基线（EVO 多 json，字段直接对照）
-ls "$PG"/index.html
-grep -nE "_assets/|RENDERER_BY_TABLE" "$PG"/index.html && echo "🔴 禁止引用共享 _assets" || echo "OK 自包含"
-node --check "$PG"/index.html 2>/dev/null || echo "内联 <script> 需手动核对"
+# ⚠️ EVO 是「stub + 共享 renderer」架构（不是 PP 的一桌一份自包含）
+wc -l "$R"/<裸 evo_table_id>/index.html                     # 应 ≈14 行引导 stub
+grep -n "<裸 evo_table_id>" "$R"/_assets/report.js          # RENDERER_BY_TABLE 必须有本桌映射，否则报表空白
+ls "$R"/_assets/renderers/                                  # 本族 renderer（同协议桌应复用已有，别新建）
+node --check "$R"/_assets/renderers/<gametype>.js
 ```
-**PASS**：自包含不共用；渲染关键骨架节点；**roulette 族** Game Result `<svg>`（game show 按 roundDetail 的 segment/倍率盘/bonus 元素）；字段对齐（金额/Description/Payoff/Status/EUR 缺兑率空不 "0"）；**字段值对照 `roundDetail/<rid>.json .data.data`（结构化）**；视觉 ≥ 90%。
+**PASS**：stub 已建（≈14 行、引 `/reports/_assets/report.js`）+ `RENDERER_BY_TABLE` 有本桌映射 + renderer 复用或新建合理；渲染关键骨架节点；**roulette 族** Game Result `<svg>`（game show 按 roundDetail 的 segment/倍率盘/bonus 元素）；字段对齐（金额/Description/Payoff/Status/EUR 缺兑率空不 "0"）；**字段值对照 `roundDetail/<rid>.json .data.data`**；视觉 ≥ 90%。
+🔴 **倍率口径单独核**：净倍率用 `(payout-stake)/stake`（别用 `payout/betAmount`，那含本金 → 15x 显成 16x）；per-player bonus 取**本人 choice** 对应盘面值（别读 round 级 `multiplier`/`roundMult`，那是整盘候选最大值）。
 
 ### V8. 消息时序对照（capture vs server）
 
@@ -134,7 +143,7 @@ grep -nE 'Dealer.*cache|EvtDealer.*Broadcast|decodeRootKeyFrame' "$CORE"/upstrea
 ### V13. DB-config 前置 + per-currency + live-launch checklist（清单交付）
 
 AI 填实进经验文档部署节：
-- **DB 前置**：`b_tables`（vendor_type='evo'、code='evo'+裸id、original_id=裸id、game_type、enabled=1、failover_group_id）；`b_table_currency_configs` 各币种限红 + **currencyMult**；`b_currency_rates` 有启用 EUR 行 + symbol（J6）
+- **DB 前置**：`b_tables`（vendor_type='evo'、code='evo'+裸id、original_id=裸id、game_type、enabled=1、failover_group_id）；`b_table_currency_configs` 各币种限红 + **currencyMult**；`b_currency_rates` 有启用 EUR 行 + symbol
 - **ID 双字段对齐**：`b_tables.code`(索引) vs `original_id`(协议帧)；factory implementedTables 键=code、switch=original_id
 - **per-currency 进制**：每币种 currencyMult 正确（IDR 20000 / BRL 5 / INR 100…）
 - 🔴 **非 USD 账号实测下注+派彩**（G5/G6，`go test` 与 codex 都抓不到）：拿一个 IDR 或 INR 账号进桌，下一笔**接近该币种上限**的注（如 IDR 直注 20000）确认受理、中奖确认派彩未被截顶。USD 账号必然通过（mult=1），**只跑 USD 等于没测**。历史：roulette 的 `CheckBet` 直读 USD 机台默认限额，IDR 玩家 13 笔 betAction 全回 `1048` 静默 wipe chip，USD 测试一路绿灯，直到用户抓 HAR 才暴露
@@ -224,7 +233,8 @@ grep -lE 'bonusBoardReady|abortOnBonusBoardMissing' "$CORE"/*.go || echo "⚠️
 { "phase":6, "status":"done | partial",
   "verify_results": {
     "V1_build":"PASS","V2_vet":"PASS","V3_test_race":"PASS","V4_cover":"27.3%","V5_policy_pr":"PASS",
-    "V6_protocol_matrix":"PASS","V7a_history_real_json":"PASS","V7b_report_real_html":"PASS ≥90% 含 SVG 自包含",
+    "V6_protocol_matrix":"PASS","V7a_history_json_render_i18n":"PASS — 真 fixture + 文案全 key 化 + zh-Hans 无英文残留",
+    "V7b_report_real_html":"PASS ≥90% 含 SVG 自包含",
     "V8_message_timing":"PASS — betsAccepted@BETS_CLOSED后 / balanceUpdated init / win@resolve后",
     "V9_per_user_construction":"PASS — strip/personalize/snapshot前置/裸 tableId/商户余额 + 单测",
     "V10_balance_merchant_init":"PASS","V11_errcode_client_recognized":"PASS",

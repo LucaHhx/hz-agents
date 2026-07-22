@@ -30,7 +30,7 @@
   - **取消锚**（`<gt>.gameCancelled` 如有）→ 关窗 + 退款
   - **禁止假设 `tableState.state` 5 态枚举存在**——game show 是离散事件帧。
 - **per-user 改写调用点**：个人注态帧广播前剥会话私有（roulette `stripTableStateBetState` / game show 剥 `<gt>.bets.state`）→ 按连接 userId 回填。**实现在 L3.3 PER_USER，本 AIU 只接入调用。**
-- **init 帧缓存**：`dealer`/`appInfo`/裸 `tableState`(binding) 缓存到 `Processor.initFrames`，供新连接 `downstream_init` 回放。按帧时效语义二分（J2 同理）：每局重发的全量桌态缓存最新一帧；纯心跳/时效帧不缓存。
+- **init 帧缓存**：`dealer`/`appInfo`/裸 `tableState`(binding) 缓存到 `Processor.initFrames`，供新连接 `downstream_init` 回放。按帧时效语义二分（B17）：每局重发的全量桌态缓存最新一帧；纯心跳/时效帧不缓存。
 - **报表 messages 录制**（L4 REPORT 前置）：`HandleUpstream` dispatch 之后调归档把整局上游帧落 `b_game_rounds.messages`（漏调 = 报表 messages 永远空）。
 - **容灾/重连**：EVO **无 PP 的 `switch`/`seat` 帧**——上游断线/会话失效由 `runtime/runner.go` + `lobby_failover` 自动重连重选会话（基础设施层，evocore 不处理）。Inactivity 由网关 per-user 管。**新族 upstream 不需实现 onSwitch/onSeat**。
 
@@ -122,7 +122,7 @@
 
 **实现内容**：
 - **`OnGameResult`** 入口：解结算锚（roulette `winNumber`+号码集；game show `gameResolved.{result, <seg>Multipliers, totalMultiplier}` 倍率）。**禁假设 winNumber/odds 制。**
-- 写 `b_game_rounds`（Result/ResultCode/Extra/RawData；**列宽 ≥ 协议族最长显示串**，game show 的段名+倍率序列化串比 roulette winNumber 宽，防超长整局丢库——EVO 同 J12）
+- 写 `b_game_rounds`（Result/ResultCode/Extra/RawData；**列宽 ≥ 协议族最长显示串**，game show 的段名+倍率序列化串比 roulette winNumber 宽，防超长整局丢库，见 H5）
 - **读 Redis bets `GetRedisUserBets(tableID, gameID, requireAccepted=true)`**（fail-closed C7）。⚠️ **betCode 双命名空间**：Redis 用下注帧裸名、roundDetail 对账用前缀名（`IF_`），先映射
 - 全用户结算循环：赔付走 L4 PAYOUT 的**通用模型**（roulette `amount×(odds+1)`；game show 押中 segment `stake×(倍率+1)`、未中=0）
 - 🔴 **交互式 bonus 派彩 per-player（玩家选择型，FunkyTime 类）**：Bar/StayinAlive 倍率取决于玩家选杯/选色 → settle 须按 user 记录的选择查倍率盘；**未选玩家 auto 随机选一个（非取最小，匹配 EVO）**、**倍率盘缺失且有人押中该段须 fail-closed（不按 0 把中奖当未中）**（known-pitfalls K3/K5）。Disco 类 communal 单值无选择。纯数字/字母段仍按 base×topSlot。
@@ -153,7 +153,7 @@
 - 按 betType 单注限额 → `ErrCodeBetTooLow/TooHigh`（**currencyMult 进制比较**）
 - 用户当前局总 stake + 新注 > 台限 → `ErrCodeTableLimitExceeded`
 - betCode 白名单校验 → `ErrCodeUnknownBetCode`（roulette 数字 / game show 字符串段名）
-- 下注规则必须 capture 实证不凭直觉（J3 同理）；`SafeBetPct` 高覆盖率玩法是 **roulette 专属**（game show 固定段+bonus 无覆盖率概念，删此句），派彩失控由 settle 三路 cap 兜底
+- 下注规则必须 capture 实证不凭直觉（A3/A4）；`SafeBetPct` 高覆盖率玩法是 **roulette 专属**（game show 固定段+bonus 无覆盖率概念，删此句），派彩失控由 settle 三路 cap 兜底
 - **撤单类非窗口拒绝才清注；窗口拒绝不改 Redis**（C4，防"界面已撤实际扣款"；game show 撤单是 placeChips 减额/空 chips 或独立 undo 事件）
 
 **B5 验收**：build/vet/test 过 + `check_bet_test` 覆盖单注/台限/窗口/betCode 4 类 + currencyMult 进制
@@ -165,5 +165,5 @@
 ## prompt 模板
 
 参考 `phase-3-aiu-L1.md` 末尾通用模板。L3 AIU prompt 额外注入：
-- **铁律 reminder**：per-user（strip/personalize/snapshot-before-settle/裸 tableId/余额来源）+ C1/C3/C4/C7/C9 + D 全部 zap.Error + H2/H5 + OnRoundSettled 必调 + /result 必先 /bet（SubmitBets + hasSuccessfulBetDebit）+ betsAccepted 时序（关窗后）+ J12 列宽
+- **铁律 reminder**：per-user（strip/personalize/snapshot-before-settle/裸 tableId/余额来源）+ C1/C3/C4/C7/C9 + D 全部 zap.Error + H2/H5 + OnRoundSettled 必调 + /result 必先 /bet（SubmitBets + hasSuccessfulBetDebit）+ betsAccepted 时序（关窗后）+ H5 列宽
 - 上游 AIU 已 commit sha + 产物路径（state.aiu_progress.L1/L2.commits）

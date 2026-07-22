@@ -1,6 +1,6 @@
 ---
 name: evo-game-develop
-description: EVO (Evolution Gaming) 真人桌游戏族对接工作流。用户提供 capture 数据（6 文件包），AI 完成全自主对接，主攻「从零建一个新 EVO 游戏族 core」（baccarat / blackjack / sicbo / dragontiger / game show 等；已建族 roulette / icefishing / crazytime / monopolybigballer / funkytime）。触发：(1) 用户给出 EVO tableId（如 "vctlz20yfnmp1ylr"）并提供 tmp-evo 下对应目录数据包；(2) 明说"用 evo 流程对接" / "对接 EVO 机台" / "新增 EVO 游戏族"。与 pp-game-develop 同构：8 phase 全自主 + AIU DAG 分层 + 三层审查防线（层间 codex / 自问审查 / 整体循环）+ codex-collab 三模式调度 + worktree 隔离 + state.json 断点。与 PP 的本质区别：PP 多数帧直转，EVO 大量帧是 per-session 会话私有（具体帧随游戏族而异：roulette 是 tableState.betState/win，game show 是 bets/balanceUpdated），必须按每个下游用户改写/补结构后定向下发——per-user 数据构造是 EVO 对接的工作量大头。roulette 协议形态是范例非通用，新游戏族必须从 capture + 客户端 bundle 自行推导协议 shape（capture 不完整时客户端代码权威，见 known-pitfalls A4）；game show 交互式 bonus（玩家选择型，如 FunkyTime 选杯/选色）的参与时序/选择锁/auto 随机/撤注快照栈是反复踩坑根因（known-pitfalls K）。不在范围：纯协议讨论 / PP 机台（走 pp-game-develop）/ 大厅·会话·视频·容灾基础设施（已建好，本流程复用不重写）。
+description: EVO (Evolution Gaming) 真人桌游戏族对接工作流。用户提供 capture 数据（6 文件包），AI 完成全自主对接，主攻「从零建一个新 EVO 游戏族 core」（未建族如 baccarat / blackjack / bacbo / andarbahar；已建 9 族 core：roulette / sicbo / dragontiger / fantan / icefishing / crazytime / funkytime / monopoly / monopolybigballer，另 lightningdice 参数化共享 sicbocore 零 fork）。触发：(1) 用户给出 EVO tableId（如 "vctlz20yfnmp1ylr"）并提供 tmp-evo 下对应目录数据包；(2) 明说"用 evo 流程对接" / "对接 EVO 机台" / "新增 EVO 游戏族"。与 pp-game-develop 同构：8 phase 全自主 + AIU DAG 分层 + 三层审查防线（层间 codex / 自问审查 / 整体循环）+ codex-collab 三模式调度 + worktree 隔离 + state.json 断点。与 PP 的本质区别：PP 多数帧直转，EVO 大量帧是 per-session 会话私有（具体帧随游戏族而异：roulette 是 tableState.betState/win，game show 是 bets/balanceUpdated），必须按每个下游用户改写/补结构后定向下发——per-user 数据构造是 EVO 对接的工作量大头。roulette 协议形态是范例非通用，新游戏族必须从 capture + 客户端 bundle 自行推导协议 shape（capture 不完整时客户端代码权威，见 known-pitfalls A4）；game show 交互式 bonus（玩家选择型，如 FunkyTime 选杯/选色）的参与时序/选择锁/auto 随机/撤注快照栈是反复踩坑根因（known-pitfalls K）。不在范围：纯协议讨论 / PP 机台（走 pp-game-develop）/ 大厅·会话·视频·容灾基础设施（已建好，本流程复用不重写）。
 ---
 
 # evo-game-develop
@@ -71,7 +71,7 @@ cat "tmp-evo/$CAPTURE_DIR/state.json" 2>/dev/null  # 检查恢复点
 - `config.txt` — `/config?table_id=X` 响应（150+ keys，可能 `{_source,_endpoint,data}` 包裹、限红在 `.data`：`table_id` / `game_type` / `currencyCode` / **`currencyMult`（进制：IDR÷20000、BRL×5、INR×100，所有金额必乘）** / `chipAmounts` / 限红字段（**随族而异**：roulette=`table_bet_min/max_limit`+betType 分注限额；game show=per-betcode `<segment>_bet_min/max_limit`+`payout_limit`）/ 视频 `video.stream.name`·`video.token.issuer`·区域 host / `wsUrl` / `wrapper_token` JWT。**EVO 无 PP 的 tableConfig.txt**，桌运行配置全在这）
 - `gameDetail.txt` — `/public/player/history/v{N}/game/{id}` 玩家单局结算记录（`BuildGameDetail` / history API 权威数据源；EVO 多为 JSON，非 PP 的 XML）
 - `roundDetail/` — `{rid}.html`（玩家可直开报表页，1:1 还原基线）+ `{rid}.json`（hall B2B `evo/rounds/{rid}/detail` 完整结算体：participants/bets/result.outcomes。**EVO 比 PP 多这份结构化 JSON**，报表前端页可直接对照）
-- `clientResources/frontend/` — 前端 bundle（`evo/mini/js/` 业务逻辑·协议常量、`loc/strings/<lang>/` 本地化、`cvi/evo-video-components/` 视频组件含 descrambler；协议字段 / betCode / 视频 token 算法逆向源）
+- `clientResources/frontend/` — 前端 bundle（`evo/mini/js/` 业务逻辑·协议常量、`loc/strings/<lang>/` 官方本地化串包、`cvi/evo-video-components/` 视频组件含 descrambler；协议字段 / betCode / 视频 token 算法逆向源）。🔴 其中 **`loc/strings/<locale>/history.json` 是历史详情 render 的文案翻译源**（51 语全量、EVO 自己 SSR 用的同一套 key）——新族 render 的文案一律取本族 key，不自建翻译资产（known-pitfalls **H7**）
 
 录制工具：pp-game 仓库 `scripts/game_dev/evo_fetch.mjs`（**双会话对比**：有头下注 → message.txt；无头 nobet 影子账号 → message-nobet.txt；浏览器自动开 Details，落 `.json`/`.html`）。**本 skill 不主动录**。
 
@@ -115,13 +115,16 @@ cat "tmp-evo/$CAPTURE_DIR/state.json" 2>/dev/null  # 检查恢复点
 
 ### 🔴 新游戏族：协议 shape 必须从 capture 自推导（铁律）
 
-已建族：roulette / icefishing / crazytime / monopolybigballer / funkytime。roulette 帧（5 态 `tableState`、`betAction` PLACE/UNDO、`winSpots`、号码赔率、无 betstats）是 **roulette 特化范例，不是 EVO 通用契约**；game show 族（icefishing/crazytime/funkytime）形态另成一类。新族对接**先抽 recv/send type 全集**（`jq -rs 'select(.dir=="recv")|.payload|fromjson|.type' nobet | sort | uniq -c`）**+ grep clientResources bundle 的 type/action 常量全集**（capture 只录到被操作过的帧，撤注/单子模式没用就不出现，见 known-pitfalls A4），实证下面 7 个变量轴，**禁止照搬 roulette 形态**：
+**已建 9 个 core**（`games/<族>/<族>core/`）：`roulette` / `sicbo` / `dragontiger` / `fantan` / `icefishing` / `crazytime` / `funkytime` / `monopoly` / `monopolybigballer`；外加 **`lightningdice` 无独立 core、参数化共享 `sicbocore`**（见 Phase 1「复用边界三分」②）。**接新桌前先 `ls -d server/game/evo/internal/games/*/*core` 看当前真实全集**，本行会过时。
+
+三类协议形态（决定能否复用）：① **roulette 系**（5 态 `tableState`、`betAction` PLACE/UNDO/UNDO_ALL、`winSpots`、号码赔率、无 betstats）；② **dice 系**（`dice.state` 6 相位混合帧、SET_CHIPS 全量快照 + UNDO 栈、闪电盘）；③ **game show 系**（离散生命周期帧、`<gt>.bets` 合并载体、bettingStats、演出帧、交互 bonus）。🔴 **roulette 帧是特化范例、不是 EVO 通用契约**——新族必须自推导。新族对接**先抽 recv/send type 全集**（`jq -rs 'select(.dir=="recv")|.payload|fromjson|.type' nobet | sort | uniq -c`）**+ grep clientResources bundle 的 type/action 常量全集**（capture 只录到被操作过的帧，撤注/单子模式没用就不出现，见 known-pitfalls A4），实证下面 7 个变量轴，**禁止照搬 roulette 形态**：
 
 | 变量轴 | roulette | game show（IceFishing/FunkyTime 实证） | 推导来源 |
 |---|---|---|---|
 | 状态机 | `tableState.state` 5 态枚举 | 离散事件帧 `betsOpen→betsClosed→wheel*→gameResolved→gameCleared`（无 state 枚举，`tableState` 仅绑 balanceId） | message-nobet 时序 |
 | 下注模型 | `betAction{type:PLACE/REMOVE/MOVE/UNDO,value}` 增量 + UNDO 栈 | `placeChips{chips:map[段名]额, betAction:"Place"\|"Repeat"}` 全量快照（CrazyTime 另有 Chip/BulkBet 增量模式）；🔴 **撤注走独立 `<gt>.undo/undoAll` 帧或 Undo action，不重发 placeChips → 服务端仍须维护 per-user 快照栈**（known-pitfalls K6，**勿因「全量快照」误判无需 UNDO 栈**） | message.txt send 帧 + bundle action 常量 |
 | betCode | 数字键（`"43"`） | 字符串段名（`Leaf1`/`LetterA`/`Bar`）；结算侧带前缀（`IF_Leaf1`/`FNT_Bar`），**两套码须双向映射** | 下注帧 + roundDetail json |
+| ⤷ 族缩写前缀 | `ROU_` | `IF_`=IceFishing / `FNT_`=FunkyTime / `FT_`=FanTan（**后两个易记反，已踩**）/ `CT_` / `MBB_` / `MB_` / `DT_` — 与官方本地化串包的**族 key 前缀是同一套**，段名 betCode 往往直接就是 render 的文案 key（H7） | roundDetail json + `loc/strings/en-US/history.json` |
 | 结算/赔付 | 押中号码集→固定 odds，`amount×(odds+1)` | 押中 segment→该局倍率（`gameResolved.totalMultiplier`/`<seg>Multipliers`），`amount×(倍率+1)`（未中=0） | gameResolved + roundDetail json |
 | betstats | **无** | **有** `<gt>.bettingStats{bettors,watchers}`（最高频，communal 聚合计数，**非 per-player**——只能加我方聚合计数、不能注单玩家注） | type 统计 |
 | A2 演出帧 / restore | 无 | 有（wheel/bonus 全桌动画 + `<gt>.restore.begin/end{version}` 重连恢复包） | type 统计 |
@@ -131,7 +134,11 @@ cat "tmp-evo/$CAPTURE_DIR/state.json" 2>/dev/null  # 检查恢复点
 
 ## 8 Phase 概览 + 读取计划（progressive disclosure）
 
-**重要**：每 phase 执行**前**才读对应 reference，不要预先读全部。每 phase 完成更新 state.json 才进下一 phase。
+🔴 **读一块 → 分析一块 → 开发一块 → 验一块，然后才读下一块**（本 skill 的核心用法，别通读）：
+
+- **每 phase 执行前**才读对应 reference，不预读全部；phase 完成写 state.json 才进下一 phase。
+- **Phase 3 内部再细分到 AIU 级**：进某个 L 层时只读该层的 `phase-3-aiu-LN.md`，做某个 AIU 时只查**该 AIU 对应的那几条铁律**——`known-pitfalls.md` 顶部有一张「按开发块查表」，照它取编号，**不要通读那 200 行**（摊平进上下文的结果是 40 条都记不牢）。
+- 每块开发完立即跑该块的 B5 验收，不攒到最后；每层完成立即层间 codex 审查（`phase-3-layer-review.md`）。
 
 | Phase | 工作 | 执行前读 |
 |---|---|---|
@@ -148,8 +155,8 @@ cat "tmp-evo/$CAPTURE_DIR/state.json" 2>/dev/null  # 检查恢复点
 - `references/per-user-frame-fidelity.md` — 🔴 **per-user 合成帧保真度方法论（L3 PER_USER 必读，反复踩坑根因）**：三方对比（nobet 收=原料 / 我方合成 / message.txt=客户端期待 target）+ 逐相位×逐 status 字段契约 + 广播频率契约 + 「客户端渲染源」判定 + wire 单测。漏字段/频率不足 = 客户端崩 `undefined.map`/卡死/不渲染，编译+单测+codex 都查不出，**只能靠这套方法论提前发现**。
 - `references/evo-platform-primer.md` — EVO 基础设施复用边界 + **per-user 数据构造全模式** + roulettecore 作为新族模板逐文件映射（Phase 1/3 高频参考，EVO 最关键文档）
 - `references/codex-collab.md` — 三模式调用 + 全 prompt 模板 + state 跟踪
-- `references/known-pitfalls.md` — EVO 协议铁律精华版（A 信息源含 **A4 capture 不完整→客户端代码权威+三方实证** / B per-user / C 资金 / V 视频 / 货币 / L 容灾 / **K 交互式 bonus+撤注（FunkyTime/CrazyTime 实证：参与时序/选择锁/auto 随机+回执/盘缺失 fail-closed/撤注快照栈）** / **R client 资源 git 治理（媒体回源 CDN 省 ~18MB）**）
-- `references/phase-3-game-record-render.md` — **游戏记录详情 render 1:1 复刻方法**（L4.3 配套）：renders 子包架构 + 四步法（分析 / 验资源 / 抽模板 / 字节对比）+ 逆向硬细节 + bonus 帧落库。让「我的历史→游戏详情」局面区逐字节还原，非纯文字降级。
+- `references/known-pitfalls.md` — EVO 协议铁律精华版，**查询手册非教材**：文件顶部有「**按开发块查表**」（做哪块 → 只读哪几条编号），**照表取用、禁止通读**。分节：A 信息源（含 **A4 capture 是下限、客户端代码是上限**）/ B per-user（EVO 灵魂）/ C 资金 fail-closed / D 静默错误 / E struct / F 测试 / G 客户端一致性+进制 / H 历史报表（含 **H7 render 文案走官方串包 key**）/ V 视频 / L 大厅会话容灾 / **K 交互式 bonus+撤注** / **R client 资源 git 治理**
+- `references/phase-3-game-record-render.md` — **游戏记录详情 render 1:1 复刻方法**（L4.3 配套）：renders 子包架构 + 四步法（分析 / 验资源 / 抽模板 / 字节对比）+ **文案 key 化找键三步法**（§2）+ 逆向硬细节 + bonus 帧落库。让「我的历史→游戏详情」局面区逐字节还原**且随玩家语言切换**，非纯文字降级、非英文孤岛。
 
 ## Phase 1 — 选 base + 复用边界 + factory 检测（AI 直接执行）
 
@@ -171,10 +178,14 @@ if [[ -z "$BASE_BRANCH" ]]; then
 fi
 [[ -z "$BASE_BRANCH" ]] && { echo "❌ 找不到 base"; exit 2; }
 
-# 复用边界：该 gameType 是否已有 evocore 包？
-REUSE_CORE="none"
+# 复用边界（四档，见下表；自上而下套，能停在哪档就停在哪档）
+REUSE_CORE="none"; SHARE_CORE=""
 if [[ -d "$REPO_ROOT/server/game/evo/internal/games/$GAMETYPE" ]]; then
-    REUSE_CORE="$GAMETYPE"   # 已有同族 core（如又一张 roulette 桌）→ 只加 factory case + DB，几乎零新代码
+    REUSE_CORE="$GAMETYPE"   # ①/② 已有同族 core → 再判赔率是否同（同=①纯配置；有增量差=②nil-gated 钩子）
+else
+    # ③ 找协议同构的兄弟族候选：先列已建 core 全集，再用 Phase 0 的 type 全集 + 下注模型比对
+    ls -d "$REPO_ROOT"/server/game/evo/internal/games/*/*core 2>/dev/null | sed 's#.*/games/##'
+    # 四条判据全中 → SHARE_CORE=<兄弟族core>，Phase 3 退化为「数学层 + GameDef 注入」；否则 ④ 建新 core
 fi
 
 # factory 已注册检测。🔴 键 = original_id（裸 EVO tableId），**不是** code：
@@ -188,8 +199,18 @@ jq --arg b "$BASE_BRANCH" --arg rc "$REUSE_CORE" --arg ts "$(date -u +%Y-%m-%dT%
    '. + {phase:1,status:"done",base_branch:$b,reuse_core:$rc,last_updated:$ts}' "$STATE" > "$STATE.tmp" && mv "$STATE.tmp" "$STATE"
 ```
 
-- `reuse_core != "none"` → **复用既有 core**：Phase 3 退化为「factory case + DB 行 + 报表页 + per-user/限额差异核对」，AIU DAG 大幅收敛（见 `phase-3-aiu-overview.md`「复用分支」）。
-- `reuse_core == "none"` → **新游戏族**（本 skill 主攻）：Phase 3 走完整 AIU DAG 建 `games/<gametype>/<gametype>core/` 全套。
+🔴 **复用形态四档，自上而下套判据，能停在哪档就停在哪档**（详见 known-pitfalls **I11**；错判成④就 fork 一份 core，此后每个资金修复要修两遍且必然漂移）：
+
+| 档 | 判据 | Phase 3 退化成 | 实证 |
+|---|---|---|---|
+| ① **纯配置复刻** | 同族**同赔率**，只有桌名/语言/视频/限额不同 | factory case + DB 行 + 报表页，**零新代码** | #498 轮盘家族 16 台 |
+| ② **nil-gated 钩子** | 同族同协议，**仅赔付数学有增量差异** | 既有 core 加可空钩子 + 本桌数学；标准桌钩子 nil → 原路径零改变 | `roulettecore/lightning_hook.go` |
+| ③ **参数化共享 core** | gameType 不同但**协议逐字段同构**（同状态帧/同下注模型/同 per-user 载体/同结算锚），只有数学层不同 | 只写 `games/<新族>/{odds.go,bet_limits.go}` 注入兄弟族 `GameDef`+`BetLimits`，协议层零改动 | `sicbo/sicbocore/gamedef.go` ← Lightning Dice |
+| ④ **建新 core** | 上面全不成立 | 完整 AIU DAG 建 `<gametype>core/` 全套（本 skill 主攻） | — |
+
+- 🔴 **②③ 的资金红线**：注入的钩子/GameDef **只改赔付数字，不碰扣款 / 结算时序 / pending / reconcile / Redis 注单**。越线即是改共享资金路径，须按全族回归。
+- 🔴 **② 必须 nil-gated**：标准桌钩子恒 nil → 走原 `CalcPayout`，行为与改造前逐字节一致且零额外 Redis 读。**先验老桌路径没变，再验新桌**。
+- ⚠️ **共享行为 ≠ 共享常量**：协议层可共享，但 **betCode 集、赔率、限额、错误码常量必须各族独立定义、禁跨族 import**（known-pitfalls **I2**）——跨包耦合会让一族改数值静默污染另一族。
 
 ## Phase 2 — 创建 worktree
 

@@ -53,7 +53,7 @@ done
    - /result 必先 /bet（SubmitBets OnMerchantBetResult + hasSuccessfulBetDebit）/ OnRoundSettled 必调 / 受理回执关窗后
    - currencyMult 进制全路径 / reconcile fail-closed
    - C1/C7/C9 Redis fail-closed / C8 payout cap / G2/G3 三路 cap
-   - 列宽 ≥ 最长显示串（J12，game show 段名+倍率串）/ 下注规则 capture 实证 / betValidationError code 客户端可识别
+   - 列宽 ≥ 最长显示串（H5，game show 段名+倍率串）/ 下注规则 capture 实证 / betValidationError code 客户端可识别
 8. policy-pr：单文件 ≤ 500 行 / 嵌套 ≤ 3 层
 
 【主信息源】capture 6 文件 / clientResources/frontend / roulettecore 模板 / $SKILL_DIR/references/{evo-platform-primer,known-pitfalls}.md

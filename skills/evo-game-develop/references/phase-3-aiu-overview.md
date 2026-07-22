@@ -10,9 +10,9 @@
 
 每个 AIU 一个 agent owner，单 agent 做"分析 + 实现 1 组职责文件"配对工作。窄上下文（只读自己需要的 capture/bundle 切片 + 上游层产物），不读全部数据。详见 `phase-3-aiu-LN.md`。
 
-## 复用分支（Phase 1 `reuse_core != "none"` 时走这条，跳过完整 DAG）
+## 复用分支（Phase 1 判到 ①②③ 档时走这条，跳过完整 DAG；四档判据见 SKILL.md / known-pitfalls I11）
 
-又一张既有族桌（如再来一张 roulette）→ evocore **一行不写**，Phase 3 收敛为 3 个 AIU + 一次差异核对：
+**① 纯配置复刻**（同族同赔率，又一张既有族桌）→ evocore **一行不写**，收敛为 3 个 AIU + 一次差异核对：
 
 ```
 REUSE-1 FACTORY     instance_factory case + buildXxxInstance（复用既有 Processor）+ b_tables/currency DB 模板
@@ -20,6 +20,25 @@ REUSE-2 REPORT_PAGE client/reports/<裸 tableId>/index.html（对照本桌 round
 REUSE-3 DIFF_AUDIT  本桌 vs 既有桌差异核对：limits（config 限红字段）/ betCode 全集 / per-user 字段 / 视频参数
         ↓ 层间 codex 审查（一轮）→ Phase 4
 ```
+
+**② nil-gated 钩子**（同族同协议、仅赔付数学有增量差异）→ 在 ① 基础上加 1 个 AIU：
+
+```
+REUSE-0 PAYOUT_HOOK 既有 core 加可空钩子（标准桌恒 nil→原路径逐字节不变）+ 本桌数学 + 双向单测
+                    🔴 只改赔付数字，不碰扣款/结算时序/pending/reconcile/Redis 注单
+                    验收顺序：先验老桌行为未变，再验新桌赔付（范例 roulettecore/lightning_hook.go）
+```
+
+**③ 参数化共享兄弟族 core**（协议逐字段同构、数学层不同）→ 不建 core，收敛为：
+
+```
+SHARE-1 MATH        games/<新族>/{odds.go,bet_limits.go}（betCode 白名单/标签/结果解析/赔付/限额，各族独立裸值）
+SHARE-2 GAMEDEF     兄弟族 core 的 gamedef.go 加 <新族>Def() 构造函数（字段全必填，禁手工构造）
+SHARE-3 FACTORY     + REPORT_PAGE + DIFF_AUDIT（同上）
+        ↓ 🔴 回归两族全部测试（改共享层的反向 oracle：还原改动后耐久测试变红=确属共享层职责）
+```
+
+**④ 全新协议形态** → 走下面的完整 5 层 DAG。
 
 ## 5 层 DAG（新游戏族，本 skill 主攻）
 
