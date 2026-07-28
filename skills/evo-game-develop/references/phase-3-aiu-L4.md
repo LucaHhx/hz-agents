@@ -9,16 +9,15 @@
 
 **产物**：`games/<gametype>/payout.go` + `payout_test.go`（可与 odds 同目录）
 
-**分析输入**：L1 PAYOUT_MODEL（赔付模型）/ L2 RULES（三路 cap 字段）/ L3 SETTLE 调用接口 / `roundDetail/<rid>.json`（`.data.data.participants[].bets[]{code,stake,payout}` 真样本反推公式）
+**分析输入**：L1 PAYOUT_MODEL（赔付模型）/ L2 RULES（per-bet cap 字段：maxMultiplier / euro_table_payout_max；#64 后无 round-level）/ L3 SETTLE 调用接口 / `roundDetail/<rid>.json`（`.data.data.participants[].bets[]{code,stake,payout}` 真样本反推公式）
 
 **实现内容**：
 - 纯函数派彩 — **含本金，公式因族而异**：roulette `amount×(odds+1)`（号码集→odds）；game show 押中 segment `stake×<seg>Multiplier`、未中=0（倍率来自结算帧 `<seg>Multipliers`/`totalMultiplier`）；baccarat 牌型赔率。**从 roundDetail json 反推，禁假设 odds 制**（IceFishing 实证 `IF_Leaf1 stake2000→payout4000`）。⚠️ betCode 双命名空间（下注帧 `Leaf1` vs roundDetail `IF_Leaf1`）反推前先映射。
-- **G3 三路 cap min（用户级，非单注级）**：A=`maxMultiplier × 用户当局总下注本金`（game show maxMultiplier 在 bonus 帧实证，如 200/500）；B=`Convert(euro_table_payout_max,"EUR",currency)`；C=`table_payout_max`/`payout_limit`（本币硬封顶）；最终 `min(A,B,C)`
-- `handlers.LookupRoundCap` + `handlers.CapUserPayout` 等比缩放（C8）+ `MCap=true`
+- **G3 payout cap = per-bet**（🔴 issue #64 于 2026-05-14 把 round-level 整套反转为 per-bet，`LookupRoundCap` / `CapUserPayout` / `table_payout_max` / `MCap` **一并下线**，见 `handlers/round_cap.go:1-12`）：调 `handlers.LookupPerBetCap` 取两路 `min(A,B)`——A=`maxMultiplier × `**本笔注额**（per-bet 单注，**非**用户当局总注；game show maxMultiplier 在 bonus 帧实证，如 200/500）；B=`Convert(euro_table_payout_max,"EUR",currency)`（EUR 换算失败 fail-closed）。game show 若有 per-betcode `payout_limit` 是族特有额外一路，按 capture 定。**别再调 LookupRoundCap/CapUserPayout（已不存在）**。
 - **currencyMult 进制**：派彩金额按币种进制
 - `betCodeDescription(bc)` 人类可读描述（H3，落 `b_game_transactions.description` 供报表/对账）。🔴 **落库值恒为英文、语言无关**（稳定标识，不随玩家 locale 变）；**玩家历史详情的注名不读这个字段**，而是 render 侧从 `betCode` 重算 + `tr()` 翻译（H7 / L4.3）——想「直接拿 DB description 显示」就永远是英文且不可译。两条路径都要有，别合并。
 
-**B5 验收**：build/vet/test 过 + `payout_test` ≥ 4 个 roundDetail/capture 真样本 + 三路 cap 分开断言（用户级非单注）
+**B5 验收**：build/vet/test 过 + `payout_test` ≥ 4 个 roundDetail/capture 真样本 + per-bet cap 分开断言（A=maxMultiplier×**本笔注额**、B=euro；#64 后无 round-level/用户级）
 
 **下游**：SETTLE 调用
 
@@ -158,4 +157,4 @@
 参考 `phase-3-aiu-L1.md` 末尾通用模板。L4 AIU prompt 额外注入：
 - 上游 SETTLE 落盘字段 / roundDetail json 结构
 - 通用 gateway handler（history_api / report_api / api_config）的覆盖边界
-- **铁律 reminder**：G3 三路 cap min 用户级 / currencyMult 进制 / H3 落库描述英文稳定 + H7 render 文案走官方串包 key（本族命名空间实搜、非英文 locale 实跑）/ 报表一桌一份不共用 / per-currency 配置必种 / reconcile fail-closed
+- **铁律 reminder**：G3 **per-bet cap** min（#64 后无 round-level/用户级）/ currencyMult 进制 / H3 落库描述英文稳定 + H7 render 文案走官方串包 key（本族命名空间实搜、非英文 locale 实跑）/ 报表 **stub+共享 renderer**（非一桌一份自包含，H4）/ per-currency 配置必种 / reconcile fail-closed

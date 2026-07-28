@@ -376,7 +376,7 @@ codex 干完后**回到工作目录用 `git diff` / `git status` 亲自过一遍
 - ❌ 执行模式（codex_dev.sh）干完就照单全收：codex 可能读到工作区的 AGENTS.md / skill 而跑偏，或验证不充分。**必做 `git diff` 亲审**，重要改动再走模式 1 做独立 review。
 - ❌ 指望用沙箱给执行模式兜底：模式 4 一律全权限（受限的 workspace-write 档把 `.git` 设成只读，`git add` 报 `Unable to create '.git/index.lock'`，连 commit 都干不了，已废弃）。**边界靠任务描述写死**（"绝对不要 push"之类）+ git 可回滚 + 干完亲审，不靠沙箱。
 - ❌ 让 codex 全权限跑在**非 git 目录**：没有 `git diff` 就无从审查、没有 `git reset` 就无从回滚，等于裸奔。`-d` 一律给 git 仓库根。
-- ⚠️ codex 若挂了 skill（`~/.codex/skills` 软链本仓库 skills）：执行任务时会先读 brainstorming 等 skill，受其"先出设计等批准"HARD-GATE 影响**停下征询确认**（exec 非交互没人回答 = 任务失败）。`codex_dev.sh` 已内置「自主执行 header」压制此行为，别删。
+- ⚠️ codex 若挂了 skill（`~/.codex/skills` 软链本仓库 skills），可能根据任务先做需求澄清。执行模式的任务描述应明确目标、边界和验收标准，避免非交互执行因关键信息缺失而停下询问。
 - ⚠️ **维护脚本者注意（本次踩坑实录）**：① macOS 无 `timeout`/`gtimeout` 命令，脚本别依赖（超时交给调用方，如 Bash 工具的 timeout / Monitor 的 timeout_ms）；② `codex exec` **不接受** `-a/--ask-for-approval`（那是交互模式的 flag；exec 非交互本就不询问审批，要调沙箱只能用 `-s/--sandbox`，而执行模式一律不调、直接全权限）；③ macOS 自带 bash 3.2，`set -u` 下展开**空数组** `"${arr[@]}"` 报 `unbound variable`，要先 `[[ ${#arr[@]} -gt 0 ]]` 守卫；④ codex `--json` 每行**已是 JSON 对象**，jq 里**别加** `fromjson`（那是把字符串解析成 JSON 的，对已是对象的输入会报错、被 `?` 吞成 empty，导致过滤后 stdout 全空）。
 
 ## 文件索引

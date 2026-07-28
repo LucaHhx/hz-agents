@@ -1,21 +1,22 @@
-# Phase 4 — 自问审查
+# Phase 4 — 对接铁律核对
 
 > 触发：Phase 3 全 5 层 + 层间 fix 完成。
-> 目的：主 Claude 内省，发现层间 codex 未捕捉的设计缺陷。
-> 阶段：❌ 禁止向用户提问；每个发现的问题调 `codex_decide.sh` 决策。
+> 目的：拿项目积累的铁律清单逐条对照实现。这些**不是**泛泛的「再检查一遍」——
+> 它们是历史 P0 事故沉淀下来的、单看代码正确性发现不了的项目特有陷阱
+> （漏 `SubmitBets` = 只派彩不扣款 = 凭空给钱；漏 `subscribe` ack = 客户端 10s 断连）。
+> 阶段：❌ 禁止向用户提问。
 
 ## 工作流程
 
 ```
 1. 读 docs/integration-experience/common/self-review-checklist.md（pp-game 仓库内方法论）
-2. 在 worktree 内回答 4 题（用户可扩展）
-3. 每个发现的问题 → 调 codex_decide.sh 决策（修 / 不修 / 待人工）
-4. codex 决策结果分流：
-   - 修 → fix agent 修 + commit + self-review.md 标 ✅
-   - 不修 → 写 state.unresolved[] + 标 ⏭️
-   - codex 失败 / INSUFFICIENT_CONTEXT → fallback 写 unresolved（category="codex-script-failed"）+ 标 ⚠️
-5. 写 tmp/<tableId>/self-review.md（**必须落盘**）
-6. 无论 unresolved 数量，进 Phase 5（绝不停问用户）
+2. 在 worktree 内逐条核对下面 5 题（用户可扩展），每条给出 file:line 或 capture 证据
+3. 发现问题时分流：
+   - 证据清楚、修法明确 → 直接修 + commit + 标 ✅（不必为每个问题都调 codex）
+   - 证据不足、或修法有争议（本机台特殊 vs 跨机台一致） → 调 codex_decide.sh 拿外部判断
+   - codex 失败 / INSUFFICIENT_CONTEXT → 写 state.unresolved[]（category="codex-script-failed"）+ 标 ⚠️
+4. 写 tmp/<tableId>/self-review.md（**必须落盘**）——只记结论、证据、行动，不复述题目
+5. 无论 unresolved 数量，进 Phase 5（绝不停问用户）
 ```
 
 ## 固定 5 题（用户可在 pp-game `docs/integration-experience/common/self-review-checklist.md` §6+ 扩展）
@@ -102,7 +103,7 @@ PP 机台运行时所有消息（client ↔ server）分为三类，必须**逐�
 
 **自检发现问题**：同前 4 题格式 — 调 codex_decide / fix agent / 写 unresolved。
 
-## codex_decide.sh 调用模板（每问题一次）
+## codex_decide.sh 调用模板（**仅**用于证据不足或修法有争议的问题）
 
 ```bash
 bash $CODEX_COLLAB/scripts/codex_decide.sh \
@@ -147,11 +148,11 @@ self-review 第 <N> 题
 ## self-review.md 落盘格式（必须写）
 
 ```markdown
-# <tableId> 自问审查报告
+# <tableId> 铁律核对报告
 
-> 自问审查日期：<ISO>
-> 触发：L5 完成 + 所有层间 fix 完成 + 进 Phase 5 之前
-> 处理原则：每问题调 codex 决策；不停问用户；用户后续审视本文件
+> 日期：<ISO> · 触发：L5 完成 + 所有层间 fix 完成 + 进 Phase 5 之前
+> 处理原则：能自己判断的直接修，有争议的调 codex；不停问用户；用户后续审视本文件
+> **只写结论、证据、行动**——不要复述题面，不要为没发现问题的条目补样板段落
 
 ## 1. winners 处理逻辑
 **结论**：<pass / rewrite / 其他> — `<file:line>`

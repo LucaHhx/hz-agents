@@ -567,7 +567,7 @@ docs/
 | 分类 | Skill | 说明 |
 |------|-------|------|
 | **项目管理** | `create-docs` | 三层文档管理系统，含 `docs.py` CLI |
-| | `brainstorming` | 需求探索与设计验证 |
+| | `brainstorming` | 真实需求理解与方案推荐 |
 | **代码生成** | `hab-autocode` | AutoCode API 操作指南（CRUD 模块生成） |
 | | `subagent-driven-development` | 子 Agent 驱动开发 + 代码审查 |
 | **UI/设计** | `ui-ux-pro-max` | 综合 UI/UX 设计系统（50+ 风格） |

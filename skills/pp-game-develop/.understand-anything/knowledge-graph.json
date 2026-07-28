@@ -171,7 +171,7 @@
       "type": "document",
       "name": "phase-4-self-review.md",
       "filePath": "references/phase-4-self-review.md",
-      "summary": "Phase 4 自问审查指南，含固定 5 题（winners 一致性、初始化消息清单、非下注操作窗口、下注窗口管理、消息格式三分类）及 codex_decide 调用模板与 self-review.md 落盘格式。",
+      "summary": "Phase 4 铁律核对指南，含固定 5 题（winners 一致性、初始化消息清单、非下注操作窗口、下注窗口管理、消息格式三分类）及 codex_decide 调用模板与 self-review.md 落盘格式。",
       "tags": [
         "documentation",
         "phase-4",

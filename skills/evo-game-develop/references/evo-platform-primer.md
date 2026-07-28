@@ -21,7 +21,7 @@
 | **游戏逻辑（evocore）** | `games/<gametype>/<gametype>core/*.go` | ✅ **新族从零建一套**（§4 模板） |
 | **限额/赔付** | `games/<gametype>/{odds.go,bet_limits.go}` | ✅ 新族建（betCode 体系 / 赔付参数：roulette 号码赔率 · game show 段倍率（每局上游下发）· 牌型赔率 / 限红） |
 | **工厂注册** | `factory/instance_factory.go` | ✅ 改（switch case + implementedTables，约 3 行 + buildXxxInstance） |
-| **报表前端页** | `client/reports/<evo_table_id>/index.html` | ✅ 新建（一桌一份，自包含） |
+| **报表前端页** | `client/reports/<evo_table_id>/index.html` | ✅ 新建 14 行 stub；渲染走共享 `_assets/renderers/<族>.js` + `report.js` 的 `RENDERER_BY_TABLE`（**非自包含**，同协议桌复用已有 renderer） |
 | **DB** | `b_tables` 行 + `b_table_currency_configs` | ✅ 插（vendor_type='evo', code='evo'+id, original_id=裸 id, enabled=true） |
 
 > **复用既有 core（reuse_core != none）**：又一张 roulette 桌 = 仅「factory case + DB 行 + 报表页 + 限额/per-user 差异核对」，evocore 一行不写。
@@ -87,7 +87,7 @@ roulette 的 `tableState.betState.{bets, lastGameChips, history}` 是会话私�
 - init 序列必发一帧 balanceUpdated（商户余额），客户端 **~6s 收不到即超时重连**。
 
 ### 3.6 个人派彩 per-user + 裸 tableId
-结算后 `events.SendToUser(table_code, userID, frame)` 定向推（只给本局有注用户）。**派彩帧 shape 随族而异**：roulette = 独立 `win` 帧（winSpots{betCode→{amount/payout}} + totalWin + netCash）；game show(IceFishing) = 复用 per-user `<gt>.bets` 帧、`state.status` 转 `Settled` + `acceptedBets[code].payout` 带派彩。🔴 **派彩/余额帧的 `tableId` 字段必须填裸 EVO tableId（PPTableID），不是 b_tables.code**——客户端按 URL 里的 table_id 匹配，填 code 判「未收到」→ 重连。
+结算后 `events.SendToUser(table_code, userID, frame)` 定向推（只给本局有注用户）。**派彩帧 shape 随族而异**：roulette = 独立 `win` 帧（winSpots{betCode→{amount/payout}} + totalWin + netCash）；game show(IceFishing) = 复用 per-user `<gt>.bets` 帧、`state.status` 转 `Settled` + `acceptedBets[code].payout` 带派彩。🔴 **tableId 双口径**：派彩帧（`win`/`<gt>.bets`）填裸 EVO tableId（PPTableID）——客户端按 URL 匹配，填 code 判「不属本桌」；但 **`balanceUpdated` 反过来填我方 code**——须与 `/config.table_id`（被 `api_config.go` 改写成 code）同源，填裸 id 会被余额中间件静默丢弃判「未收到」→ 重连（PROJECT-MEMORY『帧里的 tableId 分两种口径』/ dice #495 / baccarat 复证）。
 
 ### 3.7 events 总线 API 全集（`gateway/game_events.go` 注册，`common/runtime/events` 定义）
 新族在 evocore 里只调这些抽象，不直接碰连接：
@@ -162,6 +162,6 @@ roulette 的 `tableState.betState.{bets, lastGameChips, history}` 是会话私�
 2. `b_tables` 插行：`vendor_type='evo'`、`code='evo'+裸id`、`original_id=裸id`、`game_type`、`enabled=true`、`failover_group_id`。大厅 allowlist 自动从 DB 刷新订阅，**不改大厅代码**。
 3. `b_table_currency_configs` 预存该桌各币种限额（/config 按 tableID+currency 查；缺 → 限红/兜底错）。
 
-**报表**：`client/reports/<裸 tableId>/index.html` 自包含一页，fetch 通用 `/gameHistory/report` JSON 渲染，对照 `roundDetail/<rid>.{html,json}` ≥90% 还原。一桌一份，**不共享 _assets**。
+**报表**：`client/reports/<裸 tableId>/index.html` 是 **14 行引导 stub**（两个 `<link>` + `<div id=ppreport-root>` + `<script src=/reports/_assets/report.js>`，无内联 CSS/JS）；渲染逻辑在**共享** `_assets/renderers/<族>.js`，`report.js` 的 `RENDERER_BY_TABLE` 把 tableId→renderer 名。**每桌必须有自己的 index.html 目录**（防串桌、URL 即桌），但同协议桌复用同一 renderer（`247dc9a6` 一次把 12 张欧轮 + 5 张 SicBo 指同一个）。对照 `roundDetail/<rid>.{html,json}` ≥90% 还原。**不是 PP 的一桌一份自包含**（known-pitfalls H4）。
 
 **bootstrap 零改**：`bootstrap/run.go` 经 `import _ "hab/game/evo/internal/factory"` 触发 init() 自动注册，新族包被 factory import 即生效。

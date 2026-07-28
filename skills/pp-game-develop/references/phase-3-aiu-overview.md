@@ -130,7 +130,7 @@ for layer in [L1, L2, L3, L4, L5]:
 
     update_state(phase=3, current_layer=layer, layer_head=layer_head)
 
-# 全 5 层完成 → 进 Phase 4 自问审查
+# 全 5 层完成 → 进 Phase 4 铁律核对
 ```
 
 ## 失败回滚策略

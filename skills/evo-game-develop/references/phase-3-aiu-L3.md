@@ -102,7 +102,7 @@
 
 🔴 **快照时序铁律（最易错，必守）**：`broadcastTableStatePerUser` 的 `betsByUser` 必须在**「GAME_RESOLVED 触发结算清 Redis 之前」**用 `userBetsSnapshot` 抓。否则下发时现查 Redis 读空、丢本局注（真 EVO 的 GAME_RESOLVED 是带注的）。**L3.1 UPSTREAM 的 handleTableState 在清注前 snapshot 传入。**
 
-🔴 **裸 tableId 铁律**：per-user 改写/下发帧的 `tableId` 字段填 **PPTableID（裸 EVO tableId）**，不是 b_tables.code。
+🔴 **tableId 双口径铁律**：桌态/派彩类 per-user 下发帧的 `tableId` 填 **PPTableID（裸 id）**；但 **`balanceUpdated` 例外——填我方 code（Variant.TableID）**，须与 `/config.table_id`（已被 `api_config.go` 改写成 code）同源，填裸 id 会被客户端余额中间件静默丢弃（known-pitfalls B1 / PROJECT-MEMORY）。
 
 **B5 验收**：build/vet/test 过 + `per_user_betstate_test` 覆盖 strip 后无 betState 私有字段 + personalize 回填 + snapshot-before-clear 时序（构造 GAME_RESOLVED 验证下发帧仍带注）
 
@@ -153,7 +153,7 @@
 - 按 betType 单注限额 → `ErrCodeBetTooLow/TooHigh`（**currencyMult 进制比较**）
 - 用户当前局总 stake + 新注 > 台限 → `ErrCodeTableLimitExceeded`
 - betCode 白名单校验 → `ErrCodeUnknownBetCode`（roulette 数字 / game show 字符串段名）
-- 下注规则必须 capture 实证不凭直觉（A3/A4）；`SafeBetPct` 高覆盖率玩法是 **roulette 专属**（game show 固定段+bonus 无覆盖率概念，删此句），派彩失控由 settle 三路 cap 兜底
+- 下注规则必须 capture 实证不凭直觉（A3/A4）；`SafeBetPct` 高覆盖率玩法是 **roulette 专属**（game show 固定段+bonus 无覆盖率概念，删此句），派彩失控由 settle per-bet cap 兜底（#64 后无 round-level）
 - **撤单类非窗口拒绝才清注；窗口拒绝不改 Redis**（C4，防"界面已撤实际扣款"；game show 撤单是 placeChips 减额/空 chips 或独立 undo 事件）
 
 **B5 验收**：build/vet/test 过 + `check_bet_test` 覆盖单注/台限/窗口/betCode 4 类 + currencyMult 进制

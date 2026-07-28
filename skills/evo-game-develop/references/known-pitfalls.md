@@ -13,7 +13,7 @@
 
 | 你正在做的块（Layer） | 只读这几条铁律 | 配套 reference |
 |---|---|---|
-| **Phase 0** 协议分类 / capture 验收 | A1-A4、B0、B13 | `phase-0-acceptance.md` |
+| **Phase 0** 协议分类 / capture 验收 | A1-**A5**、B0、B13 | `phase-0-acceptance.md` |
 | **Phase 1** 复用边界判定（建新 core？） | **I11、I2** | SKILL.md「复用边界三分」 |
 | **L1** DICT / enum / 协议常量 | A4、B0、E、**I2** | `phase-3-aiu-L1.md` |
 | **L2** MODELS / RULES / 限额 | E、G1-G5、I2 | `phase-3-aiu-L2.md` |
@@ -52,11 +52,18 @@
 **A3**：capture 是事实下限非协议上限。稀有帧（betValidationError / canceled / 特殊货币 / 大奖）可能从不出现 → 结合 bundle + roulette 既有实现反推。
 **A4 capture 是「已被操作过的下限」，客户端代码才是协议上限（CrazyTime 撤注实证）**：capture 只录到录制时实际触发的帧——撤注没按就无 undo 帧、单子下注模式没用就无 Chip 帧，**「capture 没有」≠「协议没有」**。判协议全集（尤其下注 action / 撤注 / 罕见帧）必须 grep `clientResources/frontend/evo/mini/js/` 业务 bundle 的 type/action 常量 + reducer，**客户端代码权威**。行为分歧用**三方实证**坐实：① capture（真 EVO 行为）② 客户端 bundle（协议定义）③ **连我方服务端录一份 capture（我方实际行为）**。CrazyTime 撤注/单子下注 bug 就是靠「客户端代码露出 Chip/Undo action + 连我方服务端实测放 2000 筹码回 chips#0(注没记上)」坐实的——首份 capture 没按撤注、只用 SetChips 全量模式，误判无 bug。⚠️ **一个游戏可能有多套下注模式**（CrazyTime：SetChips 全量快照 vs Chip/BulkBet/Undo 增量，客户端 flag 决定），服务端须把 bundle 里所有 action 都处理，不能只按一份 capture 实现。**Monopoly 又一实证**：grep bundle `sendPlaceChipMessage({name:...})` 全集见客户端发 6 种 action（Chip/BulkBet/Repeat/Undo/**Double/UndoAll**），我方只处理前 4 种、漏 Double(翻倍)/UndoAll(清空) → 玩家点加倍/清空落 default 被拒单、功能失效（capture 只录了 4 种）。反过来 SetChips/Move 只在 enum 定义、`sendPlaceChipMessage` 从不发送 → 不处理也对，**以「实际 send 的 action」为准、非 enum 全集**。**roulette 族第三次实证（RedDoorRoulette 对接时发现，已修 commit f1a4d34e）**：`roulettecore` 只定义 PLACE/REMOVE/MOVE/UNDO 四个 action，漏 **`UNDO_ALL`**（客户端「清除全部筹码」按钮，bundle 有 `action:{type:"UNDO_ALL"}` / `"bets/UNDO_ALL"` / `CLIENT_PRESSED_UNDO_ALL`）→ 落 switch `default` 回 `ErrCodeInternalServer`、**Redis 注单原封不动** → 玩家以为已清空、封盘照扣全额本金。当年 `vctlz` 的 capture 只录到 `PLACE`（录制时没点撤销）故未暴露；而其余 5 族（crazytime/funkytime/icefishing/monopoly/monopolybigballer）**全都处理了 UndoAll，roulette 是唯一遗漏**。→ **新族对接第一件事：把 bundle 的 action 全集与既有同族实现做集合差，差集就是候选 bug**。
 
+**A5 🔴 部分桌的 game socket 是加密的，capture 先验「解没解开」再谈协议分析（2026-07 新变量）**：EVO 自 2026-07-15→07-21 起**逐桌**给 game socket 启用二进制加密帧（AES+RC4+zstd），由上游 `/config` 的 `ws_encryption:"1:3"` 协商驱动 → 客户端 game ws URL 追加 `encrypted=true&nonce=`。**不是所有机台都加密，且 EVO 在逐张切、会隔夜突变**——同一张桌 07-21 录的 capture 明文、07-24 已加密（`leqhceumaq6qfoug` 实证）。加密**只在 game socket**，chat 明文、视频是另一套加扰。判据两个（应一致，不一致说明 capture 不可信）：`config.txt` 有非空 `ws_encryption` / `message*.txt` 的 `ws` open 事件行带 `encrypted:true`。
+- **现行 `evo_fetch.mjs` 已自动解密**（复用服务端同款 sidecar + 我方 encpart bundle 解回明文再落盘），所以 **`payload` 仍是明文 JSON 字符串、与明文桌完全同构，§2/§2A 的全部 jq 命令原样可用**，只是加密桌的帧多一个 `enc:true` 标记。**明文桌产物零变化**。
+- 🔴 **拒收判据一：有 `decryptError` 的帧**（该帧只落了 base64 `raw`，没有 `payload`）→ capture 缺帧且缺得看不出来，**必须查因重录**，不能"先凑合分析"。头号原因是真客户端 `client_version` 与我方 bundle 版本脱节（脚本会打 WARN），按 `docs/evo-crypto/03` 重同步 `fec/encpart` bundle 后重抓。
+- 🔴 **拒收判据二：`payload` 里成片 U+FFFD（�）乱码** = 这份 capture 是**旧版脚本**（无解密层）录的加密桌——二进制帧被按 UTF-8 硬解，**信息已不可逆销毁**，任何分析都是在读噪声。只能重录，禁止硬着头皮解读。
+- ⚠️ **解密后数值被 JS 规范化**（`330000.00` → `330000`）：这是 sidecar `JSON.parse`→`stringify` 的必然结果，且**我方 Go 运行时在加密桌上收到的同样是这个形态**（同一条管线），所以口径是对的。但**别拿它当协议事实**去推"该族金额无小数"——要逐字节原文时用 `evo_fetch.mjs --keep-raw` 留 base64 密文离线重放。
+- 与对接实现的关系：**加密是上游连接层的事，已由 `game_upstream*.go` + `crypto_sidecar.go` 落地，新族对接不碰**（同视频/大厅/容灾）。本条只影响 Phase 0 的输入验收。
+
 ## B. per-user 数据构造（⭐ EVO 灵魂，PP 无）
 
 **B0 「per-user 帧」是 EVO 通用律，但帧名/shape 逐族不同（从 capture 推导，勿照搬 roulette 名字）**：通用律 = 会话私有帧（本人注/余额/个人受理/个人派彩）广播前剥离、按下游连接回填。**roulette 的具体载体**：`tableState.betState`/`betActionResponse`+`betsAccepted`/`winSpots`/5 态 `tableState.state`。**game show(IceFishing) 的载体不同**：per-user 注帧 = `<gt>.bets`(`state.{status,chips,acceptedBets,rejectedBets,repeat,history}`，status `Idle→Open→Accepted→Settled`，**合并了 roulette 的 betState+受理 betsAccepted+派彩 win 三职能**，无独立 betActionResponse/betsAccepted/win 帧)，结算锚=`<gt>.gameResolved`，开/关窗=离散 `<gt>.betsOpen`/`betsClosed`。**下面 B1-B9 帧名是 roulette 实例，新族先从 capture 找到对应载体再套同一律**（找 per-user 帧靠**计数悬殊+per-session 字段**，不靠 type 集合差——game show 集合差为空）。
 
-**B1 下发帧 tableId 默认用裸 EVO tableId（PPTableID），但🔴【逐帧逐族 grep 客户端门控坐实】——已有反例**：真 EVO 客户端多按 URL 里的 table_id 匹配桌态/余额，`win`/`tableState`/`subscribe` 填 code → 客户端判「不属本桌」→ 重连。索引/路由才用 code。**EVO 无 PP 的字节替换（bytes.ReplaceAll）**——per-user 合成帧时直接填正确 id。
+**B1 下发帧 tableId 双口径【逐帧逐族 grep 客户端门控坐实】**：桌态/派彩帧（`win`/`tableState`/`subscribe`/PBS/resolved）用**裸 id**——客户端按 URL 里的 table_id 匹配，填 code 判「不属本桌」→ 重连；但 **`balanceUpdated` 反过来用我方 code**——客户端余额中间件按 `getTableId()===payload.tableId` 门控，`getTableId()` 取自 `/config.table_id`，而 config 被 `api_config.go` 改写成了 code，所以 balanceUpdated 填裸 id 会被静默丢弃、表现为「派彩后余额不刷新 / ~6s 判未收到重连」（dice #495 坐实、baccarat 复证；PROJECT-MEMORY『帧里的 tableId 分两种口径』）。**记法：balanceUpdated 与 /config.table_id 同源（=code），其余桌态帧用裸 id。** 索引/路由用 code。**EVO 无 PP 的字节替换（bytes.ReplaceAll）**——per-user 合成帧时直接填正确 id。
 - 🔴 **反例（#495，dice 族 balanceUpdated 必须填我方 code）**：sicbo/lightningdice 共用的客户端 bundle 模块 15451 对 `balanceUpdated` 有严格相等门控 `t === v.getTableId()`，而 `v.getTableId()` 读的是 `/config` 的 `table_id` ——**这个字段被我方 `api_config.go` 改写成了 code**（`evoSuperSicBo000001`）。填裸 original_id 恒不相等 → **稳态余额帧被静默丢弃、UI 冻结在进桌值**（不影响真实扣派款，但是资方/客诉风险）。修法：`sicbocore/per_user_betstate.go` 把 `outboundTableID()`（桌态帧，裸 id）与 `balanceTableID()`（balanceUpdated，我方 code）**拆成两个函数**，别整族共用一个。
 - **为何 roulette 不暴露**：其 handler 是 `isAAMS() && !tableId || dispatch(...)`——非 AAMS **恒无条件更新、根本不看 tableId**，init 首帧另靠 `renewBalance` 放行。所以「裸 id 全对」是**该族客户端不校验的偶然结果**，不是 EVO 协议规定。真 EVO 自己无此坑（它的 config.table_id == 帧 tableId，没有双命名空间）。
 - **新族做法**：接入任何按桌维度的字段/门控前，拿**本族** bundle grep 该帧的门控条件 + 对照本族 `/config` 实际返回的 `table_id`，逐帧决定填哪个。**禁止整族套用一个取值函数，禁止照搬 roulette 结论或隔壁代码**。
@@ -142,13 +149,43 @@
 **C4** 整批拒清 Redis 仅限非窗口类（窗口拒绝不清，防"界面已撤实际扣款"）。
 **C5/C6** BC Atoi 失败显式跳过 + ERROR log；bets JSON 解析失败 continue 跳过用户（不 append 空 BetData）。
 **C7 「Redis 读失败 ≠ 无下注」这条规则适用于【每一个】读 bet key 的代码路径，不止 `GetRedisUserBets`**：SCAN/HGetAll 失败必须返 error **不返 nil**（否则被当无下注 → 漏结算/漏退款）。🔴 **易漏点**：`/bet` 提交路径是完全独立的一段代码（`common/merchantclient/bet_submit.go:444-466` 的 `getAllBetsForGame`），当初 SCAN 失败 `return nil,nil`、HGetAll 失败 `continue` → **部分用户被扣款、部分用户注单被静默吞掉**，且结算侧读同一批 key 也读不到 → 两边 `failedKeys` 都空 → **整局被当正常结算关闭**。修法：失败一律 append `FailedSnapshotKey{Reason: reasonRedisScanError}`，调用方见非空即整局不提交 `/bet` + 落人工介入。**新族/新功能只要自己写了一次 SCAN+HGetAll（提交/报表/监控都可能各写一次），就要重新过一遍这条**，不会因为结算路径守住了就自动免疫。
-**C8** payout_cap 接入：per-user round payout max + `handlers.CapUserPayout` 等比缩放 + MCap=true。
+**C8** payout cap 接入 = **per-bet**（🔴 issue #64 已下线 round-level：`CapUserPayout` / `MCap` / per-user round payout max 全废）：调 `handlers.LookupPerBetCap` 对**每笔 bet** 取 `min(maxMultiplier×本笔注额, Convert(euro_table_payout_max,EUR,currency))`，EUR 换算失败 fail-closed。详见 G3。
 **C9** Redis SCAN/HGetAll 用 `context.WithTimeout(5s)` 非 Background。
 **C10 /result 必先有成功 /bet**：`onBetsClosed` 必 `go handlers.SubmitBets(ctx.TableID, gameID, p.OnMerchantBetResult)`；`MarkBetAccepted` 只在 `OnMerchantBetResult` accepted 分支（**绝不**在 betAction/applyBet）；`SettleUsersSeamless::hasSuccessfulBetDebit` 通用闸门兜底（无 bet 流水 fail-closed）。漏调 SubmitBets = 无扣款派彩（凭空给钱）。
 **C11 OnRoundSettled 必调**（settle 成功），否则下一局误标 cancelled + 重复退款。
 **C12 reconcile 孤儿局补结算同样 fail-closed**：从 recentResults 补结算的注也走 requireAccepted + hasSuccessfulBetDebit，不给没扣款的注派彩。
 **C13 孤儿局 pending 态必用 `pendingsettle.Tracker` 五件套（勿自写 pending 字段）**：Mark on 扣款 / Clear on 结算（**compare-and-clear**：退款只走「原子赢得清标记」路径，防 sweep×帧驱动并发双退款）/ `NextOrphanRound` 帧驱动 / `SweepStaleSettle` 可选接口（settle_sweeper 60s 扫 5min 龄期——game-ws 长期死时帧驱动永不触发，无 sweep = 本金永扣的最大敞口）/ `RecoverPendingSettle` 跨重启载回（终态守卫防双退款）。另加 `PendingSettleStatus()` 监控可选接口（看板资金安全面孤儿局数据源），缺了 = 运维盲区。详见 phase-3-aiu-L4 §L4.2。🔴 **新族必查**：grep `pendingsettle` 确认接入五件套（Monopoly 曾是 6 族里唯一漏接的，自写 `pendingGameID` 缺 sweep/跨重启/监控，运维看板读不到其孤儿局）。🔴 **sweep maxAge 须 > 最长 bonus 演出局**：game show 长 bonus 局是分钟级（实测 monopoly 2/4Rolls 关窗→结算 192s、crazytime 大转盘 100s），旧 5min 会把**正常长局**误判孤儿退款 → 随后真结算再派彩 = 退款+派彩双付；已全局改 2h（`settle_sweeper.go`，远超最长演出局、只退真搁浅局）。「健康桌 pending 秒级清除」这个 sweep 立论对普通局成立、对长 bonus 局不成立。
 🔴 **反模式（曾真实发生）**：`pendingsettle.Clear` 的调用点必须**唯一收敛在结算成功路径内部**。`reconcileFromRecentResults` 原实现在末尾**无条件**调 `clearPendingSettle(orphan)`——不管 `OnGameResult` 成功还是 fail-closed 都清，于是 Redis 读失败走兜底分支时 pending 也被抹掉 → sweep 与跨局退款双双失效、**本金永久卡住且无人工介入入口**。修法 `roulettecore/reconcile.go:57-63` 删掉该行，注释写明「pending 清理由 OnGameResult 独占，此处不得再清」。**兜底 helper 里出现第二个 `Clear` 调用点本身就是坏味道**——新族写 reconcite 时最容易顺手加一行「清一下图个干净」。
+
+**🔴 C13 更正（2026-07-28，andarbahar L4/L5 审查实证，覆盖上面 C13 的两条具体建议）**
+上面 C13 推荐的「用 `pendingsettle.Tracker` 五件套」和「compare-and-clear：退款只走原子赢得清标记的路径」，
+在下面两种情形下**本身就是资金 bug 的来源**。两条都有可达序列与代码位置，不是理论风险。
+
+- **① 单槽 `Mark` 无条件覆盖未闭合的前一局**（`pendingsettle/tracker.go:56`：`t.gameID=gameID; t.since=now; t.orphanRounds=0`）。
+  可达序列 `G0 close-out → Mark(G0) → G1 开局 deferred → G1 close-out → Mark(G1)`：
+  G0 的本金**已扣**，标记一丢就同时退出 sweep / 帧驱动 / 跨重启恢复 / 监控看板的全部入口。
+  → **只要本族存在「两局可同时未闭合」的时序，五件套就装不下**，必须换**族内耐久多槽账**
+  （先例：`baccarat/baccaratcore/orphan_ledger.go`，`andarbahar/andarbaharcore/orphan_ledger*.go`）。
+  ❌ **不要去改 `pendingsettle` 本身** —— 11 个族共用，改共享层正是 andarbahar 前两次整批作废的主因。
+  三条不变量照抄：只增不删 / 容量到顶 fail-close 新下注（**绝不**丢弃最旧条目）/ 带真实结果的局永不被合成取消。
+  另外两条别漏：store 三个方法都要**返回 error**（旧 `pendingsettle.Store` 全是无返回值，一次写失败被吞掉
+  = 进程一崩敞口消失）；**锁内只返回决策**，DB 与商户往返全在锁外。
+
+- **② clear-before-refund 会造成永久少退**。`cancelOrphan` 先 `clearPendingSettle` 再入队退款，
+  崩在中途或入队失败 → `RecoverPendingSettle` 见到 `cancelled` **只清标记、不补建退款任务**
+  （`handlers/pending_recover.go`）→ 不可逆。
+  而退款入队**本来就是幂等的**：`merchantclient/cancel_refund.go` 用 `OnConflict{DoNothing}` 撞
+  `uk_callback_task(operator_id, callback_type, reference)` 唯一键，重复尝试**零成本**。
+  「重复入队」与「永久少退」两边代价不对称 → **顺序必须是「先形成耐久退款覆盖，再 compare-and-clear」**。
+  拿 `CancelRoundRefund` 的 error 当「覆盖已形成」的证明（它内部会逐笔核对「已退成功 或 有可执行 pending task」）。
+
+- ⚠️ **影响面（逐个 grep 确认过，不是推测）**：`crazytime` / `dragontiger` / `fantan` / `funkytime` /
+  `icefishing` / `monopoly` / `monopolybigballer` / `roulette` / `sicbo` **9 个族的 `cancelOrphan` 首个动作
+  仍是 `clearPendingSettle`**，且 `markPendingSettle` 全是无守卫直通 `Tracker.Mark`。
+  `icefishing/reconcile.go` 另有一处：claim 失败后重新 `Mark` 恢复标记，而 `Mark` 会把龄期归零 →
+  每次 stale 触发失败就再推迟一个 maxAge(2h)。
+  **「代码形状相同」已确认；「那条序列在每个族里都真能跑到」只逐帧追过 andarbahar** ——
+  其余族要各自追一遍相位流才能定性，别直接当成 9 个已确认的 bug 去报。
 
 **C14 局资金终态机 settle_state（已根治双付+本金永扣，common 层全托管，新族零接线自动生效）**：曾有两类跨族资金 bug——① fail-closed 局 persistRound 已写 SettledAt、`HasTerminalRound` 靠它判终态 → 重启误清 pending → 本金永扣；② 结算(/result R+rid)与取消退款(/refund F+rid)幂等空间被前缀隔开互不感知 → 跨端点双付。根治：`b_game_rounds.settle_state`（''/settling/settled/cancelled）单一真相源 + DB CAS 原子抢占（`handlers/settle_state.go`），`SettleUsersSeamless` 入口 claim（已取消局返 `ErrRoundCancelled` → 机台走既有 abortSettleTopLevel 不派彩）、`OnRoundCancelled` 退款前 claim（已结算/结算中跳过退款）、`HasTerminalRound` 只认 settle_state、refund_worker 三类 task 复检（refund_timeout 是 **per-user** 查 result 流水——局 settled 但该用户恰 /bet 超时未派彩仍须退他本金）。设计全文 `docs/资金终态机/DESIGN.md`。**新族注意**：结算必须走 `handlers.SettleUsersSeamless`、取消必须走 `p.OnRoundCancelled`（common 唯一实现），就自动在终态机保护内——绕开自调 wallet = 脱保；SettledAt 只是开奖展示时间，**永远不要拿它判资金终态**。
 
@@ -161,6 +198,28 @@
 **C16 🔴 关窗必须排空「已过窗口校验、尚未落 Redis」的在飞下注写（late-bet 资金竞态，4 族已有、roulette 第 5 次才补）**：EVO 架构下「下游 betAction 写入」和「上游关窗/结算抓快照」**必然跑在不同 goroutine**（下游 WS 读循环 vs 上游读循环）。betAction 过了 `IsBetsOpen` 布尔校验、还没写完 Redis 时，BETS_CLOSED 已经抓走结算快照 → 该笔注**既没扣款也没参与结算**（或反向少扣多派），客户端却显示「已受理」。
 - **修法（样板代码，新族照抄）**：Processor 加 `betWritesWG sync.WaitGroup`；`beginBetWrite()` 在 `betsMu` **读锁内** `Add(1)`（窗口已关则返 false 拒单）/ `endBetWrite()` `Done()` 配对；`MarkBetsClosed` 关窗后 **`betWritesWG.Wait()` 排空再让调用方抓快照**；`handleBetAction` 用 `beginBetWrite` + `defer endBetWrite` 包住**全部** `applyBet` 落库。范例 `roulettecore/{processor.go:70-74, bet_window.go:73-97, downstream_bet.go:62-66}`。
 - **为何新族必踩**：这是纯样板代码，「只做 `IsBetsOpen` 布尔检查」看起来完全正确、编译测试全绿，**只有 `-race` + 精确时序才暴露**。icefishing 等 4 族早有此模式，roulette 作为最老的族反而漏了、直到 `0f7481c9` 才补——**新族从零写 `downstream_bet.go` 没有「抄别族」这一步，不会自动带上**。F4 的 race 测试必须覆盖这条。
+
+## C-meta. 关于「怎么验证一条资金修复」（AndarBahar000001 沉淀，比单条铁律更常用）
+
+**变异反验是硬要求**（注入缺陷 → 确认变红 → 还原），但它有三种失效形态，实测各踩过一次：
+
+1. **变异没打进生效路径** —— perl 少写 `/g` 只改到注释、`-run` 正则没覆盖到目标用例。
+   → 变异「存活」时**先 diff 确认注入位置**，再判定测试弱。
+2. **变异被另一处同契约的实现兜住** —— 两道防线互为备份，只改一处不会红。
+   → 每道防线**分别**单独注入。
+3. 🔴 **变异转红了，但红在不相干的行** —— 被更早的前置断言短路，真正的资金断言被遮住。
+   → 变异红了之后**看一眼红在哪一行**；不是那条资金断言就说明**测试结构**有问题。
+   把「前置成立」和「钱到底派没派」拆成两条用例。
+
+**测试本身的三类假绿**（编译测试全绿、codex 也未必看得出）：
+- 真实样本恰好无法区分正确与错误实现（23/23 局里超付实现与正解逐笔相同）；
+- 断言恒真（Go 的 `float64(37)` 也序列化成 `37`，「断人数是 5 不是 5.0」永远通过）；
+- **用例根本没走到被测分支**（条目要落进 hold 必须先有 `HasResult`，而用例里走的是别的分支）。
+  → 给每个场景用例加一条**前置断言**：断言「本用例确实进入了要测的那个分支」。
+
+**并发测试**：`-race` **抓不到逻辑竞态**（两次操作各自都加了锁，但组合起来失配）。
+写并发测试时**写清它假设了什么**——那个假设本身就是待验证项
+（实测：既有测试假设「每个 userID 只有一个 writer」，而顶号窗口下这个前提不成立）。
 
 ## D. 静默错误（必加 zap log）
 业务关键路径禁 `_ = err`。必加 `global.HAB_LOG.Error/Warn + zap.Error`：OnGameResult / UpsertRound / SettleUsersSeamless / json.Unmarshal(bets/winSpots) / OnMerchantBetResult 早期 return / per-user snapshot 失败（warn）/ 视频三跳失败。
@@ -186,7 +245,7 @@
 ## G. 客户端-后端一致性 + 进制
 **G1** 客户端展示的约束类数值（限额/封顶/赔率/合法投注）后端必须同字段同来源 enforce。
 **G2** 默认值与客户端 fallback 一致（缺配置 ≠ 不封顶）。
-**G3** payout cap `min(A,B,C)`：A=`maxMultiplier×用户当局总注`（用户级非单注）/ B=`Convert(euro_table_payout_max,EUR,currency)` / C=`table_payout_max`。EUR 换算失败 fail-closed。
+**G3** payout cap **per-bet 两路** `min(A,B)`（🔴 issue #64 于 2026-05-14 把 round-level 整套反转为 per-bet，`LookupRoundCap`/`CapUserPayout`/`table_payout_max` **一并下线**，见 `handlers/round_cap.go:1-12` + `baccarat/payout.go:26-37` 坐实——旧文档的「用户级/当局总注/三路 min/C=table_payout_max」已过时）：A=`maxMultiplier×`**本笔注额**（per-bet 单注，**不是**用户当局总注）/ B=`Convert(euro_table_payout_max,EUR,currency)`。EUR 换算失败 fail-closed。
 **G4 🔴 currencyMult 进制全路径**：EVO 金额是进制制（IDR÷20000、BRL×5、INR×100，config.currencyMult）。下注校验 / 结算 / payout / 限额比较 / 显示**全部按币种乘系数**，漏一处金额错乱。限额与下注金额必须同进制比较。
 
 **G5 🔴 限额/封顶必须 per-currency 取，禁止静默回落 USD**（2026-07-10 HAR 实证，6 族全中）：`b_table_currency_configs` 逐币种存限额，同桌 `straight_bet_max` USD=2000 / IDR=4000万（差 mult 倍）。三条硬规矩：

@@ -96,7 +96,7 @@ Layer 5 (依赖全部, 1):
 | `recent_results.go`+`reconcile.go` | L4 HISTORY_RECENT | 换历史帧名（recentResults/spinHistory）+ 格式 + 孤儿局恢复 |
 | `odds.go`（父目录） | L1 PAYOUT_MODEL | 赔付参数（roulette 号码赔率复用；game show 倍率制无固定表；betCode 双命名空间映射） |
 | `[betstats_enrich.go]`（条件） | L4 BETSTATS | 仅 capture 有 `<gt>.bettingStats` 等统计帧的族建；直转或合并我方聚合计数 |
-| `client/reports/<裸 tableId>/index.html` | L4 REPORT_PAGE | 一桌一份自包含，对照 roundDetail json+html |
+| `client/reports/<裸 tableId>/index.html` | L4 REPORT_PAGE | 14 行 stub + 共享 renderer（RENDERER_BY_TABLE 映射），对照 roundDetail json+html（非自包含，H4） |
 | `factory/instance_factory.go`（包外，唯一改动点） | L5 FACTORY | switch case + implementedTables + buildXxxInstance |
 
 ### 注意（EVO 特有）

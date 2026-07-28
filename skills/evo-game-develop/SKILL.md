@@ -1,6 +1,6 @@
 ---
 name: evo-game-develop
-description: EVO (Evolution Gaming) 真人桌游戏族对接工作流。用户提供 capture 数据（6 文件包），AI 完成全自主对接，主攻「从零建一个新 EVO 游戏族 core」（未建族如 baccarat / blackjack / bacbo / andarbahar；已建 9 族 core：roulette / sicbo / dragontiger / fantan / icefishing / crazytime / funkytime / monopoly / monopolybigballer，另 lightningdice 参数化共享 sicbocore 零 fork）。触发：(1) 用户给出 EVO tableId（如 "vctlz20yfnmp1ylr"）并提供 tmp-evo 下对应目录数据包；(2) 明说"用 evo 流程对接" / "对接 EVO 机台" / "新增 EVO 游戏族"。与 pp-game-develop 同构：8 phase 全自主 + AIU DAG 分层 + 三层审查防线（层间 codex / 自问审查 / 整体循环）+ codex-collab 三模式调度 + worktree 隔离 + state.json 断点。与 PP 的本质区别：PP 多数帧直转，EVO 大量帧是 per-session 会话私有（具体帧随游戏族而异：roulette 是 tableState.betState/win，game show 是 bets/balanceUpdated），必须按每个下游用户改写/补结构后定向下发——per-user 数据构造是 EVO 对接的工作量大头。roulette 协议形态是范例非通用，新游戏族必须从 capture + 客户端 bundle 自行推导协议 shape（capture 不完整时客户端代码权威，见 known-pitfalls A4）；game show 交互式 bonus（玩家选择型，如 FunkyTime 选杯/选色）的参与时序/选择锁/auto 随机/撤注快照栈是反复踩坑根因（known-pitfalls K）。不在范围：纯协议讨论 / PP 机台（走 pp-game-develop）/ 大厅·会话·视频·容灾基础设施（已建好，本流程复用不重写）。
+description: EVO (Evolution Gaming) 真人桌游戏族对接工作流。用户提供 capture 数据（6 文件包），AI 完成全自主对接，主攻「从零建一个新 EVO 游戏族 core」（未建族如 baccarat / blackjack / bacbo / andarbahar；已建 9 族 core：roulette / sicbo / dragontiger / fantan / icefishing / crazytime / funkytime / monopoly / monopolybigballer，另 lightningdice 参数化共享 sicbocore 零 fork）。触发：(1) 用户给出 EVO tableId（如 "vctlz20yfnmp1ylr"）并提供 tmp-evo 下对应目录数据包；(2) 明说"用 evo 流程对接" / "对接 EVO 机台" / "新增 EVO 游戏族"。与 pp-game-develop 同构：8 phase 全自主 + AIU DAG 分层 + 三层审查防线（层间 codex / 铁律核对 / 整体循环 codex）+ codex-collab 三模式调度 + worktree 隔离 + state.json 断点。与 PP 的本质区别：PP 多数帧直转，EVO 大量帧是 per-session 会话私有（具体帧随游戏族而异：roulette 是 tableState.betState/win，game show 是 bets/balanceUpdated），必须按每个下游用户改写/补结构后定向下发——per-user 数据构造是 EVO 对接的工作量大头。roulette 协议形态是范例非通用，新游戏族必须从 capture + 客户端 bundle 自行推导协议 shape（capture 不完整时客户端代码权威，见 known-pitfalls A4）；game show 交互式 bonus（玩家选择型，如 FunkyTime 选杯/选色）的参与时序/选择锁/auto 随机/撤注快照栈是反复踩坑根因（known-pitfalls K）。不在范围：纯协议讨论 / PP 机台（走 pp-game-develop）/ 大厅·会话·视频·容灾基础设施（已建好，本流程复用不重写）。
 ---
 
 # evo-game-develop
@@ -52,7 +52,7 @@ cat "tmp-evo/$CAPTURE_DIR/state.json" 2>/dev/null  # 检查恢复点
 | `TABLE_CODE`（= `evo`+tableId） | `evovctlz20yfnmp1ylr` | `b_tables.code`，我方机台编号。**索引/路由**用：`FindByTableCode`、下游 game ws path `:tableId`、`Variant.TableID`、Redis bet key。 |
 | `gameType` | `roulette` | 游戏族目录 `games/<gameType>/<gameType>core/`、game ws path `<gt>` 段。 |
 
-> 🔴 **两者绝不混用**：`Variant.TableID = table.Code`（带 evo 前缀，我方索引）；`Variant.PPTableID = table.OriginalId`（裸 EVO tableId，协议帧用）。下发给客户端的 `tableId` 字段一律用 **PPTableID（裸 EVO tableId）**——填 code 客户端 URL 不匹配，判余额/桌态不属本桌。
+> 🔴 **两者绝不混用**：`Variant.TableID = table.Code`（带 evo 前缀，我方索引）；`Variant.PPTableID = table.OriginalId`（裸 EVO tableId，协议帧用）。下发给客户端的 `tableId` 字段**分两种口径**：桌态/派彩帧（subscribe/win/tableState/PBS/resolved）用 **PPTableID（裸 id）**——客户端按 URL 匹配，填 code 判「不属本桌」；但 **`balanceUpdated` 反过来用我方 code（Variant.TableID）**——它必须与 `/config.table_id` 同源，而 config 被 `api_config.go` 改写成了 code，填裸 id 会被客户端余额中间件（`getTableId()===payload.tableId` 门控）静默丢弃、判「余额未收到」→ 重连（dice #495 坐实、baccarat 复证；PROJECT-MEMORY『帧里的 tableId 分两种口径』）。
 
 ## 用户交互边界（核心铁律）
 
@@ -62,11 +62,95 @@ cat "tmp-evo/$CAPTURE_DIR/state.json" 2>/dev/null  # 检查恢复点
 | Phase 1 | ✅ 可确认 base / 新族命名（如歧义） |
 | **Phase 2+** | **❌ 禁止提问，所有不确定走 codex-collab，失败 fallback 写 `state.unresolved[]`** |
 
+## 🔴 无人值守执行纪律（Phase 2 之后，这一节比任何技术铁律都更影响交付速度）
+
+实测：AndarBahar000001 那次，**Stop hook 触发了 6 次，每次都是 AI 自己停的**——不是缺权限、
+不是等输入，而是「跑完一轮审查 → 输出进度总结 → 结束回合」。这个习惯是最大的单项时间损失。
+
+1. **phase / 轮次之间不要输出进度总结**。无人值守下没人在读它，它唯一的作用是结束回合。
+   要报告就在**全部完成时报一次**。中途只在「有裁决需要留痕」时写进 commit message 或 state.json。
+2. 🔴 **codex 在后台跑时，前台必须有活**。审查一轮 10–40 分钟墙钟。启动后立刻去做**不依赖它**的事：
+   Phase 6 的确定性闸门（build/vet/race/cover/policy-pr）、seed SQL、经验文档、
+   自己按同一份清单先审一遍（实测这样能在审查回来前**自己先抓到**它要报的条目）。
+   **禁止**「启动审查 → 结束回合等通知」。
+3. **等待用 `Bash(run_in_background)` 的 until 循环，不要用轮询式的看一眼**。
+   条件写成「三份报告都出现 `review end`」这种可判定的，别写成固定 sleep。
+4. **一次派满**。同一轮的 N 个 codex agent 写在**同一条消息**里；下一轮的 prompt 在上一轮
+   结果回来之前就准备好。
+5. **自己先答一遍给审查方列的问题**。给 codex 的 prompt 里若写了「请重点判 X」，
+   那 X 你自己也能查——实测本次有两条 🔴 是自查先发现的（广播路径栈顶对齐、每帧双重 lease 查询）。
+6. 🔴 **不要指望 Stop hook / goal 兜底**。它的机制是「你停下 → 被拒绝 → 推回来」，
+   每次都是一个完整往返的浪费（本次 6 次）。它是**兜底不是动力**。
+   判断「现在能不能停」的标准只有一个：**任务清单是不是空了**——
+   「这一阶段做完了」「等后台结果」「报个进度」**都不是**停止条件。
+   AI 也**无法自己设置** goal（那是用户侧命令），所以别把它当成计划的一部分。
+
+## 🔴 资金/并发容器：**先评审设计，再写实现**（把 8h 压到 4h 的最大单项杠杆）
+
+**实测反面教材**：AndarBahar000001 的孤儿局跟踪账，演化路径是
+`单槽 → 多槽 → +耐久契约 → +degraded 自愈 → +版本闸 → +Reclaims → +分片锁` ——
+**七次增量，每一次都是被某一轮审查逼出来的**。这不是「审查有效」，是**在审查压力下边写边设计**：
+每轮审查 25 分钟墙钟 + 修复 + 补测试 + 变异反验 + commit，七次滚下来接近 1.5 小时，
+而且 **round N+1 的发现大量打在 round N 的修复上**（实测 round4 的三条 🟡 全部如此）。
+
+### 判据：什么算「资金/并发容器」
+
+满足任一条就走本节：① 持有「已扣款未闭合」这类**资金敞口**；② 有**跨 goroutine 共享的可变状态**；
+③ 需要**跨重启存活**；④ 有**两把以上的锁**或与既有锁交互。
+
+### 做法：一页设计，先评审
+
+实现之前先写一页（**不超过一页**），交 codex 评审**设计本身**：
+
+1. **不变量**：写成可检验的句子。例：「`degraded == false` ⟹ ……」——
+   ⚠️ 写完自己攻一遍，本次就写出过一条**做不到**的强不变量（出锁到落盘之间恒有窗口），
+   审查两轮才纠正。**声明不出来的不变量不要写进注释**。
+2. **锁序**：列全部锁 + 唯一允许的获取顺序 + 「锁内绝不做什么」（外部调用 / 网络写 / DB）。
+   本次两条 🟡 就是「Redis 写在锁内」和「网络写在分片锁内」。
+3. **失败矩阵**：每个外部依赖（Redis / DB / 商户）失败时**这一格的钱怎么办**。
+   每个格子必须落到「结算 / 退款 / 仍在账上且可见」三者之一 —— 落不到就是缺口，
+   当场决定是修还是记为跨族待办。
+4. **生命周期**：谁创建、谁销毁、容量上界、到顶怎么办（fail-close 还是丢弃——
+   丢的是不是已扣走的真钱决定了答案）。
+5. **代际 / 版本**：有没有「旧的写覆盖新的写」的可能。有就写清怎么定序。
+
+**一个波次的设计评审 ≈ 省掉 4 个波次的实现评审。** 而且设计阶段改一句话，实现阶段要改
+代码 + 测试 + 变异 + 文档四处。
+
+### 已有先例可抄，别从零设计
+
+`baccarat/baccaratcore/orphan_ledger.go` 的**文件头**就是一份写好的设计（三条不变量 + 为什么单槽不行）。
+新族做同类容器**先读它**，再写「本族与它的差异 + 理由」——本次证明差异只有两处
+（无 replay 列、多 buffer 列），其余照抄即可。
+
+## 🔴 前提可判定性闸门（做任何「从聚合/公共数据反推单体」的功能之前，先答这一题）
+
+实测代价：AndarBahar000001 的「走势串补结算」做到**第三版**、按结构穷举验证通过
+（6.4×10⁷ 组误放行 0）、真实数据 6/6 放行，最后**整体删掉约 850 行**——
+算法全对，**前提**不成立。
+
+判据只有一句：
+
+> 数据里有没有一个**标识**（gameId / 序号 / 时间戳 / 玩家 id）能把这条记录钉到目标身上？
+
+- **没有** → 这个功能不成立，**当场放弃**，别写第一行代码。
+  走势串是「每局一 token、无 id、定长环形」，而**取消的局根本不入串** ——
+  所以「第一个新增 token 属于孤儿局」永远证不了，无论算法多聪明。
+- **有** → 再谈算法精度。
+
+⚠️ 这一题**必须在 L1 分析阶段问**，不是等到层间审查。层间审查查的是「实现对不对」，
+它默认前提成立；本次是第 3 轮 codex 才有人跳出实现层去质疑前提。
+
+配套：任何「从聚合数据反推」的判据，**验证要按结构穷举**（周期 / 边界 / 自相似 / 全同 / 交替 /
+前后缀重叠 / **定长容器的跨容量边界**），不是按分布随机采样——i.i.d. 采样命中长度 120 的
+严格周期串概率 ≈ 2⁻¹²⁰，「4×10⁶ 次零击穿」是假阴性。
+**估计误拦率可以随机采样，证明「没有反例」不行。**
+
 ## 用户提供的数据契约（必备）
 
 `tmp-evo/<EVO_TABLE_ID>/`（目录名 = 真实 EVO tableId）：
 
-- `message.txt` — **有头下注会话**的 game WS 双向帧（每行 JSON：`{ts,dir,payload}`，🔴 **`payload` 是 JSON 编码的字符串、不是对象**——解析一律 `.payload|fromjson|.type`，直接 `.payload.type` 抛 `Cannot index string with string` 终止脚本；`dir` ∈ `recv`/`send`/`ws`，`ws` 是连接 open/close 事件无 payload）= **我方 ↔ 下游用户的完整协议**（下游视角全集：公共桌态广播 + **per-user 帧**，其 type 名/shape **随游戏族而异**：roulette = `betAction` echo/`betsAccepted`/`betActionResponse`/个人 `win`/per-user `tableState.betState`；game show(IceFishing) = `<gt>.placeChips` echo/**`<gt>.bets`**(会话私有 `state.{status,chips,acceptedBets,rejectedBets,repeat,history}`，合并了 roulette 的 betState+受理+派彩四职能)/`balanceUpdated`/`betValidationError`。我方生产**收不到、必须自合成或 per-user 改写**的帧真实 shape 都在这）
+- `message.txt` — **有头下注会话**的 game WS 双向帧（每行 JSON：`{ts,dir,payload}`；🔒 加密桌的帧另带 `enc:true`，**`payload` 仍是解好的明文 JSON 字符串、与明文桌同构**，见下方「加密桌」段，🔴 **`payload` 是 JSON 编码的字符串、不是对象**——解析一律 `.payload|fromjson|.type`，直接 `.payload.type` 抛 `Cannot index string with string` 终止脚本；`dir` ∈ `recv`/`send`/`ws`，`ws` 是连接 open/close 事件无 payload）= **我方 ↔ 下游用户的完整协议**（下游视角全集：公共桌态广播 + **per-user 帧**，其 type 名/shape **随游戏族而异**：roulette = `betAction` echo/`betsAccepted`/`betActionResponse`/个人 `win`/per-user `tableState.betState`；game show(IceFishing) = `<gt>.placeChips` echo/**`<gt>.bets`**(会话私有 `state.{status,chips,acceptedBets,rejectedBets,repeat,history}`，合并了 roulette 的 betState+受理+派彩四职能)/`balanceUpdated`/`betValidationError`。我方生产**收不到、必须自合成或 per-user 改写**的帧真实 shape 都在这）
 - `message-nobet.txt` — **无头 nobet 影子账号（只看不动）**会话的 game WS 帧 = **上游广播给我方的完整协议**（mirror-feed：我方一会话连上游 game ws、不下注，生产真正收到的就是这一份；含 init 握手帧 + 每局全桌广播（**帧名随族而异**：roulette=`tableState`(5 态)/`winSpots`/`winnersList`/`recentResults`；game show=`<gt>.betsOpen/betsClosed/wheelSpinning/wheelStopping/wheelResult/gameResolved/gameCleared`(离散生命周期 7 帧)/`<gt>.winnersList`/`<gt>.spinHistory`/**`<gt>.bettingStats`**(投注热度聚合，最高频)/`<gt>.bonus`(演出)）+ `dealer`/`appInfo` + 渠道 `balanceUpdated`。与 message.txt 同机台、同批局、时间对齐。影子账号严格"只看不动"→ 此份 per-user 帧只剩公共空壳，per-session 私有内容为空，**但同名帧仍会广播**——实锤 mirror-feed，但也意味着「集合差」找不出 game show 的 per-user 帧，见 §2A）
 - `config.txt` — `/config?table_id=X` 响应（150+ keys，可能 `{_source,_endpoint,data}` 包裹、限红在 `.data`：`table_id` / `game_type` / `currencyCode` / **`currencyMult`（进制：IDR÷20000、BRL×5、INR×100，所有金额必乘）** / `chipAmounts` / 限红字段（**随族而异**：roulette=`table_bet_min/max_limit`+betType 分注限额；game show=per-betcode `<segment>_bet_min/max_limit`+`payout_limit`）/ 视频 `video.stream.name`·`video.token.issuer`·区域 host / `wsUrl` / `wrapper_token` JWT。**EVO 无 PP 的 tableConfig.txt**，桌运行配置全在这）
 - `gameDetail.txt` — `/public/player/history/v{N}/game/{id}` 玩家单局结算记录（`BuildGameDetail` / history API 权威数据源；EVO 多为 JSON，非 PP 的 XML）
@@ -74,6 +158,20 @@ cat "tmp-evo/$CAPTURE_DIR/state.json" 2>/dev/null  # 检查恢复点
 - `clientResources/frontend/` — 前端 bundle（`evo/mini/js/` 业务逻辑·协议常量、`loc/strings/<lang>/` 官方本地化串包、`cvi/evo-video-components/` 视频组件含 descrambler；协议字段 / betCode / 视频 token 算法逆向源）。🔴 其中 **`loc/strings/<locale>/history.json` 是历史详情 render 的文案翻译源**（51 语全量、EVO 自己 SSR 用的同一套 key）——新族 render 的文案一律取本族 key，不自建翻译资产（known-pitfalls **H7**）
 
 录制工具：pp-game 仓库 `scripts/game_dev/evo_fetch.mjs`（**双会话对比**：有头下注 → message.txt；无头 nobet 影子账号 → message-nobet.txt；浏览器自动开 Details，落 `.json`/`.html`）。**本 skill 不主动录**。
+
+### 🔒 加密桌（部分机台，Phase 0 必先验）
+
+EVO 自 2026-07 起**逐桌**给 game socket 启用二进制加密帧（`/config` 的 `ws_encryption:"1:3"` 协商驱动，
+**不是所有机台都加密**、会隔夜突变、只影响 game socket）。`evo_fetch.mjs` 命中加密桌会**自动解密后落盘**
+（复用服务端同款 sidecar + 我方 encpart bundle），所以：
+
+- **协议分析完全不受影响**——`payload` 是解好的明文 JSON 字符串，本文档与 `phase-0-acceptance.md` 的所有
+  jq/grep 命令原样可用；明文桌产物零变化。
+- **但 Phase 0 必须先验解全了没有**：有 `decryptError` 的帧（只剩 base64 `raw`）或成片 `U+FFFD` 乱码
+  （旧版无解密层脚本录的加密桌，信息已不可逆销毁）→ **一律拒收重录，不接受先凑合分析**。
+  闸门命令见 `phase-0-acceptance.md` §2 P0 #0a/#0b/#0c，铁律见 `known-pitfalls.md` **A5**。
+- **对接实现不碰加密**：加密在上游连接层（`game_upstream*.go` + `crypto_sidecar.go`）已落地，
+  与视频/大厅/容灾同属"复用不重写"的基础设施。新族只在 state.json 记一笔事实。
 
 ### message.txt vs message-nobet.txt —— 协议分类权威（mirror-feed 核心）
 
@@ -109,7 +207,7 @@ cat "tmp-evo/$CAPTURE_DIR/state.json" 2>/dev/null  # 检查恢复点
 - **Setup 处理顺序**：`/setup?EVOSESSIONID=...` 带 token 必须验真；失效时返回明确的 EV.19 HTML 页面。若客户端 failedAuth 跳到 `/`，根路径也必须返回同一 HTML，不能让用户落到 404。
 - **验证点**：补 WS 回环测试（同桌第二连接进入 → 旧连接收到 `newConnection` 且新连接可玩；token 失效 → 收到 `inactivity` → Redis 无注单）和 `/style` sessionTimeout URL 测试；不要只靠 build 通过。
 
-🔴 **per-user 帧时序 + 余额来源（铁律）**：① 余额用**商户钱包**（drop 上游渠道 USD `balanceUpdated`，**按下游连接寻址 per-connection 重发**——`balanceUpdated` 不一定带 playerId，IceFishing 只含 `balance/balances[]/currencyCode/tableId`，靠 ws 连接定向），客户端 ~6s 收不到即重连；② 下发帧 `tableId` 用**裸 EVO tableId**（PPTableID），填 code 客户端判「未收到」；③ 结算 per-user 帧在**结算锚帧触发清 Redis 之前**抓 `userBetsSnapshot`；④ `currencyMult` 进制——所有金额按币种乘系数。
+🔴 **per-user 帧时序 + 余额来源（铁律）**：① 余额用**商户钱包**（drop 上游渠道 USD `balanceUpdated`，**按下游连接寻址 per-connection 重发**——`balanceUpdated` 不一定带 playerId，IceFishing 只含 `balance/balances[]/currencyCode/tableId`，靠 ws 连接定向），客户端 ~6s 收不到即重连；② 下发帧 `tableId` **双口径**：桌态/派彩帧用裸 EVO tableId（PPTableID）；但 `balanceUpdated` 用我方 **code**（须与 `/config.table_id` 同源，config 已被改写成 code——余额帧填裸 id 才会被中间件丢弃判「未收到」）；③ 结算 per-user 帧在**结算锚帧触发清 Redis 之前**抓 `userBetsSnapshot`；④ `currencyMult` 进制——所有金额按币种乘系数。
 
 ⚠️ **diff 是候选不是真相**：稀有帧（`betValidationError`/`canceled`/`gameCancelled`/`restore`/特殊货币/大奖）可能从不出现。结合 `clientResources/frontend/evo/mini/js/` 反推 + roulette 既有实现沉淀。capture 是事实下限。
 
@@ -139,6 +237,7 @@ cat "tmp-evo/$CAPTURE_DIR/state.json" 2>/dev/null  # 检查恢复点
 - **每 phase 执行前**才读对应 reference，不预读全部；phase 完成写 state.json 才进下一 phase。
 - **Phase 3 内部再细分到 AIU 级**：进某个 L 层时只读该层的 `phase-3-aiu-LN.md`，做某个 AIU 时只查**该 AIU 对应的那几条铁律**——`known-pitfalls.md` 顶部有一张「按开发块查表」，照它取编号，**不要通读那 200 行**（摊平进上下文的结果是 40 条都记不牢）。
 - 每块开发完立即跑该块的 B5 验收，不攒到最后；每层完成立即层间 codex 审查（`phase-3-layer-review.md`）。
+- 🔴 **每层 commit 后 / 每 phase 转换前，立即清点并关闭该阶段派出的全部子代理**（`TaskStop` 传代理名，与 commit 写同一步）。本流程 Phase 3-7 派大量 agent，而 **context compaction 不保留活跃 agent 清单**——跨 compaction 会永久丢失跟踪。别只靠 idle 通知（代理静默 idle 或在 compaction 前就 idle → 信号永久丢失）；**状态驱动兜底**：发一个不存在的 `TaskStop`（如 `__verify__`）触发错误里的 `Running teammates` 列表清点，**永不凭记忆断言「没有子代理了」**。实证：baccarat 三个 L3 代理跨 compaction 空转到收官才被用户指证发现（OPS-MEMORY『验收完要关闭子代理』第 4 次）。
 
 | Phase | 工作 | 执行前读 |
 |---|---|---|
@@ -146,10 +245,41 @@ cat "tmp-evo/$CAPTURE_DIR/state.json" 2>/dev/null  # 检查恢复点
 | **1** | 选 base + 复用边界判定（新游戏族 / 复用既有 core）+ factory 注册检测 | 本 SKILL.md「Phase 1」节即可 |
 | **2** | 创建 worktree（调 worktree-task-flow init-worktree.sh）— 自此无人值守 | 本 SKILL.md「Phase 2」节即可 |
 | **3** | AIU DAG 实现（5 层，建 `evocore` 包 + per-user 构造 + 工厂注册 + 报表页；每层完成立即层间 codex 审查） | `references/phase-3-aiu-overview.md`，进入某 L 时再读 `phase-3-aiu-LN.md` + `phase-3-layer-review.md` |
-| **4** | 自问审查 + codex_decide 每题决策 | `references/phase-4-self-review.md` |
-| **5** | 整体循环 codex review（≤5 轮） | `references/phase-5-overall-review.md` |
-| **6** | verify 全量（per-user 闸门 + 资金 /bet→/result + 货币/视频边界） | `references/phase-6-verify.md` |
+| **4** | ⚠️ **已降级成 Phase 6 的一张检查表**，不再单独占一个 phase（见下「Phase 4 为什么被降级」） | 并入 `phase-6-verify.md` |
+| **5** | 整体循环 codex review（**收敛判据见下，不是固定轮数**） | `references/phase-5-overall-review.md` |
+| **6** | verify 全量（per-user 闸门 + 资金 /bet→/result + 货币/视频边界）+ 铁律检查表 | `references/phase-6-verify.md` |
 | **7** | 经验文档归档 | `references/phase-7-experience-doc.md` |
+
+### 🔴 审查的收敛判据（替代「≤N 轮」这种开放式循环）
+
+固定轮数上限会诱导「反正还能再跑一轮」。改成可判定的停止条件：
+
+> **连续两轮无新增 🔴 即收敛。**中途每一轮的 🔴 全部修完再进下一轮，**不要边修边审**。
+
+实测数据（AndarBahar000001，8 轮）：新增 🔴 = `3 → 4 → 4 → 1 → 3 → 1 → 2 → 1`。
+- **第 4 轮才开始收敛**——前三轮就收官会漏掉 8 条资金阻断级。
+- 🔴 **round N+1 的发现有相当比例打在 round N 的修复上**（round4 的三条 🟡 **全部**如此）。
+  所以「最后一次修完之后必须再审一轮」是硬要求，不是保险起见。
+- 反过来，**同一条被反复换位置报出来时**（本次「顶号竞态」连报三轮，一轮比一轮窄），
+  说明已经逼近架构边界：此时应当**做裁决**（修 / 记为跨族待办并写清理由），而不是再开一轮。
+
+### 单轮内的并行
+
+- 同一轮的 N 个 agent **写在同一条消息里**（真并行）；给它们**互补的视角**而不是同一份 prompt。
+- 视角分工实测有效：`资金守恒` / `并发与崩溃` / `判据正确性或移除是否干净`。
+  本次三条最重的发现分别来自三个不同视角，同视角重复派没有增量。
+- ⚠️ **审查方之间会互相矛盾**。按证据裁决不按投票：本次一个 agent 判 🟢 的理由里
+  **偷偷假设了待证的前提**（「目标局确实产生了 token」），而那正是另一个 agent 指出的问题。
+  **看它的推导有没有用掉待证的东西。**
+
+### Phase 4 为什么被降级
+
+实测：铁律自查跑了两次，**两次都是 0 条新发现**；同一批代码的独立审查揪出 36 条（资金阻断级 12 条）。
+原因是自查在拿自己的心智模型核对自己写的代码，前提错了就一起错——本次最贵的那条
+（走势串归属不可判定）不违反任何一条已知铁律，自查永远查不出来。
+
+→ **保留检查表**（当回归性检查用：确认既有铁律没被新改动破坏），
+**取消它作为独立 phase 的地位**（不再单独一轮、不再写 self-review.md）。省一整个 phase 的开销。
 
 **跨 phase 共用 references**（按需 grep，不必预读）：
 - `references/per-user-frame-fidelity.md` — 🔴 **per-user 合成帧保真度方法论（L3 PER_USER 必读，反复踩坑根因）**：三方对比（nobet 收=原料 / 我方合成 / message.txt=客户端期待 target）+ 逐相位×逐 status 字段契约 + 广播频率契约 + 「客户端渲染源」判定 + wire 单测。漏字段/频率不足 = 客户端崩 `undefined.map`/卡死/不渲染，编译+单测+codex 都查不出，**只能靠这套方法论提前发现**。
@@ -223,6 +353,44 @@ bash "$WT_SKILL/scripts/init-worktree.sh" "$BASE_BRANCH" "evo-${GAMETYPE}-${TAIL
 
 🔒 **本步完成即进入完全无人值守**。Phase 3-7 禁止向用户提问。
 
+## 🔴 工时预算（8h → 4h 的拆解，下次照它对表）
+
+AndarBahar000001 实测约 8 小时。逐项归因与压缩手段：
+
+| 块 | 实测 | 性质 | 压缩手段 | 目标 |
+|---|---|---|---|---|
+| 22 个 codex agent **重复通读** skill + 记忆 | **2–3.5h** | **纯浪费** | 审查 prompt 自带事实 + 禁止通读（`codex-collab.md` 首节） | **~0.3h** |
+| 审查墙钟本身（8 个波次） | ~3.3h | 必要 | **与开发重叠**：启动后立刻做不依赖它的活 | 边际 ≈ 0 |
+| AI 自己停下来 / 空转等通知 | ~1h | **纯浪费** | 无人值守执行纪律 | 0 |
+| 资金容器被审查逐轮逼出七次增量 | ~1.5h | **半浪费** | **先评审一页设计**（省 4 个波次 + 中间返工） | ~0.4h |
+| 走势串补结算白做后整体删 | ~1h | **纯浪费** | 前提可判定性闸门（L1 就问） | 0 |
+| 30+ 次变异反验，每次一个 bash 往返 | ~0.5h | 半必要 | **批量脚本**：一次跑完 N 个变异出一张表 | ~0.15h |
+| 文档改 4 遍 + state/记忆反复挪 | ~0.5h | **纯浪费** | 一次成稿 + phase 边界写 | ~0.15h |
+
+**不可压缩的**：找到 36 条缺陷（12 条资金阻断级）本身、以及「最后一次修完必须再审一轮」。
+那是领域复杂度，不是流程浪费——前三轮就收官会漏掉 8 条资金阻断级。
+
+🔴 **对表方法**：下次对接时记录每个波次的起止，收尾时把实际值填进这张表。
+偏差最大的那一格就是下一轮要改的地方。
+
+## 🔴 仪式性开销的收口（实测这块能省掉可观时间）
+
+1. **state.json 只在 phase 边界写一次**，不要每 commit 更新。它的作用是断点续跑，
+   不是审计日志——中途的裁决写进 commit message（那里本来就要写清楚）。
+2. **经验文档在最后一次成稿**，不要边做边改。本次改了 4 遍，前 3 遍的内容
+   在「走势串补结算整体删除」之后全部作废重写。
+   → 过程中只往 `state.unresolved[]` / commit message 里记**事实**，收尾时一次组织成文。
+3. **记忆（PROJECT-MEMORY / OPS-MEMORY）当场记，但只记「跨机台复用」的**。
+   判据：这条结论**下一个机台还会用到吗**？会 → 记；只关乎本机台 → 写经验文档。
+   本次误把若干本机台事实写进项目记忆，又在收尾时挪出来。
+4. **子代理的验收命令发脚本不发命令**：命令会被复制 N 份、走样 N 份
+   （policy-pr 的 diff 范围就因此错了两次）。
+5. **变异反验批量跑，不要一个一个来**。本次做了 30+ 次，每次一个 bash 往返
+   （注入 → build → test → 读结果），30–60s 起步。写一个小脚本：
+   接受「文件 + perl 表达式 + `-run` 正则」的三元组列表，逐个 `go test -overlay=` 并输出一张
+   「变异名 / 是否注入成功 / 是否变红 / 红在哪一行」的表。
+   ⚠️ 表里**必须有「是否注入成功」这一列** —— 本次三次「变异存活」里有两次是根本没注入进去。
+
 ## state.json 字段
 
 ```jsonc
@@ -243,6 +411,14 @@ bash "$WT_SKILL/scripts/init-worktree.sh" "$BASE_BRANCH" "evo-${GAMETYPE}-${TAIL
 ```
 
 ## 完成判定
+
+🔴 **交付时必须显式列出「本地做不到的」，不能含糊带过**。本次四项：seed SQL 未在任何环境执行 /
+真机账户验收 / pre 环境 / 某些失败分支只有内存桩覆盖。写成清单交给人，比写「已验证」诚实也更有用。
+
+🔴 **允许「不修」，但必须留裁决**：某条修法需要改共享层、或族内只能造补偿事务时，
+正确动作是**写清理由 + 记跨族待办**，不是硬修。本次两条如此（`MerchantClient` 缺 per-user
+退款入口 / 顶号与注单写不可线性化）。判据：**危害是否有界且自纠** + **修它是否要引入
+「自造问题再造机器」那类结构**。
 
 8 phase 全 done / Phase 0 拒收 / Phase 1 skip。最终输出：
 

@@ -23,16 +23,16 @@ import (
 )
 ```
 
-### 改动 2: `implementedTables()` map 加一行（键 = b_tables.code，**带 evo 前缀**）
+### 改动 2: `implementedTables()` map 加一行（键 = **original_id 裸 id**，不带 evo 前缀）
 ```go
 func implementedTables() map[string]bool {
     return map[string]bool{
-        "evovctlz20yfnmp1ylr": true,   // roulette 既有
-        "evo<新 tableId>":      true,   // 新桌
+        "vctlz20yfnmp1ylr": true,   // roulette 既有（裸 id）
+        "<新裸 tableId>":     true,   // 新桌
     }
 }
 ```
-> 🔴 **键是 `b_tables.code`（evo+裸id），不是裸 tableId**（EVO 用 code 索引；与 PP 用 tableId 不同）。裸 id 可能是 operator 风格（如 `IceFishing000001`）而非 vctlz hash，`"evo"+裸id` 拼接逻辑不变（→ `evoIceFishing000001`）。
+> 🔴 **键是 `original_id`（裸 id），不是 `b_tables.code`**——实际代码 `instance_factory.go` 注释坐实「键必须用 original_id」：后台同步弹窗 `buildPreviewItem` 按 `PreviewTable.TableID(=original_id)` 比对，误用 code 会让所有 EVO 桌错显「未实现」（已修历史坑）。与 `newGameInstance` switch 的 `table.OriginalId` **同口径**。裸 id 可能是 operator 风格（如 `IceFishing000001`）而非 vctlz hash，直接原样作键。
 
 ### 改动 3: `newGameInstance()` switch 加 case（switch 的是 **`table.OriginalId`**=裸 tableId）
 ```go
@@ -87,7 +87,7 @@ INSERT INTO b_tables (vendor_type, code, original_id, name, game_type, enabled, 
 
 ## 下游
 - 跑全量 build + 全 EVO 测试，确认不破坏既有 roulette
-- 进 Phase 4 自问审查
+- 进 Phase 4 铁律核对
 
 ## prompt 模板
 ```
@@ -96,8 +96,8 @@ INSERT INTO b_tables (vendor_type, code, original_id, name, game_type, enabled, 
 ## 工作区：worktree <worktree_path> · HEAD <head_sha>（L1-L4 全 commit 后）· 主仓库 <repo_root>
 ## 唯一改动文件：server/game/evo/internal/factory/instance_factory.go
 ## 分析：读既有 instance_factory.go（buildRouletteInstance 范例）；确定 import 别名 + switch 位置
-## 实现：import + implementedTables(键=evo+裸id) + switch(on OriginalId=裸id) + buildXxxInstance + DB 模板写经验文档
+## 实现：import + implementedTables(键=original_id 裸id) + switch(on OriginalId=裸id) + buildXxxInstance + DB 模板写经验文档
 ## 验收：go build ./... 全仓库 PASS / go vet / 既有 roulette + 新族 test 全 PASS / policy-pr ≤500 行
 ## 完成回报（B5）：1.commit sha 2.git show --stat HEAD（仅 1 文件）3.build/vet/test 结果 4.关键决策（别名/插入位置/DB 模板）
-最后一句："等待主 claude 验收 — 末层，进 Phase 4 自问审查"
+最后一句："等待主 claude 验收 — 末层，进 Phase 4 铁律核对"
 ```

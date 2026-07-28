@@ -1,6 +1,6 @@
 # Phase 5 — 整体循环 codex review
 
-> 触发：Phase 4 自问审查 fix 完成。
+> 触发：Phase 4 铁律核对 fix 完成。
 > 软上限：5 轮。
 > 模式：codex-collab review。
 

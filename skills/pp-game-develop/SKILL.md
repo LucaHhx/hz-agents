@@ -1,6 +1,6 @@
 ---
 name: pp-game-develop
-description: PP (Pragmatic Play) 机台对接 v2 工作流。用户提供 capture 数据（5 文件包），AI 完成全自主对接。触发：(1) 用户给出 PP tableId 并提供 tmp/tableId/ 数据包；(2) 明说"用 v2 流程对接 PP 机台" / "AIU 流程对接"。覆盖 baccarat / roulette / sweetbonanza / dragontiger / jackpotwheel 等 PP 全协议族。与老 skill 区别：本 skill 不录 capture（用户录），不依赖 PP/bc.game 网络；走 AIU DAG 实现 + 三层审查防线（层间 codex / 自问审查 / 整体循环）+ codex-collab 三模式调度。Phase 2 起完全无人值守，所有不确定走 codex-collab。不在范围：纯协议讨论 / 其他供应商 / 单纯代码 review。
+description: PP (Pragmatic Play) 机台对接 v2 工作流。用户提供 capture 数据（5 文件包），AI 完成全自主对接。触发：(1) 用户给出 PP tableId 并提供 tmp/tableId/ 数据包；(2) 明说"用 v2 流程对接 PP 机台" / "AIU 流程对接"。覆盖 baccarat / roulette / sweetbonanza / dragontiger / jackpotwheel 等 PP 全协议族。与老 skill 区别：本 skill 不录 capture（用户录），不依赖 PP/bc.game 网络；走 AIU DAG 实现 + 三层审查防线（层间 codex / 铁律核对 / 整体循环 codex）+ codex-collab 三模式调度。Phase 2 起完全无人值守，所有不确定走 codex-collab。不在范围：纯协议讨论 / 其他供应商 / 单纯代码 review。
 ---
 
 # pp-game-develop
@@ -103,7 +103,7 @@ cat "tmp/$CAPTURE_DIR/state.json" 2>/dev/null  # 检查恢复点
 | **1** | 选 base + factory 注册检测（AI 直接 bash） | 本 SKILL.md「Phase 1」节即可 |
 | **2** | 创建 worktree（调 worktree-task-flow init-worktree.sh）— 自此无人值守 | 本 SKILL.md「Phase 2」节即可 |
 | **3** | AIU DAG 实现（5 层 18 单元，每层完成立即层间 codex 审查；**L3.4 BuildGameDetail（Go XML）/ L3.5 报表前端页（client/reports/<tableId>/，自包含一机台一份，后端零代码）**） | `references/phase-3-aiu-overview.md`，进入某 L 时再读对应 `phase-3-aiu-LN.md` + `phase-3-layer-review.md` |
-| **4** | 自问审查 4 题 + codex_decide 每题决策 | `references/phase-4-self-review.md` |
+| **4** | 对接铁律核对 5 题（历史 P0 沉淀的项目特有陷阱）；有争议的问题才调 codex_decide | `references/phase-4-self-review.md` |
 | **5** | 整体循环 codex review（≤5 轮） | `references/phase-5-overall-review.md` |
 | **6** | verify 全量（含 I9/I10 + V10-V13 生产 bug 闸门 + V14 赢钱反推 + **V16 资金安全 /bet→/result wiring 闸门**） | `references/phase-6-verify.md` |
 | **7** | 经验文档归档（16 节） | `references/phase-7-experience-doc.md` |

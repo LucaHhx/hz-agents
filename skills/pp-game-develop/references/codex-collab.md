@@ -19,7 +19,7 @@
 | 1 选 base | — | — | — |
 | 2 建 worktree | — | — | — |
 | 3 AIU 实现 | **每层 ≤ 2 轮层间审查**（L1-L5） | D1 AIU 路径不确定 / D2 L2 MODELS 字段类型歧义 | S1 AIU 卡 ≥ 10min / 失败 ≥ 2 次 |
-| 4 自问审查 | — | **D3 每个自问问题一次** | S4 决策不收敛（可选） |
+| 4 铁律核对 | — | **D3 仅有争议的问题** | S4 决策不收敛（可选） |
 | 5 整体循环 | **≤ 5 轮跨层审查** | D4 finding fix 分流争议 | S2 同 finding hash ≥ 3 次 |
 | 6 verify | — | D5 verify.sh 失败 ≥ 2 次根因 | S3 决策不收敛 / 失败跨边界 |
 | 7 归档 | — | — | — |
@@ -80,7 +80,7 @@
 |---|---|---|---|
 | **D1** | 3 AIU 启动前 | AIU 实现路径不确定 | A 复用既有机台结构 / B 抽到 common helper / C 本机台独立实现 |
 | **D2** | 3 L2 MODELS | 字段类型歧义（capture vs main.js 不一致） | A 按 capture 真帧类型 / B 按 main.js 字面量 / C 用 json.RawMessage 容错 |
-| **D3** | 4 自问审查 | 每个自问发现问题 | A 修 / B 不修-本机台特殊 / C 不修-可接受 / D 待人工 |
+| **D3** | 4 铁律核对 | 核对中证据不足或修法有争议的问题 | A 修 / B 不修-本机台特殊 / C 不修-可接受 / D 待人工 |
 | **D4** | 5 整体循环 | finding fix 分流争议 | A small 立即修 / B medium 必要修 / C medium 非必要 unresolved / D large unresolved |
 | **D5** | 6 verify | verify.sh 失败 ≥ 2 次根因分类 | A 实现 bug 回 Phase 3 / B 测试断言错 / C policy-pr 拆 / D 设计遗漏 |
 
@@ -139,7 +139,7 @@ gameType: <...> / tableId: <...> / worktree: <...>
 | **S1** | 3 AIU 实现 | worker 卡 ≥ 10min 无有效 diff / 失败 ≥ 2 次 | 根因诊断 + 修复路径 | ≤ 3 轮 |
 | **S2** | 5 整体循环 | 同 finding hash ≥ 3 次反复 | 根本设计原因 | ≤ 3 轮 |
 | **S3** | 6 verify | decide 不收敛 / 失败跨边界 | 系统性根因 | ≤ 2 轮 |
-| **S4** | 4 自问审查 | decide 选 D 占多数（可选） | "补 capture 重做" vs "接受 unresolved" | ≤ 2 轮 |
+| **S4** | 4 铁律核对 | decide 选 D 占多数（可选） | "补 capture 重做" vs "接受 unresolved" | ≤ 2 轮 |
 
 ### discuss 通用 prompt 模板（多轮 thread_id resume）
 

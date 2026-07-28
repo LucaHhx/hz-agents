@@ -57,7 +57,7 @@ case <别名>.TableID:
 ## 下游
 
 - 跑全量 build + 全机台测试，确认不破坏既有机台
-- 进 Phase 4 自问审查
+- 进 Phase 4 铁律核对
 
 ## prompt 模板
 
@@ -92,5 +92,5 @@ server/game/pp/internal/factory/instance_factory.go
 3. build/vet/test 结果
 4. 关键决策：变量名选择 / 插入位置
 
-最后一句："等待主 claude 验收 — 这是 Layer 5 末层，进 Phase 4 自问审查"。
+最后一句："等待主 claude 验收 — 这是 Layer 5 末层，进 Phase 4 铁律核对"。
 ```

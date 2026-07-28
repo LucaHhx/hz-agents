@@ -1,6 +1,9 @@
 # Phase 5 — 整体循环 codex review
 
-> 触发：Phase 4 自问审查 fix 完成。软上限：5 轮。模式：codex-collab review。
+> 触发：Phase 3 层间审查收敛之后。模式：codex-collab review。
+> 🔴 **停止条件是「连续两轮无新增 🔴」，不是固定轮数**（软上限 5 轮只作兜底）。
+> 理由与实测数据见 SKILL.md「审查的收敛判据」——固定轮数会诱导「反正还能再跑一轮」，
+> 而真正该停的信号是「同一条被反复换位置报出来」（此时做裁决，别再开一轮）。
 
 ## 与层间审查的差异
 
@@ -8,7 +11,8 @@
 |---|---|---|
 | 范围 | 本层 diff（HEAD~M..HEAD） | 全 worktree diff vs base 分支 |
 | 重点 | 字段错 / struct 不匹配 / 协议铁律 | 跨层一致性 / race / silent fallback / 测试覆盖 |
-| 软上限 | 每层 ≤ 2 轮 | ≤ 5 轮 |
+| 停止条件 | 该层无新增 🔴 | **连续两轮无新增 🔴** |
+| 🔴 硬要求 | — | **最后一次修完之后必须再审一轮** —— round N+1 的发现有相当比例打在 round N 的修复上（实测 round4 的三条 🟡 全部如此） |
 
 ## 调用模板
 
@@ -52,7 +56,7 @@ done
    - 下注模型按 capture（roulette 增量+UNDO 栈 / game show placeChips 全量快照）
    - /result 必先 /bet（SubmitBets OnMerchantBetResult + hasSuccessfulBetDebit）/ OnRoundSettled 必调 / 受理回执关窗后
    - currencyMult 进制全路径 / reconcile fail-closed
-   - C1/C7/C9 Redis fail-closed / C8 payout cap / G2/G3 三路 cap
+   - C1/C7/C9 Redis fail-closed / C8 payout cap / G2/G3 per-bet cap（#64 已下线 round-level）
    - 列宽 ≥ 最长显示串（H5，game show 段名+倍率串）/ 下注规则 capture 实证 / betValidationError code 客户端可识别
 8. policy-pr：单文件 ≤ 500 行 / 嵌套 ≤ 3 层
 
@@ -69,7 +73,9 @@ done
 | 触发 | 处理 |
 |---|---|
 | 同 finding hash ≥ 3 次反复 | 调 `codex_discuss.sh` ≤ 3 轮根因（codex-collab.md S2） |
-| 5 轮跑完仍有 finding | 全部写 `state.unresolved[]`（category="round-cap-leftover"）+ 进 Phase 6 |
+| 🔴 **本轮 finding 里「上一轮修复新引入的回归」占比 ≥ 50% 或连续上升** | **停止逐条打补丁——补丁在发散**。判该缺陷簇的不变量是否靠「多个 bool 标志 / 递归深度论证 / 跨函数『某路径必在某路径后』推理」维持；是 → 用并发原语（耐久队列 / `running+dirty` coordinator / 单次 CAS）做**收敛重设计**（目标净减代码，不是再叠一层）。**每轮让 codex 报「本轮 🔴 有几条是上个 commit 新引入」**。实证：baccarat 结算/重放/孤儿局回归率 0/6→1/6→4/6，到第三轮才转重设计，本可早一轮。 |
+| 重写 / 重设计一段旧逻辑时 | 逐函数问「它存在的理由是什么」——旧代码里「平平无奇的两行」常是某次事故补丁（如重启 grace 重置），重写漏掉 = 把老 bug 请回来。论证「A→B 之间原子」要展开中间每个 getter（惰性初始化自带 Redis/DB I/O）+ 记住两次独立调用间 goroutine 可抢占，真原子只能靠同一临界区 / 单次 CAS。 |
+| 5 轮跑完仍有 finding | 按「上线阻断 vs 可 backlog」分类（**让 codex 末轮直接判**）：阻断项（双付/双退/凭空给钱/本金悬空/中奖额丢失）**必须修完才进 Phase 6**；其余写 `state.unresolved[]`（category="phase5-no-converge"）+ 进 Phase 6。 |
 
 ## state.json 写入
 

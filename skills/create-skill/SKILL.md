@@ -44,6 +44,39 @@ Match the level of specificity to the task's fragility and variability:
 
 Think of Claude as exploring a path: a narrow bridge with cliffs needs specific guardrails (low freedom), while an open field allows many routes (high freedom).
 
+### Don't Add Scaffolding the Model Already Provides
+
+Current models verify their own work, catch their own mistakes, and re-check their reasoning without being told to. Instructions that duplicate these built-in behaviors do not improve results — they add tokens, latency, and over-verification. This is the most common way older skills degrade: scaffolding written for weaker models keeps firing on models that no longer need it.
+
+**Leave these out:**
+
+- "Include a final verification step for any non-trivial task"
+- "Double-check your answer before responding" / "Re-verify your work"
+- "Use a subagent to verify or review the result"
+- Separate review phases whose only job is re-reading what was just written
+
+**Keep these — they are not the same thing:**
+
+- **Deterministic gates**: builds, tests, linters, type checkers, validation scripts. These produce facts the model cannot produce by thinking.
+- **Domain checklists** encoding project-specific knowledge the model cannot infer: past incidents, protocol invariants, "if this call is missing, payouts fire without a matching debit."
+- **Independent review by a different model or a human.** Cross-model review is not self-verification.
+
+The test: would a strong engineer who has never seen this codebase know it already? If yes, the model knows it too — leave it out. If no, it belongs in the skill.
+
+### Writing Instructions That Work
+
+**Say what to do, not what to avoid.** "Write flowing prose in complete paragraphs" beats "don't use bullet points" — negative instructions leave the desired behavior undefined.
+
+**Give the reason with the rule.** "Never use ellipses" is weaker than "never use ellipses — this text is read aloud by a TTS engine that cannot pronounce them." Claude generalizes from stated motivation and applies the rule correctly to cases the instruction never mentioned.
+
+**Do not over-emphasize.** "CRITICAL: You MUST ALWAYS…" causes over-triggering on current models. Plain phrasing ("Use this when…") triggers just as reliably without the side effects.
+
+**Calibrate output length explicitly.** If the skill produces written deliverables, say how long they should be — current models write longer files by default. "Cover the substance without padding out filler sections, redundant summaries, or boilerplate" is usually enough.
+
+**Bound delegation.** If the skill spawns subagents, state both when delegation is warranted (genuinely independent, parallelizable, substantial work) and when it is not (anything finishable in a handful of tool calls, single-file edits, work needing continuous context). Current models delegate readily; an unbounded invitation multiplies cost and wall-clock time on small tasks.
+
+**Don't suppress findings in review skills.** "Only report high-severity issues" or "be conservative" gets followed literally and suppresses real findings. Ask for everything, then filter by severity in a separate output step.
+
 ### Anatomy of a Skill
 
 Every skill consists of a required SKILL.md file and optional bundled resources:
@@ -111,6 +144,8 @@ A skill should only contain essential files that directly support its functional
 - etc.
 
 The skill should only contain the information needed for an AI agent to do the job at hand. It should not contain auxilary context about the process that went into creating it, setup and testing procedures, user-facing documentation, etc. Creating additional documentation files just adds clutter and confusion.
+
+Also leave out content the model supplies on its own: general programming advice, explanations of well-known tools or languages, and the verification scaffolding described above. A skill earns its context by carrying knowledge that is specific to this domain, this codebase, or this workflow.
 
 ### Progressive Disclosure Design Principle
 

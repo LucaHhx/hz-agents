@@ -101,7 +101,7 @@ grep -nE 'strip.*State|broadcast.*PerUser' "$CORE"/upstream_handlers.go "$CORE"/
 grep -nE 'personalize' "$CORE"/per_user_betstate.go "$CORE"/downstream_init.go
 # 2. 🔴 快照在清 Redis 之前：userBetsSnapshot 调用早于 settle 清注
 grep -nE 'userBetsSnapshot|OnGameResult|clearBets|DeleteBets' "$CORE"/upstream_handlers.go   # 人工确认 snapshot 在 settle 之前
-# 3. 🔴 裸 tableId：所有下发帧 tableId 用 PPTableID（不是 TableID/code）
+# 3. 🔴 tableId 双口径：桌态/派彩帧用 PPTableID（裸 id）；balanceUpdated 反过来用我方 code（须与 /config.table_id 同源）
 grep -rnE 'TableId:|"tableId"' "$CORE"/*.go | grep -vE 'PPTableID|test'   # 命中处人工核对是否应为 PPTableID
 # 4. 🔴 余额来源：balanceUpdated 用商户余额，上游渠道 drop（无 playerId，按连接寻址）
 grep -nE 'balanceUpdated|PlayerBalance|merchantBalance' "$CORE"/*.go
@@ -109,8 +109,8 @@ grep -nE 'BalanceUpdated.*DispDrop|balanceUpdated.*Drop' "$CORE"/upstream_dispat
 # 5. 单测：strip 后无私有字段 + personalize 回填 + snapshot-before-clear
 cd <worktree>/server && go test -v -run "TestPerUser|TestStrip|TestPersonalize|TestSnapshot" ./game/evo/internal/games/<gametype>/...
 ```
-**PASS**：① strip 剥净本族个人注态私有字段（roulette bets/lastGameChips/history；game show chips/acceptedBets/history）；② 按 userId 回填；③ snapshot 在 settle 清注前；④ 所有 per-user 下发帧 tableId=PPTableID（裸 id）；⑤ balanceUpdated=商户余额、上游渠道 drop、**无 playerId 按连接寻址**；⑥ 单测覆盖 ①②③。
-**FAIL**：漏 strip → 全桌串注；snapshot 时序颠倒 → 丢本局注；填 code → 客户端判余额未收到；透传上游余额 → 串账。
+**PASS**：① strip 剥净本族个人注态私有字段（roulette bets/lastGameChips/history；game show chips/acceptedBets/history）；② 按 userId 回填；③ snapshot 在 settle 清注前；④ 桌态/派彩 per-user 下发帧 tableId=PPTableID（裸 id），**但 balanceUpdated=我方 code**（与 /config.table_id 同源）；⑤ balanceUpdated=商户余额、上游渠道 drop、**无 playerId 按连接寻址**；⑥ 单测覆盖 ①②③。
+**FAIL**：漏 strip → 全桌串注；snapshot 时序颠倒 → 丢本局注；桌态帧填 code → 客户端判「不属本桌」；**balanceUpdated 填裸 id → 客户端判余额未收到**（余额帧要 code，与 /config.table_id 同源）；透传上游余额 → 串账。
 
 ### V10. balanceUpdated 商户余额 + 6s init 闸门
 
@@ -144,7 +144,7 @@ grep -nE 'Dealer.*cache|EvtDealer.*Broadcast|decodeRootKeyFrame' "$CORE"/upstrea
 
 AI 填实进经验文档部署节：
 - **DB 前置**：`b_tables`（vendor_type='evo'、code='evo'+裸id、original_id=裸id、game_type、enabled=1、failover_group_id）；`b_table_currency_configs` 各币种限红 + **currencyMult**；`b_currency_rates` 有启用 EUR 行 + symbol
-- **ID 双字段对齐**：`b_tables.code`(索引) vs `original_id`(协议帧)；factory implementedTables 键=code、switch=original_id
+- **ID 双字段对齐**：`b_tables.code`(索引) vs `original_id`(协议帧)；factory implementedTables 键=**original_id**、switch=**original_id**（两者同口径裸 id，键误用 code → 后台弹窗全显「未实现」）
 - **per-currency 进制**：每币种 currencyMult 正确（IDR 20000 / BRL 5 / INR 100…）
 - 🔴 **非 USD 账号实测下注+派彩**（G5/G6，`go test` 与 codex 都抓不到）：拿一个 IDR 或 INR 账号进桌，下一笔**接近该币种上限**的注（如 IDR 直注 20000）确认受理、中奖确认派彩未被截顶。USD 账号必然通过（mult=1），**只跑 USD 等于没测**。历史：roulette 的 `CheckBet` 直读 USD 机台默认限额，IDR 玩家 13 笔 betAction 全回 `1048` 静默 wipe chip，USD 测试一路绿灯，直到用户抓 HAR 才暴露
 - **post-merge live-launch 必查**（test/codex 抓不到）：`/config` wsHost 指我方 + 视频参数 + 限红非空；大厅 allowlist 自动订阅新桌；game ws 连我方进桌；descrambler/视频可放后置；session mint（Akamai tls-client）
@@ -164,7 +164,7 @@ ls "$CAP"/roundDetail/*.json | head -3
 cd <worktree>/server && go test -v -run "TestV14PayoutReverse" ./game/evo/internal/games/<gametype>/...
 ```
 **PASS**：≥ 3 个真实 round 反推一致（≤ 0.01）；覆盖 直注命中 / 多注 / 全输；fixture 用 roundDetail json + message.txt 真数据（不构造）；**currencyMult 进制正确**。
-**FAIL**：单注差异→赔率/号码集错；全局同系数→三路 cap 顺序错；进制错→currencyMult 漏乘。
+**FAIL**：单注差异→赔率/号码集错；全局同系数→per-bet cap 顺序错；进制错→currencyMult 漏乘。
 
 ### V14b. 公共帧合并我方数据（winnersList / bettingStats，名为公共实须 enrich）
 

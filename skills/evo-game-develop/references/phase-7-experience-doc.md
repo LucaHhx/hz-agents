@@ -4,7 +4,29 @@
 > 产物：`<repo>/docs/integration-experience/evo/<evo_table_id>.md`（worktree 内）。
 > 阶段：❌ 禁止向用户提问；commit 到 worktree 子分支，不 PR。
 
-## 经验文档模板（16 节，全部必填）
+## 🔴 写之前：先确认这份文档该存在什么
+
+**它的唯一不可替代价值**：`tmp-evo` 被 gitignore（`/tmp*`），capture 与对接期的 BRIEF.md **都不入库**。
+临时目录一清，这份文档就是该机台协议事实的**唯一持久记录**。
+
+所以判据很清楚 ——
+
+| 内容 | 去处 |
+|---|---|
+| 换一台机台**不成立**的事实（协议 shape / 逆向硬细节 / 本族特有陷阱） | **本文档** |
+| 下一个机台**还会用到**的结论 | `docs/PROJECT-MEMORY.md` |
+| 每次对接都要守的铁律 | `known-pitfalls.md` |
+| 这次改了什么、为什么 | commit message |
+
+⚠️ **模板节按需删，不要留占位**。「本族无此项」的节直接删掉 —— 16 节全填会把独有内容淹掉
+（实测：读者只会打开一次，看到半屏「无此项」就再也不来了）。
+**独有内容不足 5 节就写 5 节**，那也比 16 节注水强。
+
+🔴 **写完必须更新 `docs/integration-experience/README.md` 索引**：加一行
+「机台 | gametype | **这份文档独有的**」。31 份文档 8000+ 行散在 24 个目录里，
+不进索引 = 不会被任何人找到（实测：本次只把既有文档当格式模板看，没用里面一个事实）。
+
+## 经验文档模板（16 节，**按需删，非全部必填**）
 
 > **完整性铁律**：§1-§16 全部必填。某节无内容写 `无 / N/A` 并一句话说明原因，**禁止整节省略**。节号固定，新族 fork 本模板不自行增删。
 > EVO 重点节：§5.2 per-user 改写决策表、§16 客户端帧表现手册——这两节是后续同族对接复用价值最大处。
@@ -82,7 +104,7 @@ game show(离散事件):  <gt>.betsOpen → 玩家 placeChips → betsClosed(→
 | 客户端展示项 | 来源字段 | 客户端 fallback | 后端 enforce 位置 | 一致? |
 |---|---|---|---|---|
 | 单注上下限 | config.<betType>_bet_max | ?? | check_bet | ✅ |
-| 派彩封顶 | euro_table_payout_max 等 | ?? | payout 三路 cap | ✅ |
+| 派彩封顶 | euro_table_payout_max 等 | ?? | payout per-bet cap（#64 反转，非 round-level） | ✅ |
 | currencyMult 进制 | config.currencyMult | — | 全路径金额换算 | ✅ |
 
 ### 5.2 per-user 改写决策表（⭐ EVO 强制节，复用价值最大）
@@ -109,7 +131,7 @@ A2 communal 演出（game show，直转不缓存）：`<gt>.wheelSpinning/wheelS
 ## 8. 资金安全清单（known-pitfalls C 节逐项）
 - [x] C1 CanBet Redis 异常 false  - [x] C7 GetRedisUserBets fail-closed  - [x] C9 context 超时
 - [x] /result 必先 /bet（SubmitBets OnMerchantBetResult + hasSuccessfulBetDebit）
-- [x] MarkBetAccepted 仅 accepted 分支  - [x] OnRoundSettled 必调  - [x] payout 三路 cap
+- [x] MarkBetAccepted 仅 accepted 分支  - [x] OnRoundSettled 必调  - [x] payout per-bet cap（#64 已下线 round-level）
 - [x] per-user 余额=商户钱包（上游 drop）  - [x] snapshot-before-settle 时序
 
 ## 9. 测试策略
@@ -152,7 +174,7 @@ coverage：<X>%
 总结 Phase 3-6 学到的本族特殊知识，给后续同 gameType 对接参考：
 - <如 状态机与 roulette 不同 / 特殊 betCode / per-user 帧额外字段 / 进制特殊>
 
-## 14. 自问审查补充（来自 self-review.md）
+## 14. 铁律核对补充（来自 self-review.md）
 引用 `tmp-evo/<evo_table_id>/self-review.md`：总问题 N / ✅ 已修 M / ⏭️ unresolved K / ⚠️ 待人工 L。
 
 ## 15. unresolved 摘要（用户后续审视）
@@ -177,7 +199,7 @@ mkdir -p "$(dirname "$DOC")"
 cd "$WT" && git add docs/integration-experience/evo/
 git commit -m "docs(integration-experience): evo/$TABLE_ID 对接经验
 
-16 节经验文档 + per-user 改写决策表 + 客户端帧表现手册 + 自问审查 + unresolved。
+16 节经验文档 + per-user 改写决策表 + 客户端帧表现手册 + 铁律核对 + unresolved。
 capture 6 文件作 fixture。"
 ```
 
@@ -193,7 +215,7 @@ codex review 轮: <N>（L1-L5 层间 + 整体循环）
 codex decide:    <N>      codex discuss: <N>
 unresolved:      <N> 项（详见经验文档 §15）
 经验文档:        docs/integration-experience/evo/<evo_table_id>.md
-自问审查报告:    tmp-evo/<evo_table_id>/self-review.md
+铁律核对报告:    tmp-evo/<evo_table_id>/self-review.md
 
 未做：PR / 部署（用户决定时机；铁律：不 PR）
 ```

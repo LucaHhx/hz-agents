@@ -16,7 +16,7 @@ bash $CODEX_COLLAB/scripts/codex_review.sh -d "$WT" -l "layer-${LAYER}-round-${R
 ## 每层审查重点（注入 prompt）
 
 ### L1 — ENUM / DICT / PAYOUT_MODEL / CLIENT_FRAME_EFFECTS（协议事实正确性）
-- **ID 双字段**：`Variant.TableID`=code（带 evo 前缀）/ `PPTableID`=裸 tableId；下发帧 tableId 用裸 id
+- **ID 双字段**：`Variant.TableID`=code（带 evo 前缀）/ `PPTableID`=裸 tableId；下发帧 tableId 双口径——桌态/派彩帧用裸 id，`balanceUpdated` 用 code（与 /config.table_id 同源）
 - 上游事件 type 全集（capture 实证 + bundle 补 canceled/gameCancelled/betValidationError/restore 等罕见）
 - **状态机 kind + 序列实证**：roulette 5 态枚举；**离散事件型（game show）必判 kind=discrete_events** 并列全生命周期事件链；**禁假设 5 态 tableState.state**
 - **betCode 全集 + 赔付参数**：`odds.go` 与 `roundDetail/<rid>.json .data.data` 三方交叉；roulette 号码 odds（含 0 周边特殊码）/ game show segment 倍率（每局上游下发，无固定表）；**betCode 双命名空间映射**（下注帧 `Leaf1` vs roundDetail `IF_Leaf1`）
@@ -50,19 +50,19 @@ bash $CODEX_COLLAB/scripts/codex_review.sh -d "$WT" -l "layer-${LAYER}-round-${R
 **主信息源**：`message.txt`/`message-nobet.txt`（时序）+ `roundDetail/*.json`（结算体）+ `config.txt`（限额）+ `clientResources/frontend/`
 
 ### L4 — PAYOUT / HISTORY_RECENT / HISTORY_DETAIL / REPORT_PAGE / CURRENCY_CONFIG / [BETSTATS 条件]（派生产物一致性）
-- payout 公式**含本金、按族**（roulette `amount×(odds+1)` / game show `stake×倍率`）+ G3 三路 cap min（用户级非单注）+ CapUserPayout（C8）+ currencyMult 进制
+- payout 公式**含本金、按族**（roulette `amount×(odds+1)` / game show `stake×倍率`）+ G3 **per-bet 两路 cap** min（A=maxMultiplier×**本笔注额**、B=euro 换算；#64 已把 round-level/CapUserPayout/table_payout_max 整套下线）+ currencyMult 进制
 - **BETSTATS check**：capture 有 `<gt>.bettingStats` 则建（直转或合并我方聚合计数，**非 per-player 不可注单玩家注**）；roulette 无则跳过——**不可默认「EVO 无 betstats」**
 - **reconcile fail-closed**：走势帧（recentResults/spinHistory）补结算同样走 requireAccepted + hasSuccessfulBetDebit
 - 走势全量快照帧（recentResults/spinHistory）缓存 + 新连接回放
 - HISTORY_DETAIL：结构化对账以 `roundDetail/<rid>.json .data.data` 为准（`gameDetail.txt .data` 含 `render` HTML 非逐字段）；投注类型/开奖结果分离（H3）；缺数据填 "0" 不空串（I8）；**文案位全 key 化走 `tr()`、key 取自本族串包命名空间、非英文 locale 渲染无英文残留（H7）**——render 里直接拼进 HTML 的英文单词即漏网
-- **REPORT_PAGE**：渲染 vs `roundDetail/<rid>.html` ≥ 90% + 对照 `roundDetail/<rid>.json` 字段；**一桌一份不共用、不引共享 _assets**；前置 messages 非空 + round/extra 齐
+- **REPORT_PAGE**：渲染 vs `roundDetail/<rid>.html` ≥ 90% + 对照 `roundDetail/<rid>.json` 字段；**EVO 是 14 行 stub + 共享 renderer**（`_assets/renderers/<族>.js` + `report.js` 的 `RENDERER_BY_TABLE` 有本桌映射；同协议桌复用已有 renderer——**不是** PP 的一桌一份自包含，known-pitfalls H4）；前置 messages 非空 + round/extra 齐
 - CURRENCY_CONFIG：`b_table_currency_configs` 各币种限红 + currencyMult；`/config` 返回限红非空
 
 **主信息源**：全 capture + `roundDetail/*.{json,html}` + bundle + 上游 L1-L3 产物
 
 ### L5 — FACTORY（注册完整性）
 - import 路径正确 + 别名唯一
-- `implementedTables` 键 = **b_tables.code（evo+裸id）**；switch on **table.OriginalId（裸 id）**
+- `implementedTables` 键 = **original_id（裸 id）**，与 switch on **table.OriginalId（裸 id）同口径**（键必须 original_id，误用 code → 后台弹窗全显「未实现」，代码注释坐实）
 - buildXxxInstance：Variant 双 ID 正确 + LoadLimits + NewProcessor + **`SetBalanceSource(runtime.PlayerBalance)`**（缺 → LOW BALANCE）+ SeamlessBetService + NewEvoInstance
 - **全仓库 build pass**（既有 roulette + 新族）+ 无重复 case
 - DB 模板写进经验文档（不执行）

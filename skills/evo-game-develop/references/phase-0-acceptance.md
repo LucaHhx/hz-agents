@@ -17,6 +17,8 @@
 3. 确认文件齐全：tmp-evo/<dir>/{message.txt, message-nobet.txt, config.txt, gameDetail.txt, roundDetail/, clientResources/} 都存在
    - message.txt = 有头下注会话（我方↔下游完整协议）；message-nobet.txt = 无头影子账号（上游广播完整协议）。**两份同批局时间对齐 → diff 即得协议分类**（§2A）。
    - message-nobet.txt 缺失 → 退化为「单看 message.txt + uId/playerId 启发式」分类 + 记 P1 警告，建议补双会话录制。
+3.5 **加密完整性检查（§2 P0 #0，先于一切分析）**：EVO 部分桌的 game socket 加密，加密桌的 capture 只有解开了才能分析。
+   一条命令过闸，不通过直接拒收（详见 known-pitfalls **A5**）。**明文桌此步恒通过、零影响**。
 4. 跑通用指标（§2）+ 协议分类 diff（§2A）
 5. 推断 gametype：config.txt 的 `game_type` 字段优先；fallback clientResources/frontend/evo/mini/js/ 业务 chunk 文件名（如 roulette.*.js）
 6. 按 gametype 跑特化检查（§3）；新游戏族（无既有 core）走 §3「新族」分支
@@ -29,13 +31,20 @@
 
 ## 2. 通用指标速查表
 
-> 命令里 `CD=<capture_dir>`。帧每行 JSON `{ts,dir,payload}`，🔴 **`payload` 是 JSON 编码的字符串**——一律 `.payload|fromjson` 再取 `.type`/`.args`（直接 `.payload.type` 抛 `Cannot index string with string` **终止脚本**）；`dir` ∈ `recv`/`send`/`ws`（`ws` = 连接 open/close 事件、**无 payload**，统计帧必 `select(.dir=="recv" or .dir=="send")` 排除，否则 fromjson 报错）。
+> 命令里 `CD=<capture_dir>`。帧每行 JSON `{ts,dir,payload}`（加密桌另带 `enc:true`；解密失败的帧**没有 `payload`**、只有 `raw`+`decryptError`，见 #0a），🔴 **`payload` 是 JSON 编码的字符串**——一律 `.payload|fromjson` 再取 `.type`/`.args`（直接 `.payload.type` 抛 `Cannot index string with string` **终止脚本**）；`dir` ∈ `recv`/`send`/`ws`（`ws` = 连接 open/close 事件、**无 payload**，统计帧必 `select(.dir=="recv" or .dir=="send")` 排除，否则 fromjson 报错）。
 > 🔴 **下面指标里的事件名/字段是 roulette 范例**。新族先抽 type 全集（§3）确定本族开窗/关窗/结算锚帧、下注帧名、限红字段，**禁止假设 roulette 的 5 态 `tableState.state`/`winSpots`/`betAction`/`table_bet_*`**——否则下面 P0 会把合格的 game show capture 误判拒收。
 
 ### 🔴 P0 必须通过（任一未过 = 拒收）
 
+> 🔒 **#0 先跑**：EVO **部分**桌的 game socket 走二进制加密（`/config.ws_encryption` 协商，逐桌、会隔夜突变）。
+> 现行 `evo_fetch.mjs` 命中加密桌会自动解密后落盘，`payload` 与明文桌同构 → **下面 #1-#18 全部原样适用**；
+> 加密桌的帧多带 `enc:true`。但**解没解全必须先验**，否则后面所有指标都在读残缺数据。铁律见 known-pitfalls **A5**。
+
 | # | 指标 | AI 检测命令 |
 |---|---|---|
+| 0a | **无解密失败帧**（有 = 帧只剩 base64 密文，capture 残缺） | `jq -s '[.[]\|select(.decryptError)]\|length' tmp-evo/$CD/message.txt`（message-nobet.txt 同查），**必须 = 0** |
+| 0b | **无 U+FFFD 乱码**（有 = 旧版脚本录的加密桌，信息已不可逆销毁） | `LC_ALL=C grep -c $'\xef\xbf\xbd' tmp-evo/$CD/message.txt` **必须 = 0**（成片出现才算，单个可能是昵称字符） |
+| 0c | 加密判据自洽（两处应一致，不一致 = capture 不可信） | `grep -o '"ws_encryption":"[^"]*"' tmp-evo/$CD/config.txt`（有非空值 = 加密桌）对照 `jq -rs '[.[]\|select(.dir=="ws" and .encrypted)]\|length' tmp-evo/$CD/message.txt` > 0 |
 | 1 | 4 个数据文件齐全 + 非空 | `[[ -s tmp-evo/$CD/message.txt && -s tmp-evo/$CD/message-nobet.txt && -s tmp-evo/$CD/config.txt && -s tmp-evo/$CD/gameDetail.txt ]]` |
 | 2 | clientResources 业务 chunk 存在 | `find tmp-evo/$CD/clientResources/frontend -name '*.js' \| head -1` |
 | 3 | 上行 send 帧 ≥ 5 | `jq -s '[.[]\|select(.dir=="send")]\|length' tmp-evo/$CD/message.txt` |
@@ -172,6 +181,9 @@ P0 任一未过 → status="failed"，拒收 + 给用户补救（§7）→ 停
 P0 全过 + P1 警告 > 2 → status="degraded"，向用户报告问题 → 询问是否继续（Phase 0 可问）
 ```
 
+🔴 **#0a/#0b 未过不适用 degraded、不接受"先凑合分析"**：残缺/损坏的帧看起来和"这个族本来就没这帧"一模一样，会一路误导到协议分类和实现，且**编译测试全绿查不出来**。一律 failed + 重录。
+写 state 时把加密事实记进 `lobby`：`ws_encryption`（config 现值，明文桌为空串）+ `encrypted`（bool），供后续 phase 与经验文档引用。
+
 ## 5. 元信息抽取（AI 用 jq/grep）
 
 > ⚠️ **目录名 = 裸 EVO tableId**（与 PP 不同，无需反查）。`evo_table_id` 用于协议帧；`table_code`=`evo`+id 用于索引。
@@ -183,6 +195,7 @@ P0 全过 + P1 警告 > 2 → status="degraded"，向用户报告问题 → 询�
 | `gameType` | `grep -oE '"game_type"[: ]*"[^"]+"' tmp-evo/$CD/config.txt`（如 roulette） |
 | `currencyMult` | `grep -oE '"currencyMult"[: ]*[0-9]+' tmp-evo/$CD/config.txt`（进制，结算/显示必用） |
 | `currencyCode` | `grep -oE '"currencyCode"[: ]*"[^"]+"' tmp-evo/$CD/config.txt`（capture 会话币种） |
+| `ws_encryption` + `encrypted` | `grep -oE '"ws_encryption"[: ]*"[^"]*"' tmp-evo/$CD/config.txt`（非空值如 `"1:3"` = 加密桌；缺失/空串 = 明文桌。**只是事实记录，新族对接不因此改任何实现**——加密在上游连接层已落地，见 known-pitfalls A5） |
 | `casinoHost` | `grep -oE '"wsUrl"[: ]*"[^"]+"' tmp-evo/$CD/config.txt`（取 host 段；占位文档用 `<PROVIDER_HOST>`） |
 | `limits.min/max` | `grep -oE '"[a-z_]+_bet_(min\|max)_limit"[: ]*[0-9]+' tmp-evo/$CD/config.txt`（roulette `table_bet_*`；game show per-betcode `<segment>_bet_*`+`payout_limit`） |
 | `chipAmounts` | `grep -oE '"chipAmounts"[: ]*\[[^]]+\]' tmp-evo/$CD/config.txt` |
@@ -205,11 +218,13 @@ jq -n \
   --argjson broadcast '["<gt>.winnersList","<gt>.spinHistory/recentResults","appInfo","dealer"]' \
   --argjson per_user '["<gt>.placeChips/betAction","<gt>.bets/tableState.betState","balanceUpdated"]' \
   --arg smkind "state_enum|discrete_events" --arg betmodel "..." --arg payoutmodel "..." \
+  --arg wsenc "<config 的 ws_encryption 现值，明文桌填空串>" --argjson encrypted "true|false" \
   '{
      evo_table_id:$evo_table_id, table_code:$table_code, capture_dir:$capture_dir, repo_root:$repo_root,
      phase:0, status:$status,
      lobby:{ gameType:$gameType, casinoHost:$casinoHost, currencyCode:$currencyCode,
              currencyMult:$currencyMult, limits:{min:$min,max:$max}, dealer:{name:$dealer},
+             ws_encryption:$wsenc, encrypted:$encrypted,
              state_machine_kind:$smkind, bet_model:$betmodel, payout_model:$payoutmodel },
      capture_audit:{ p0_passed:$p0_passed, p1_warnings:$p1_warnings,
                      classification:{ broadcast:$broadcast, per_user:$per_user } },
@@ -222,6 +237,9 @@ jq -n \
 
 AI **不要**硬背模板。按实际触发的 P0/P1 失败项 + capture 状态 + gametype 综合给建议。例如：
 
+- 「**#0a 有 decryptError 帧**」→ "这是加密桌（EVO 逐桌加密，非全部），部分帧没解开、只留了 base64 密文，capture 残缺且缺得看不出来。头号原因是真客户端 client_version 与我方 `fec/encpart` bundle 版本脱节（录制时脚本会打 WARN，翻一下日志）；其次是 node < 23（zstd 解压依赖内置 `zlib.zstdDecompressSync`）。按 docs/evo-crypto/03 重新同步 bundle 后重抓，别拿残缺件往下做。失败帧定位：`jq 'select(.decryptError)' message.txt | head`"
+- 「**#0b 有成片 U+FFFD 乱码**」→ "这份 capture 是**没有解密层的旧版脚本**录的加密桌——二进制帧被按 UTF-8 硬解，原始字节已不可逆销毁，任何分析都是在读噪声。**必须用当前版 `scripts/game_dev/evo_fetch.mjs` 重录**（它命中加密桌会自动解密）"
+- 「**#0c 判据不自洽**」→ "config 显示加密但 ws 事件没有 `encrypted:true`（或反之）：多半是 /config 拉的不是这张桌，或客户端版本旧到没启用加密。核对 config.txt 的 table_id 与目录名是否一致后重抓"
 - 「#1 message-nobet.txt 缺失/空」→ "无头影子账号会话没建起来（Akamai 反爬 / 会话 mint 失败），EVO 协议分类强依赖双会话对比；建议检查 evo_fetch.mjs 的 nobet 路日志，确认 EVOSESSIONID 取到 + UA=evo-client/1.0"
 - 「#4 betAction=0 + 有头会话」→ "有头会话没真下注（或客户端没连上我方/真 EVO），per-user 帧 shape 取不到；建议 headed 模式手动在桌面放 ≥2 个不同 betCode 的筹码"
 - 「#6 GAME_RESOLVED<2 + 抓了 3min」→ "真人轮盘约 30-45s/局，3min 不够 2 局完整循环；建议 DURATION_MS 调到 ≥ 6min 重抓"

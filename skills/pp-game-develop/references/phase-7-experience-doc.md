@@ -172,7 +172,7 @@ coverage: <X>%
 - <如 fourty typo 字段>
 - <如 jackpotwheel_rng.slot 嵌套对象>
 
-## 14. 自问审查补充（来自 self-review.md）
+## 14. 铁律核对补充（来自 self-review.md）
 
 引用 `tmp/<tableId>/self-review.md` 综合汇总：
 - 总问题数：N
@@ -244,7 +244,7 @@ cd "$WT"
 git add docs/integration-experience/
 git commit -m "docs(integration-experience): $GAMETYPE/$TABLE_ID 对接经验
 
-16 节经验文档 + 自问审查摘要 + unresolved 列表。
+16 节经验文档 + 铁律核对摘要 + unresolved 列表。
 
 capture 5 文件作 fixture，main.js 路径见第 9 节。"
 ```
@@ -259,11 +259,11 @@ commits:         <N>
 新增文件:         <N>
 测试覆盖率:       <X.X>%
 codex review 轮: <N> (L1-L5 层间 + 整体循环)
-codex decide:    <N> (自问审查 + 路径决策等)
+codex decide:    <N> (铁律核对 + 路径决策等)
 codex discuss:   <N> (卡死诊断)
 unresolved:      <N> 项（详见经验文档第 15 节）
 经验文档:        docs/integration-experience/<gametype>/<tableId>.md
-自问审查报告:    tmp/<tableId>/self-review.md
+铁律核对报告:    tmp/<tableId>/self-review.md
 
 未做：PR / 部署（用户决定时机；铁律：不 PR）
 ```

@@ -1,4 +1,42 @@
-# codex-collab 三模式调度（跨 Phase 共用）
+# codex-collab 在本流程中的用法
+
+## 🔴 审查 prompt 必须**自带事实**，并禁止被审方通读文档（最大的单项提速点）
+
+**实测**：AndarBahar000001 那次派了 22 个 codex agent，**几乎每一个开头都在重新啃**
+`evo-game-develop` skill（3000+ 行）+ `AI-GUIDE.md` + `PROJECT-MEMORY.md`（11 万字），
+其中一个还报「首次读取输出被截断了，我会补齐未读区段」。
+22 × 5–10 分钟 = **2–3.5 小时墙钟花在重复读同一批文档上**，占了整个对接工时的相当比例。
+
+根因是**我方 prompt 写了「按 skill 流程审查」**——等于让每个 agent 自己去加载整套教条。
+
+### 每份审查 prompt 的硬要求
+
+```
+🔴 不要读 skill / AI-GUIDE / PROJECT-MEMORY / known-pitfalls。
+   你需要的全部前提**都在本 prompt 里**。缺什么就在报告里说「缺 X 无法判定」，不要自己去翻。
+```
+
+然后把它真正需要的**直接贴进 prompt**（这些是每次都一样的模板，复制即可）：
+
+1. **审查范围**：精确的 `git show <sha>` / `git diff <base>...HEAD -- <path>`，以及
+   「要整文件读的那几个文件名」（diff 会掩盖调用顺序问题）。
+2. **硬约束**（原样贴，别让它去查）：禁改 `server/game/common/**`；禁自造异步/协调层；
+   单文件 ≤500 行含 `_test.go`；资金主干是串行同步的。
+3. **上一轮的处置**：每条 finding 一句话「原问题 → 怎么修的」。
+4. **已知且刻意不修的清单**：逐条列出，写明「别再报」。**这条最省时间**——
+   不列的话每一轮都会重复报同样几条跨族缺陷。
+5. **本族的三到五条特有事实**：照模板做会错的那几处（例：无独立走势帧 / 无 restore 标记 /
+   本桌 config 无 payout cap 字段）。
+6. **要它重点判的问题**，编号列出。
+
+### 判据
+
+一份合格的审查 prompt 应该让 agent **第一个动作就是 `git show`**，而不是 `Read skill`。
+看它的输出开头：出现「先完整读取 skill / 项目记忆」就是 prompt 没写好，下一轮立刻补齐事实。
+
+⚠️ 反过来也要注意：**别把 prompt 写成结论**。给事实与约束，不给「你应该发现 X」——
+那会让 agent 变成应声虫（本 skill 决策模式那一节的同款退化）。
+
 
 > 汇总 codex-collab 三模式（review / decide / discuss）的全部触发点 + prompt 模板。
 > 各 phase 遇到 codex 调用时引用此文件。方法论与 PP 同；EVO 特化在触发点 + 示例（per-user / currencyMult / tmp-evo 路径 / roulettecore 模板）。
@@ -19,7 +57,7 @@
 | 1 选 base/复用边界 | — | — | — |
 | 2 建 worktree | — | — | — |
 | 3 AIU 实现 | **每层 ≤ 2 轮层间审查**（L1-L5） | D1 AIU 路径不确定 / D2 MODELS 字段歧义 / **D2' per-user 改写时序/字段不确定** | S1 AIU 卡 ≥10min / 失败 ≥2 次 |
-| 4 自问审查 | — | **D3 每个自问问题一次** | S4 决策不收敛（可选） |
+| 4 铁律核对 | — | **D3 仅有争议的问题** | S4 决策不收敛（可选） |
 | 5 整体循环 | **≤ 5 轮跨层审查** | D4 finding fix 分流争议 | S2 同 finding hash ≥ 3 次 |
 | 6 verify | — | D5 verify 失败 ≥ 2 次根因 | S3 决策不收敛 / 失败跨边界 |
 | 7 归档 | — | — | — |
@@ -74,7 +112,7 @@
 | **D1** | 3 AIU 启动前 | 实现路径不确定 | A 照搬 roulettecore 机制 / B 抽 common helper / C 本族独立实现 |
 | **D2** | 3 L2 MODELS | 字段类型歧义（capture vs bundle 不一致） | A 按 capture 真帧类型 / B 按 bundle 字面量 / C json.RawMessage 容错 |
 | **D2'** | 3 L3 PER_USER | per-user 改写时序/字段不确定（EVO 特有） | A 照 roulettecore strip/snapshot 时序（注意载体 roulette=`tableState.betState`，game show=`<gt>.bets`，帧名/字段可能不同）/ B 新族字段差异调整 / C 待 capture 实证 |
-| **D3** | 4 自问审查 | 每个自问发现问题 | A 修 / B 不修-本族特殊 / C 不修-可接受 / D 待人工 |
+| **D3** | 4 铁律核对 | 核对中证据不足或修法有争议的问题 | A 修 / B 不修-本族特殊 / C 不修-可接受 / D 待人工 |
 | **D4** | 5 整体循环 | finding fix 分流争议 | A small 立即修 / B medium 必要修 / C unresolved / D large unresolved |
 | **D5** | 6 verify | verify 失败 ≥2 次根因分类 | A 实现 bug 回 Phase 3 / B 测试断言错 / C policy-pr 拆 / D 设计遗漏 回 Phase 4 |
 
